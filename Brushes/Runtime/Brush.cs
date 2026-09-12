@@ -1,0 +1,130 @@
+using System;
+using UnityEngine;
+using CsgBrush.Colliders;
+
+namespace CsgBrush
+{
+    public enum BrushShape
+    {
+        Box = 0,
+        /// <summary>Ramp: rises along the local Z axis.</summary>
+        Wedge = 1,
+        Cylinder = 2,
+        Cone = 3,
+        Sphere = 4,
+        /// <summary>Linear stairs climbing along the local Z axis.</summary>
+        Stairs = 5,
+        /// <summary>Edited by hand: the shape is the polyhedron on the brush, decomposed into convex pieces.</summary>
+        Custom = 6,
+    }
+
+    public enum BrushOperation
+    {
+        Add = 0,
+        Subtract = 1,
+    }
+
+    /// <summary>
+    /// A convex level-building volume. Place and rotate it with the normal Unity tools; its size lives on
+    /// this component and is centred on the transform, like a BoxCollider. Rendering and collision are
+    /// generated automatically (CSG through the Manifold library, one convex collider per piece). Sizes are stored in
+    /// metres; the Inspector shows them in the world preset's units.
+    /// </summary>
+    [AddComponentMenu("Brush")]
+    [DisallowMultipleComponent]
+    [SelectionBase]
+    [ExecuteAlways]
+    public sealed class Brush : MonoBehaviour
+    {
+        public const string ShapeChildName = "<[shape]>";
+        public const string HollowChildName = "<[hollow]>";
+        /// <summary>Custom shapes are decomposed into convex pieces, one hidden child each: "<[piece 0]>", "<[piece 1]>", ...</summary>
+        public const string PieceChildPrefix = "<[piece ";
+
+        public static bool IsGeneratedChildName(string name) => name == ShapeChildName || name == HollowChildName || name.StartsWith(PieceChildPrefix);
+
+        /// <summary>The editable shape when <see cref="shape"/> is Custom. May be concave; convex pieces are derived from it.</summary>
+        [HideInInspector] public BrushPolyhedron polyhedron = new BrushPolyhedron();
+        /// <summary>The parametric shape a Custom brush was converted from, for "Reset to ...".</summary>
+        [HideInInspector] public BrushShape customFrom = BrushShape.Box;
+        /// <summary>Set by the editor layer when the shape (or one of its convex parts) cannot be built; shown in the Inspector and the Scene view, never in the console.</summary>
+        [NonSerialized] public string problem;
+
+        public BrushShape shape = BrushShape.Box;
+        public BrushOperation operation = BrushOperation.Add;
+        public ControllerSurface.Kind surface = ControllerSurface.Kind.Solid;
+        public bool noFallDamage;
+
+        [Tooltip("Metres, centred on the transform.")]
+        public Vector3 size = new Vector3(2f, 2f, 2f);
+
+        [Tooltip("Box and cylinder: keep only the walls.")]
+        public bool hollow;
+        [Tooltip("Metres.")]
+        public float wallThickness = 0.5f;
+
+        [Tooltip("Cylinder and cone.")]
+        [Min(3)] public int sides = 16;
+        [Tooltip("Sphere: 1 is coarse, 5 is smooth.")]
+        [Range(1, 5)] public int tessellation = 2;
+        [Tooltip("Stairs: metres.")]
+        public float stepHeight = 0.5f;
+        [Tooltip("Stairs: metres.")]
+        public float stepDepth = 1f;
+
+        [Tooltip("Applied to every face. Per-face materials can be dropped onto faces in the Scene view.")]
+        public Material material;
+
+        /// <summary>Set by the editor layer; called when the component needs to push its values into the generated structure.</summary>
+        public static Action<Brush> SyncRequested;
+
+        public Vector3 ClampedSize
+        {
+            get
+            {
+                const float min = 0.001f;
+                return new Vector3(Mathf.Max(size.x, min), Mathf.Max(size.y, min), Mathf.Max(size.z, min));
+            }
+        }
+
+        public bool SupportsHollow => shape == BrushShape.Box || shape == BrushShape.Cylinder;
+
+        /// <summary>True when a hollow (subtractive) child should exist for this brush.</summary>
+        public bool IsHollow => hollow && SupportsHollow;
+
+        void OnValidate()
+        {
+            if (size.x < 0f) size.x = 0f;
+            if (size.y < 0f) size.y = 0f;
+            if (size.z < 0f) size.z = 0f;
+            if (wallThickness < 0f) wallThickness = 0f;
+            if (stepHeight < 0.001f) stepHeight = 0.001f;
+            if (stepDepth < 0.001f) stepDepth = 0.001f;
+            SyncRequested?.Invoke(this);
+        }
+
+        void OnEnable()
+        {
+            SyncRequested?.Invoke(this);
+        }
+
+        void OnDrawGizmosSelected()
+        {
+            // The wire box follows the hand during a drag, including the Scale tool: the transform scale is what
+            // the size will become once the drag is released and the scale is baked into the size.
+            var scale = transform.lossyScale;
+            var shown = Vector3.Scale(ClampedSize, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
+            Gizmos.matrix = Matrix4x4.TRS(transform.position, transform.rotation, Vector3.one);
+            Gizmos.color = operation == BrushOperation.Subtract ? new Color(1f, 0.4f, 0.2f, 0.9f) : new Color(0.3f, 0.8f, 1f, 0.9f);
+            if (shape == BrushShape.Custom && polyhedron != null && polyhedron.IsValid)
+            {
+                var sc = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+                foreach (var face in polyhedron.faces)
+                    for (int i = 0; i < face.indices.Length; i++)
+                        Gizmos.DrawLine(Vector3.Scale(polyhedron.vertices[face.indices[i]], sc), Vector3.Scale(polyhedron.vertices[face.indices[(i + 1) % face.indices.Length]], sc));
+                return;
+            }
+            Gizmos.DrawWireCube(Vector3.zero, shown);
+        }
+    }
+}

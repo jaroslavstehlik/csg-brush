@@ -1,0 +1,144 @@
+using CsgBrush.Colliders;
+using UnityEditor;
+using UnityEngine;
+
+namespace CsgBrush.Editor
+{
+    [CustomEditor(typeof(Brush))]
+    [CanEditMultipleObjects]
+    public sealed class BrushEditor : UnityEditor.Editor
+    {
+        SerializedProperty shapeProp, operationProp, surfaceProp, noFallDamageProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, stepDepthProp, materialProp;
+
+        void OnEnable()
+        {
+            shapeProp = serializedObject.FindProperty(nameof(Brush.shape));
+            operationProp = serializedObject.FindProperty(nameof(Brush.operation));
+            surfaceProp = serializedObject.FindProperty(nameof(Brush.surface));
+            noFallDamageProp = serializedObject.FindProperty(nameof(Brush.noFallDamage));
+            sizeProp = serializedObject.FindProperty(nameof(Brush.size));
+            hollowProp = serializedObject.FindProperty(nameof(Brush.hollow));
+            wallProp = serializedObject.FindProperty(nameof(Brush.wallThickness));
+            sidesProp = serializedObject.FindProperty(nameof(Brush.sides));
+            tessProp = serializedObject.FindProperty(nameof(Brush.tessellation));
+            stepHeightProp = serializedObject.FindProperty(nameof(Brush.stepHeight));
+            stepDepthProp = serializedObject.FindProperty(nameof(Brush.stepDepth));
+            materialProp = serializedObject.FindProperty(nameof(Brush.material));
+        }
+
+        public override void OnInspectorGUI()
+        {
+            var settings = BrushSettings.instance;
+            serializedObject.Update();
+
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(shapeProp, new GUIContent("Shape"));
+            EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
+            EditorGUILayout.PropertyField(surfaceProp, new GUIContent("Surface", "What the volume means to the character controller."));
+            if (surfaceProp.enumValueIndex == (int)ControllerSurface.Kind.Solid || surfaceProp.enumValueIndex == (int)ControllerSurface.Kind.Slick)
+                EditorGUILayout.PropertyField(noFallDamageProp, new GUIContent("No fall damage"));
+
+            foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
+            EditorGUILayout.Space(4);
+            var shape = (BrushShape)shapeProp.enumValueIndex;
+            if (shape == BrushShape.Custom)
+            {
+                var brush = (Brush)target;
+                var poly = brush.polyhedron;
+                int parts = 0;
+                if (poly != null && poly.IsValid) { var pieces = new System.Collections.Generic.List<ConvexPolytope>(); ConvexDecomposition.Decompose(poly, pieces); parts = pieces.Count; }
+                string info = poly != null && poly.IsValid ? poly.vertices.Length + " vertices, " + poly.faces.Length + " faces, " + (parts == 1 ? "convex" : parts + " convex parts") : "no shape";
+                EditorGUILayout.LabelField("Custom shape", info);
+                EditorGUILayout.HelpBox("Edited by hand: sizes come from the vertices. Use the Edit Shape tool in the Scene view to push faces and move vertices. Concave shapes are split into convex parts for you.", MessageType.None);
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button(BrushEditContext.IsActive ? "Stop editing" : "Edit shape")) BrushEditContext.Toggle();
+                if (GUILayout.Button("Reset to " + brush.customFrom)) foreach (var t in targets) BrushApi.ResetShape((Brush)t);
+                EditorGUILayout.EndHorizontal();
+            }
+            else DrawSize(settings, shape);
+
+            if (shape != BrushShape.Custom && BrushApi.CanConvertToCustom(shape))
+            {
+                if (GUILayout.Button(new GUIContent(BrushEditContext.IsActive ? "Stop editing" : "Edit shape", "Move, Rotate and Scale act on vertices, edges or faces in the Scene view. The first edit turns the brush into a Custom shape.")))
+                    BrushEditContext.Toggle();
+            }
+            if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.PropertyField(hollowProp, new GUIContent("Hollow", "Keep only the walls. Unreal's one-click room."), GUILayout.Width(EditorGUIUtility.labelWidth + 20f));
+                using (new EditorGUI.DisabledScope(!hollowProp.boolValue))
+                    DrawUnitsField(settings, wallProp, "Wall thickness");
+                EditorGUILayout.EndHorizontal();
+            }
+            switch (shape)
+            {
+                case BrushShape.Cylinder:
+                case BrushShape.Cone:
+                    EditorGUILayout.PropertyField(sidesProp, new GUIContent("Sides"));
+                    break;
+                case BrushShape.Sphere:
+                    EditorGUILayout.PropertyField(tessProp, new GUIContent("Tessellation"));
+                    break;
+                case BrushShape.Stairs:
+                    DrawUnitsField(settings, stepHeightProp, "Step height");
+                    DrawUnitsField(settings, stepDepthProp, "Step depth");
+                    var sz = sizeProp.vector3Value;
+                    int steps = Mathf.Max(1, Mathf.RoundToInt(sz.y / Mathf.Max(0.001f, stepHeightProp.floatValue)));
+                    EditorGUILayout.LabelField(" ", steps + " steps over " + settings.FormatUnits(sz.z) + " (" + settings.FormatUnits(sz.z / steps) + " each)", EditorStyles.miniLabel);
+                    break;
+            }
+
+            EditorGUILayout.Space(4);
+            EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face. Drop a material onto a single face in the Scene view for per-face materials."));
+            bool changed = EditorGUI.EndChangeCheck();
+            serializedObject.ApplyModifiedProperties();
+            if (changed)
+                foreach (var t in targets) BrushSync.Ensure((Brush)t);
+
+            EditorGUILayout.Space(6);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel(new GUIContent("Order", "Brushes above in the Hierarchy are evaluated first; a Subtract cuts only what is above it."));
+            if (GUILayout.Button("To first")) foreach (var t in targets) BrushApi.ToFirst((Brush)t);
+            if (GUILayout.Button("To last")) foreach (var t in targets) BrushApi.ToLast((Brush)t);
+            EditorGUILayout.EndHorizontal();
+            foreach (var t in targets)
+            {
+                var brush = (Brush)t;
+                var s = brush.transform.localScale;
+                if (s != Vector3.one)
+                {
+                    EditorGUILayout.HelpBox("Scale is " + s + ". With snapping on, the Scale tool is baked into the size on release; otherwise apply it here.", MessageType.Info);
+                    if (GUILayout.Button("Apply scale to size")) BrushApi.ApplyScale(brush);
+                    break;
+                }
+            }
+        }
+
+        void DrawSize(BrushSettings settings, BrushShape shape)
+        {
+            var size = sizeProp.vector3Value;
+            var units = settings.ToUnits(size);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel(new GUIContent("Size (" + settings.unitLabel + ")", shape == BrushShape.Wedge ? "X width, Y height, Z length. The ramp rises along Z." : shape == BrushShape.Stairs ? "X width, Y total rise, Z run. Stairs climb along Z." : "Centred on the transform."));
+            float w = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 14f;
+            EditorGUI.BeginChangeCheck();
+            float x = EditorGUILayout.FloatField("X", units.x);
+            float y = EditorGUILayout.FloatField("Y", units.y);
+            float z = EditorGUILayout.FloatField("Z", units.z);
+            if (EditorGUI.EndChangeCheck())
+                sizeProp.vector3Value = settings.ToMeters(new Vector3(Mathf.Max(0f, x), Mathf.Max(0f, y), Mathf.Max(0f, z)));
+            EditorGUIUtility.labelWidth = w;
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.LabelField(" ", size.x.ToString("0.00") + " x " + size.y.ToString("0.00") + " x " + size.z.ToString("0.00") + " m", EditorStyles.miniLabel);
+        }
+
+        static void DrawUnitsField(BrushSettings settings, SerializedProperty prop, string label)
+        {
+            EditorGUI.BeginChangeCheck();
+            float v = EditorGUILayout.FloatField(new GUIContent(label + " (" + settings.unitLabel + ")"), settings.ToUnits(prop.floatValue));
+            if (EditorGUI.EndChangeCheck())
+                prop.floatValue = settings.ToMeters(Mathf.Max(0f, v));
+        }
+    }
+}

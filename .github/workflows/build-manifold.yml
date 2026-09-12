@@ -1,0 +1,65 @@
+# Builds the Manifold native library for the editor platforms and opens a pull request with the binaries.
+# Run it from the Actions tab (workflow_dispatch) after changing Manifold/native or bumping MANIFOLD_TAG.
+name: Build Manifold plugin
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Manifold/native/**"
+      - ".github/workflows/build-manifold.yml"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14          # Apple silicon runner
+            artifact: macOS/libmanifoldc.dylib
+            built: build/libmanifoldc.dylib
+          - os: windows-2022
+            artifact: Windows/x86_64/manifoldc.dll
+            built: build/Release/manifoldc.dll
+          - os: ubuntu-22.04
+            artifact: Linux/x86_64/libmanifoldc.so
+            built: build/libmanifoldc.so
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S Manifold/native -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p out/$(dirname "${{ matrix.artifact }}")
+          cp "${{ matrix.built }}" "out/${{ matrix.artifact }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.os }}
+          path: out
+
+  pull-request:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Place binaries
+        run: |
+          mkdir -p Manifold/Plugins
+          cp -R artifacts/*/. Manifold/Plugins/
+          ls -R Manifold/Plugins
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          branch: manifold-binaries
+          title: "Update Manifold native binaries"
+          commit-message: "Update Manifold native binaries (built by CI)"
+          body: "Binaries built by the Build Manifold plugin workflow. Unity meta files for new files are added on first import."

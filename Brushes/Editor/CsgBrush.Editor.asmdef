@@ -1,0 +1,21 @@
+{
+    "name": "CsgBrush.Editor",
+    "rootNamespace": "CsgBrush.Editor",
+    "references": [
+        "CsgBrush",
+        "CsgBrush.Colliders",
+        "CsgBrush.Colliders.Editor",
+        "CsgBrush.Manifold.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,105 @@
+using System.Collections.Generic;
+using CsgBrush.Colliders;
+using UnityEditor;
+using UnityEngine;
+
+namespace CsgBrush.Editor
+{
+    /// <summary>
+    /// Keeps the derived state of brushes in step with their fields: validates the shape, marks the brush's model
+    /// for a rebuild (see <see cref="BrushCsg"/>), and hides the generated objects.
+    ///
+    /// Everything derived (models, meshes, collider pieces) is never registered with Undo. The only undo state is
+    /// the Brush component, its transform and the brush GameObject itself (see BrushApi). After an undo or redo
+    /// the derived state is rebuilt from the restored fields, which is what keeps undo reliable.
+    /// </summary>
+    public static class BrushSync
+    {
+        const HideFlags kHidden = HideFlags.HideInHierarchy | HideFlags.NotEditable;
+
+        public static void Ensure(Brush brush)
+        {
+            if (brush == null) return;
+            if (PrefabUtility.IsPartOfPrefabAsset(brush)) return;
+            RemoveLegacyChildren(brush);
+            brush.problem = null;
+            if (brush.shape == BrushShape.Custom)
+            {
+                if (brush.polyhedron == null || !brush.polyhedron.IsValid)
+                    brush.polyhedron = BrushGeometry.ShapePolyhedron(brush.customFrom, brush.ClampedSize, brush.sides, brush.tessellation, brush.stepHeight, brush.stepDepth); // picked Custom in the dropdown
+                brush.size = brush.polyhedron.Bounds().size;
+                if (!brush.polyhedron.IsSound(out var why)) brush.problem = "Shape is " + why + ".";
+            }
+            BrushCsg.MarkDirty(brush);
+        }
+
+        /// <summary>Hidden children of the Chisel era ("<[shape]>", "<[hollow]>", pieces) are no longer used; drop them.</summary>
+        static void RemoveLegacyChildren(Brush brush)
+        {
+            for (int i = brush.transform.childCount - 1; i >= 0; i--)
+            {
+                var child = brush.transform.GetChild(i);
+                if (Brush.IsGeneratedChildName(child.name)) { child.SetParent(null, false); Object.DestroyImmediate(child.gameObject); }
+            }
+            if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(brush.gameObject) > 0)
+                GameObjectUtility.RemoveMonoBehavioursWithMissingScript(brush.gameObject);
+            var tag = brush.GetComponent<ControllerSurface>();
+            if (tag != null) Object.DestroyImmediate(tag); // the surface now lives on the Brush itself
+        }
+
+        /// <summary>Objects Chisel generated in a scene saved before the switch: its default model and generated containers.</summary>
+        public static void RemoveLegacySceneObjects()
+        {
+            var doomed = new List<GameObject>();
+            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (t == null) continue;
+                if (t.name == "‹[default-model]›" || t.name.StartsWith("‹[generated")) doomed.Add(t.gameObject);
+            }
+            foreach (var go in doomed) if (go != null) Object.DestroyImmediate(go);
+            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject) > 0)
+                    GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
+        }
+
+        /// <summary>After a structural change (brush added, removed, reordered, operation changed) the model is rebuilt on the next update.</summary>
+        public static void RequestFullUpdate(Brush brush)
+        {
+            if (brush == null) return;
+            BrushCsg.MarkDirty(brush);
+        }
+
+        /// <summary>Snapping, scripts and parent moves change transforms directly: mark the model.</summary>
+        public static void NotifyTransformChanged(Brush brush)
+        {
+            if (brush == null) return;
+            BrushCsg.MarkDirty(brush);
+        }
+
+        /// <summary>Set the visibility of the default model and the generated objects according to the settings.</summary>
+        public static void ApplyVisibility()
+        {
+            bool show = BrushSettings.instance.showGenerated;
+            var flags = show ? HideFlags.NotEditable : kHidden;
+            foreach (var model in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                // The implicit default model is hidden entirely; a user-created model stays visible as a folder,
+                // but its generated children are not part of the student's picture.
+                if (model.isDefault && model.gameObject.hideFlags != flags) model.gameObject.hideFlags = flags;
+                var componentFlags = show ? HideFlags.None : HideFlags.HideInInspector;
+                if (model.TryGetComponent<ConvexColliderSettings>(out var cc))
+                {
+                    if (cc.showInHierarchy != show) cc.showInHierarchy = show;
+                    if (cc.hideFlags != componentFlags) cc.hideFlags = componentFlags;
+                }
+                foreach (Transform child in model.transform)
+                {
+                    bool generated = child.name == BrushModel.MeshChildName || child.name == ConvexColliderSettings.ContainerName;
+                    if (!generated) continue;
+                    if (child.gameObject.hideFlags != flags) child.gameObject.hideFlags = flags;
+                }
+            }
+            EditorApplication.RepaintHierarchyWindow();
+        }
+    }
+}
