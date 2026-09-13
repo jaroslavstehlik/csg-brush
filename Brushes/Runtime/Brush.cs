@@ -163,6 +163,17 @@ namespace CsgBrush
                         Gizmos.DrawLine(Vector3.Scale(polyhedron.vertices[face.indices[i]], sc), Vector3.Scale(polyhedron.vertices[face.indices[(i + 1) % face.indices.Length]], sc));
                 return;
             }
+            if (HasParametricSize)
+            {
+                // the axis is the transform: draw the steps and a mark on the axis
+                var poly = shape == BrushShape.CurvedStairs ? BrushPolyhedron.CurvedStairs(Stairs) : BrushPolyhedron.SpiralStairs(Stairs);
+                foreach (var face in poly.faces)
+                    for (int i = 0; i < face.indices.Length; i++)
+                        Gizmos.DrawLine(poly.vertices[face.indices[i]], poly.vertices[face.indices[(i + 1) % face.indices.Length]]);
+                var b = poly.Bounds();
+                Gizmos.DrawLine(new Vector3(0f, b.min.y, 0f), new Vector3(0f, b.max.y, 0f));
+                return;
+            }
             Gizmos.DrawWireCube(Vector3.zero, shown);
         }
     }

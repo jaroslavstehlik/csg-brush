@@ -56,6 +56,23 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void RadialStairsTakeWidthAndRiseFromTheDrag()
+        {
+            var s = BrushSettings.instance; bool snap = s.snapToGrid; int grid = s.gridIndex;
+            s.snapToGrid = true; s.SetGridIndex(4); // 16 u = 0.5 m
+            try
+            {
+                var p = BrushCreateTool.ParametersForRadial(BrushShape.CurvedStairs, 3f, 2f);
+                Assert.AreEqual(0.5f, p.stairs.innerRadius, 1e-4f, "inner radius defaults to one grid step");
+                Assert.AreEqual(2.5f, p.stairs.stepWidth, 1e-4f, "outer radius minus the inner radius");
+                Assert.AreEqual(BrushSnap.Round(2f / p.stairs.numSteps, 0.5f) < 0.5f ? 0.5f : BrushSnap.Round(2f / p.stairs.numSteps, 0.5f), p.stairs.stepHeight, 1e-4f, "rise over the steps, at least one grid step");
+                var tiny = BrushCreateTool.ParametersForRadial(BrushShape.SpiralStairs, 0.2f, 0.1f);
+                Assert.AreEqual(0.5f, tiny.stairs.stepWidth, 1e-4f, "never thinner than a grid step");
+            }
+            finally { s.snapToGrid = snap; s.SetGridIndex(grid); }
+        }
+
+        [Test]
         public void HeightFromRayIsTheNearestPointOnTheNormalLine()
         {
             var corner = new Vector3(1f, 0f, 1f);

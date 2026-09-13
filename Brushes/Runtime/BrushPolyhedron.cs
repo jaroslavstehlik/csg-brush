@@ -242,7 +242,7 @@ namespace CsgBrush
         /// <summary>
         /// Curved stairs (Unreal's Curved Stair): steps wrapping around an inner column over an angle, each step a solid
         /// block from the floor to its tread. Every step is its own closed convex block (Face.group), touching its
-        /// neighbours; the shape is centred on its bounds.
+        /// neighbours. The column axis is the local y axis and the floor is y = 0: the transform is the axis.
         /// </summary>
         public static BrushPolyhedron CurvedStairs(StairParams p)
         {
@@ -261,12 +261,13 @@ namespace CsgBrush
                 for (int i = 0; i < 4; i++) verts.Add(new Vector3(verts[b0 + i].x, yTop, verts[b0 + i].z));
                 AddBlock(verts, faces, k, new[] { b0, b0 + 1, b0 + 2, b0 + 3 }, new[] { b0 + 4, b0 + 5, b0 + 6, b0 + 7 });
             }
-            return Centred(verts, faces);
+            return OnFloor(verts, faces);
         }
 
         /// <summary>
         /// Spiral stairs (Unreal's Spiral Stair): separate step slabs wrapping around an inner column, any number of
         /// turns; sloped floor and ceiling turn the steps into a ramp. Each slab is its own closed block (Face.group).
+        /// The column axis is the local y axis and the first step starts at y = 0: the transform is the axis.
         /// </summary>
         public static BrushPolyhedron SpiralStairs(StairParams p)
         {
@@ -287,7 +288,16 @@ namespace CsgBrush
                 verts.Add(new Vector3(ro * Mathf.Cos(t1), yTop1, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), yTop1, ri * Mathf.Sin(t1)));
                 AddBlock(verts, faces, k, new[] { b, b + 1, b + 2, b + 3 }, new[] { b + 4, b + 5, b + 6, b + 7 }, splitCaps: p.slopedFloor || p.slopedCeiling);
             }
-            return Centred(verts, faces);
+            return OnFloor(verts, faces);
+        }
+
+        /// <summary>The shape with its lowest point at y = 0: the transform is the axis at floor level whatever the first step does.</summary>
+        static BrushPolyhedron OnFloor(List<Vector3> verts, List<Face> faces)
+        {
+            var p = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+            float minY = p.Bounds().min.y;
+            if (Mathf.Abs(minY) > 1e-6f) for (int i = 0; i < p.vertices.Length; i++) p.vertices[i].y -= minY;
+            return p;
         }
 
         /// <summary>
@@ -320,14 +330,6 @@ namespace CsgBrush
                 if (volume < 0) Array.Reverse(idx);
                 faces.Add(new Face(idx) { group = group });
             }
-        }
-
-        static BrushPolyhedron Centred(List<Vector3> verts, List<Face> faces)
-        {
-            var p = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
-            var c = p.Bounds().center;
-            for (int i = 0; i < p.vertices.Length; i++) p.vertices[i] -= c;
-            return p;
         }
 
         /// <summary>A copy with every vertex transformed.</summary>

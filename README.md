@@ -16,7 +16,9 @@ URL", the URL of this repository.
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
   Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
   base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool.
-  Everything snaps to the grid, and a wall makes the brush grow out of the wall. The "New Brush" panel that opens
+  Everything snaps to the grid, and a wall makes the brush grow out of the wall. Curved and Spiral Stairs are
+  drawn by their axis instead: press where the column axis goes, drag the outer radius (the drag direction is
+  where the first step starts), then the height; the transform of those brushes is the axis at floor level. The "New Brush" panel that opens
   with the tool holds the values the next brush is made with: operation, surface, sides, tessellation, step
   sizes, hollow and wall thickness. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are

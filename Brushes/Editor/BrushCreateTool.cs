@@ -112,6 +112,22 @@ namespace CsgBrush.Editor
             wallThickness = s.newWallThickness > 0f ? s.ToMeters(s.newWallThickness) : s.GridMeters;
         }
 
+        /// <summary>Curved and spiral stairs are placed by their axis: press on the axis, drag the outer radius, then the height.</summary>
+        public static bool IsRadial(BrushShape shape) => shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs;
+
+        /// <summary>Parameters of a radial shape drawn with an outer radius and a total height: step width and step height from those, the rest from the panel.</summary>
+        public static BrushGeometry.ShapeParams ParametersForRadial(BrushShape shape, float outerRadius, float height)
+        {
+            var s = BrushSettings.instance;
+            float grid = s.GridMeters, step = grid > 0f ? grid : 0.01f;
+            var p = ParametersFor(shape, new Vector3(outerRadius, height, outerRadius));
+            var st = p.stairs;
+            st.stepWidth = Mathf.Max(step, BrushSnap.Round(outerRadius - st.innerRadius, grid));
+            st.stepHeight = Mathf.Max(step, BrushSnap.Round(Mathf.Abs(height) / Mathf.Max(1, st.numSteps), grid));
+            p.stairs = st;
+            return p;
+        }
+
         /// <summary>
         /// The parameters a brush drawn with the given size gets. Curved and spiral stairs take their step width from the
         /// drawn footprint and their step height from the drawn height divided by the number of steps.
@@ -200,7 +216,8 @@ namespace CsgBrush.Editor
                         GUIUtility.hotControl = 0; e.Use();
                         var local = Quaternion.Inverse(planeRotation) * (opposite - origin);
                         float min = Grid > 0f ? Grid * 0.5f : 0.05f;
-                        if (Mathf.Abs(local.x) < min && Mathf.Abs(local.z) < min) { state = State.Idle; break; } // a click, not a drag
+                        bool tooSmall = IsRadial(Shape) ? new Vector2(local.x, local.z).magnitude < min : Mathf.Abs(local.x) < min && Mathf.Abs(local.z) < min;
+                        if (tooSmall) { state = State.Idle; break; } // a click, not a drag
                         state = State.Height; height = 0f;
                     }
                     if (e.type == EventType.Repaint) DrawPreview();
@@ -210,7 +227,7 @@ namespace CsgBrush.Editor
                     if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag)
                     {
                         var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
-                        float h = BrushDraw.HeightFromRay(opposite, normal, ray);
+                        float h = BrushDraw.HeightFromRay(IsRadial(Shape) ? origin : opposite, normal, ray);
                         height = Grid > 0f ? BrushSnap.Round(h, Grid) : h;
                         e.Use(); SceneView.RepaintAll();
                     }
@@ -239,13 +256,28 @@ namespace CsgBrush.Editor
 
         void CurrentPose(out Vector3 centre, out Vector3 size, out Quaternion rotation)
         {
+            if (IsRadial(Shape))
+            {
+                // the axis is the press point; the drag sets the outer radius and where the first step starts
+                var local = Quaternion.Inverse(planeRotation) * (opposite - origin);
+                float radius = new Vector2(local.x, local.z).magnitude;
+                float yaw = -Mathf.Atan2(local.z, local.x) * Mathf.Rad2Deg;
+                if (radius < 1e-4f) yaw = 0f;
+                yaw = BrushSnap.Round(yaw, BrushSettings.instance.rotationSnapDegrees);
+                centre = origin;
+                size = new Vector3(Mathf.Max(Grid, BrushSnap.Round(radius, Grid)), Mathf.Abs(height), 0f);
+                rotation = planeRotation * Quaternion.Euler(0f, yaw, 0f);
+                return;
+            }
             BrushDraw.Pose(origin, opposite, height, planeRotation, Grid, out centre, out size, out rotation);
         }
+
+        BrushGeometry.ShapeParams CurrentParameters(Vector3 size) => IsRadial(Shape) ? ParametersForRadial(Shape, size.x, size.y) : ParametersFor(Shape, size);
 
         void DrawPreview()
         {
             CurrentPose(out var centre, out var size, out var rotation);
-            var poly = BrushGeometry.ShapePolyhedron(Shape, ParametersFor(Shape, size));
+            var poly = BrushGeometry.ShapePolyhedron(Shape, CurrentParameters(size));
             var m = Matrix4x4.TRS(centre, rotation, Vector3.one);
             Handles.color = Operation == BrushOperation.Subtract ? new Color(1f, 0.4f, 0.2f, 0.9f) : new Color(0.3f, 0.8f, 1f, 0.9f);
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
@@ -261,7 +293,7 @@ namespace CsgBrush.Editor
             int group = Undo.GetCurrentGroup();
             var brush = BrushApi.Create(Shape, centre, size, rotation, null);
             NewBrushParameters(out _, out _, out float wall);
-            var p = ParametersFor(Shape, size);
+            var p = CurrentParameters(size);
             Undo.RecordObject(brush, "Create brush");
             brush.sides = p.sides; brush.tessellation = p.tessellation;
             brush.stepHeight = Shape == BrushShape.Stairs ? p.stepHeight : p.stairs.stepHeight; brush.stepDepth = p.stepDepth;
@@ -331,7 +363,7 @@ namespace CsgBrush.Editor
                     s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
                     s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
-                    EditorGUILayout.LabelField(" ", "Step width and height come from the drag", EditorStyles.miniLabel);
+                    EditorGUILayout.LabelField(" ", "Press on the axis, drag the radius, then the height", EditorStyles.miniLabel);
                     break;
                 case BrushShape.SpiralStairs:
                     s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
@@ -341,7 +373,7 @@ namespace CsgBrush.Editor
                     s.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.newSlopedCeiling);
                     s.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.newSlopedFloor);
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
-                    EditorGUILayout.LabelField(" ", "Step width and height come from the drag", EditorStyles.miniLabel);
+                    EditorGUILayout.LabelField(" ", "Press on the axis, drag the radius, then the height", EditorStyles.miniLabel);
                     break;
             }
             if (shape == BrushShape.Box || shape == BrushShape.Cylinder)

@@ -335,7 +335,7 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ParametricStairsAreCentredAndCollide([Values(BrushShape.CurvedStairs, BrushShape.SpiralStairs)] BrushShape shape)
+        public void ParametricStairsSitOnTheirAxisAndCollide([Values(BrushShape.CurvedStairs, BrushShape.SpiralStairs)] BrushShape shape)
         {
             var position = new Vector3(3f, 1.5f, -2f);
             var brush = BrushApi.Create(shape, position, new Vector3(4f, 2f, 4f), Quaternion.identity);
@@ -343,7 +343,10 @@ namespace CsgBrush.Tests
             Physics.SyncTransforms();
             var bounds = ColliderBounds();
             Assert.Greater(bounds.size.magnitude, 0f, "no colliders generated for " + shape);
-            Assert.AreEqual(position.ToString("F1"), bounds.center.ToString("F1"), shape + " centred");
+            // the transform is the column axis at floor level
+            Assert.AreEqual(position.y, bounds.min.y, 0.05f, shape + " floor at the transform");
+            var grown = bounds; grown.Expand(0.05f);
+            Assert.IsTrue(grown.Contains(position), shape + " axis inside the footprint " + bounds);
             Assert.AreEqual(brush.size.ToString("F1"), bounds.size.ToString("F1"), "size follows the parameters");
             Assert.AreEqual(brush.numSteps, UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "one convex collider per step");
             Assert.Greater(RenderVertexCount(), 0, "renders");

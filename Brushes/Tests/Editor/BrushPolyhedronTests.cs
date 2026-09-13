@@ -312,7 +312,8 @@ namespace CsgBrush.Tests
             Assert.IsTrue(stairs.IsValid);
             Assert.IsTrue(stairs.IsClosed(), "every block closed");
             Assert.Greater(stairs.Volume(), 0f);
-            Assert.AreEqual(Vector3.zero.ToString("F3"), stairs.Bounds().center.ToString("F3"), "centred on the transform");
+            Assert.GreaterOrEqual(stairs.Bounds().min.y, -1e-4f, "nothing below the floor: the origin is the axis at floor level");
+            Assert.LessOrEqual(stairs.Bounds().min.x, 1e-4f); Assert.GreaterOrEqual(stairs.Bounds().max.x, -1e-4f); // the axis is inside the footprint
             var groups = new HashSet<int>(); foreach (var f in stairs.faces) groups.Add(f.group);
             Assert.AreEqual(6, groups.Count, "one block per step");
             // each block's collider is the convex hull of its corners, and they add up to the shape

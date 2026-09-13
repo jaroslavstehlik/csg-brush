@@ -2,6 +2,9 @@
 
 ## 0.2.0 (2026-09-13)
 
+- Curved and Spiral Stairs are placed by their column axis: the transform is the axis at floor level (it snaps to
+  the grid like a pivot), the gizmo draws the steps and the axis, and the Create tool works radially: press on
+  the axis, drag the outer radius (the direction sets where the first step starts), then the height.
 - Curved Stairs and Spiral Stairs, with Unreal's parameters (inner radius, step width, step height, angle of
   curve / steps per 360, num steps, add to first step, counter clockwise; spirals also step thickness, sloped
   floor, sloped ceiling). Every step is its own closed block (`Face.group`), so the mesh is closed by construction

@@ -72,6 +72,7 @@ namespace CsgBrush.Editor
             bool changed = false;
 
             if (brush.shape == BrushShape.Custom) return SnapCustom(brush, grid, s.rotationSnapDegrees);
+            if (brush.HasParametricSize) return SnapPivot(brush, grid, s.rotationSnapDegrees);
 
             // The Scale tool resizes the brush: any scale the user applied on top of the parent counter-scale is
             // baked into the size, then the world scale goes back to one.
@@ -119,6 +120,22 @@ namespace CsgBrush.Editor
         /// Rotation snaps as usual; the Scale tool is baked into the vertices; moving the pivot onto the grid keeps
         /// the geometry where it is.
         /// </summary>
+        /// <summary>Shapes built around an axis (curved and spiral stairs): the transform is the axis, so the pivot, rotation and scale snap; the parameters stay.</summary>
+        static bool SnapPivot(Brush brush, float grid, float rotationStep)
+        {
+            var t = brush.transform;
+            bool changed = false;
+            var rotation = SnapRotation(t.rotation, rotationStep);
+            if (Quaternion.Angle(rotation, t.rotation) > 1e-3f) { t.rotation = rotation; changed = true; }
+            var desiredScale = CounterScale(t);
+            if ((t.localScale - desiredScale).sqrMagnitude > kEpsilon * kEpsilon) { t.localScale = desiredScale; changed = true; }
+            var position = Round(t.position, grid);
+            if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
+            if (changed) BrushSync.NotifyTransformChanged(brush);
+            t.hasChanged = false;
+            return changed;
+        }
+
         static bool SnapCustom(Brush brush, float grid, float rotationStep)
         {
             var t = brush.transform;
@@ -206,6 +223,13 @@ namespace CsgBrush.Editor
             var t = brush.transform;
             var R = t.rotation; var T = t.position; var lossy = t.lossyScale;
             var Rs = SnapRotation(R, s.rotationSnapDegrees);
+            if (brush.HasParametricSize)
+            {
+                s_Preview[brush] = (Matrix4x4.TRS(Round(T, grid), Rs, Vector3.one), Vector3.one);
+                BrushSync.NotifyTransformChanged(brush);
+                t.hasChanged = false;
+                return;
+            }
             var scaledSize = Vector3.Scale(brush.size, new Vector3(Mathf.Abs(lossy.x), Mathf.Abs(lossy.y), Mathf.Abs(lossy.z)));
             var sizeS = SnapSize(scaledSize, grid);
             var Ts = SnapPosition(T, sizeS, Rs, grid);
@@ -274,11 +298,12 @@ namespace CsgBrush.Editor
             var s = BrushSettings.instance;
             float grid = s.GridMeters;
             var t = brush.transform;
-            if (brush.shape == BrushShape.Custom)
+            if (brush.shape == BrushShape.Custom || brush.HasParametricSize)
             {
                 if (Quaternion.Angle(SnapRotation(t.rotation, s.rotationSnapDegrees), t.rotation) > 1e-3f) return true;
                 if ((t.lossyScale - Vector3.one).sqrMagnitude > 1e-4f) return true;
                 if ((Round(t.position, grid) - t.position).sqrMagnitude > kEpsilon * kEpsilon) return true;
+                if (brush.HasParametricSize) return false;
                 var poly = brush.polyhedron;
                 if (poly == null || !poly.IsValid) return false;
                 foreach (var v in poly.vertices) { var w = t.TransformPoint(v); if ((Round(w, grid) - w).sqrMagnitude > kEpsilon * kEpsilon) return true; }
