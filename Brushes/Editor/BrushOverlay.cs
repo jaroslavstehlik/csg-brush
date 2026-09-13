@@ -36,16 +36,6 @@ namespace CsgBrush.Editor
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
-            // new brushes: operation (the Create tools in the toolbar draw with it)
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label(new GUIContent("New", "Operation of brushes drawn with the Create tools (toolbar) or the Tools > CSG Brush menu"), GUILayout.Width(28));
-            bool add = GUILayout.Toggle(BrushCreateTool.Operation == BrushOperation.Add, new GUIContent("Add", "Fills space"), EditorStyles.miniButtonLeft);
-            bool sub = GUILayout.Toggle(BrushCreateTool.Operation == BrushOperation.Subtract, new GUIContent("Subtract", "Carves the brushes above it"), EditorStyles.miniButtonRight);
-            if (add && BrushCreateTool.Operation != BrushOperation.Add) BrushCreateTool.Operation = BrushOperation.Add;
-            else if (sub && BrushCreateTool.Operation != BrushOperation.Subtract) BrushCreateTool.Operation = BrushOperation.Subtract;
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
-
             // edit mode: one row, Edit brush toggle then Vertex / Edge / Face
             EditorGUILayout.BeginHorizontal();
             bool editing = BrushEditContext.IsActive;

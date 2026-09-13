@@ -27,6 +27,15 @@ namespace CsgBrush.Editor
         public float maxStep = 18f;
         public float maxSlopeDegrees = 45.6f;
         public Vector2 doorwayMinimum = new Vector2(32f, 56f);
+        [Header("New brushes (the Create tools)")]
+        public BrushOperation newOperation = BrushOperation.Add;
+        public CsgBrush.Colliders.ControllerSurface.Kind newSurface = CsgBrush.Colliders.ControllerSurface.Kind.Solid;
+        [Min(3)] public int newSides = 16;
+        [Range(1, 5)] public int newTessellation = 2;
+        [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepHeight = 0f;
+        [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepDepth = 0f;
+        public bool newHollow = false;
+        [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
         [Header("Editor")]
         public bool showGenerated = false;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]

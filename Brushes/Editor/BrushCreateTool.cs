@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.EditorTools;
+using UnityEditor.Overlays;
 using UnityEngine;
 
 namespace CsgBrush.Editor
@@ -73,8 +74,12 @@ namespace CsgBrush.Editor
     /// </summary>
     public abstract class BrushCreateTool : EditorTool
     {
-        /// <summary>Operation of the brushes drawn next (set in the Brushes overlay).</summary>
-        public static BrushOperation Operation = BrushOperation.Add;
+        /// <summary>Operation of the brushes drawn next (set in the New Brush panel).</summary>
+        public static BrushOperation Operation { get => BrushSettings.instance.newOperation; set => BrushSettings.instance.newOperation = value; }
+
+        /// <summary>The Create tool that is active, if any.</summary>
+        public static BrushCreateTool Active { get; private set; }
+        public const string PanelId = "CSG Brush/New Brush";
 
         public abstract BrushShape Shape { get; }
         protected abstract string IconArt { get; }
@@ -90,13 +95,28 @@ namespace CsgBrush.Editor
         {
             get
             {
-                if (icon == null) icon = new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), "Create " + Shape + " brush: drag the base on a surface, move for the height, click");
+                if (icon == null) icon = new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Shape + " Brush");
                 return icon;
             }
         }
 
-        public override void OnActivated() { state = State.Idle; }
-        public override void OnWillBeDeactivated() { state = State.Idle; }
+        public override void OnActivated() { state = State.Idle; Active = this; ShowPanel(true); }
+        public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; ShowPanel(false); }
+
+        static void ShowPanel(bool show)
+        {
+            foreach (SceneView view in SceneView.sceneViews)
+                if (view.TryGetOverlay(PanelId, out var overlay)) overlay.displayed = show;
+        }
+
+        /// <summary>Step sizes and wall thickness for new brushes: the settings, or grid-derived defaults when left at 0.</summary>
+        public static void NewBrushParameters(out float stepHeight, out float stepDepth, out float wallThickness)
+        {
+            var s = BrushSettings.instance;
+            stepHeight = s.newStepHeight > 0f ? s.ToMeters(s.newStepHeight) : s.ToMeters(Mathf.Min(s.maxStep, s.GridUnits));
+            stepDepth = s.newStepDepth > 0f ? s.ToMeters(s.newStepDepth) : s.ToMeters(s.GridUnits * 2f);
+            wallThickness = s.newWallThickness > 0f ? s.ToMeters(s.newWallThickness) : s.GridMeters;
+        }
 
         static float Grid => BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
 
@@ -202,26 +222,92 @@ namespace CsgBrush.Editor
         {
             CurrentPose(out var centre, out var size, out var rotation);
             var s = BrushSettings.instance;
-            var poly = BrushGeometry.ShapePolyhedron(Shape, size, 16, 2, s.ToMeters(Mathf.Min(s.maxStep, s.GridUnits)), s.ToMeters(s.GridUnits * 2f));
+            NewBrushParameters(out float stepHeight, out float stepDepth, out _);
+            var poly = BrushGeometry.ShapePolyhedron(Shape, size, s.newSides, s.newTessellation, stepHeight, stepDepth);
             var m = Matrix4x4.TRS(centre, rotation, Vector3.one);
             Handles.color = Operation == BrushOperation.Subtract ? new Color(1f, 0.4f, 0.2f, 0.9f) : new Color(0.3f, 0.8f, 1f, 0.9f);
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
             foreach (var face in poly.faces)
                 for (int i = 0; i < face.indices.Length; i++)
                     Handles.DrawLine(m.MultiplyPoint3x4(poly.vertices[face.indices[i]]), m.MultiplyPoint3x4(poly.vertices[face.indices[(i + 1) % face.indices.Length]]), 2f);
-            var units = s.ToUnits(size);
-            Handles.Label(m.MultiplyPoint3x4(poly.Bounds().max), units.x.ToString("0.#") + " x " + units.y.ToString("0.#") + " x " + units.z.ToString("0.#") + " " + s.unitLabel, EditorStyles.helpBox);
         }
 
         void Finish()
         {
             CurrentPose(out var centre, out var size, out var rotation);
+            var s = BrushSettings.instance;
+            int group = Undo.GetCurrentGroup();
             var brush = BrushApi.Create(Shape, centre, size, rotation, null);
+            NewBrushParameters(out float stepHeight, out float stepDepth, out float wall);
+            Undo.RecordObject(brush, "Create brush");
+            brush.sides = s.newSides; brush.tessellation = s.newTessellation;
+            brush.stepHeight = stepHeight; brush.stepDepth = stepDepth;
+            if (brush.SupportsHollow && s.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
             if (Operation != BrushOperation.Add) BrushApi.SetOperation(brush, Operation);
+            if (s.newSurface != CsgBrush.Colliders.ControllerSurface.Kind.Solid) BrushApi.SetSurface(brush, s.newSurface);
+            BrushSync.Ensure(brush);
+            Undo.CollapseUndoOperations(group);
             BrushApi.ForceUpdate();
             Selection.activeGameObject = brush.gameObject;
             state = State.Idle; hoverValid = false;
             SceneView.RepaintAll();
+        }
+    }
+
+    /// <summary>
+    /// Shown with the Create tools: the values the next brush is created with (what ProBuilder's Shape Settings does).
+    /// Only the fields that apply to the active shape are shown.
+    /// </summary>
+    [Overlay(typeof(SceneView), BrushCreateTool.PanelId, "New Brush", false)]
+    public sealed class NewBrushOverlay : UnityEditor.Overlays.Overlay
+    {
+        public override UnityEngine.UIElements.VisualElement CreatePanelContent()
+        {
+            var container = new UnityEngine.UIElements.IMGUIContainer(Draw);
+            container.style.minWidth = 200;
+            return container;
+        }
+
+        static float UnitsField(BrushSettings s, string label, string tooltip, float units, float placeholderMeters)
+        {
+            EditorGUI.BeginChangeCheck();
+            float shown = units > 0f ? units : s.ToUnits(placeholderMeters);
+            float v = EditorGUILayout.FloatField(new GUIContent(label + " (" + s.unitLabel + ")", tooltip), shown);
+            return EditorGUI.EndChangeCheck() ? Mathf.Max(0f, v) : units;
+        }
+
+        static void Draw()
+        {
+            var s = BrushSettings.instance;
+            var tool = BrushCreateTool.Active;
+            var shape = tool != null ? tool.Shape : BrushShape.Box;
+            EditorGUIUtility.labelWidth = 96;
+            EditorGUILayout.LabelField(shape + " Brush", EditorStyles.boldLabel);
+            EditorGUI.BeginChangeCheck();
+            s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
+            s.newSurface = (CsgBrush.Colliders.ControllerSurface.Kind)EditorGUILayout.EnumPopup(new GUIContent("Surface", "What the volume means to the character controller"), s.newSurface);
+            BrushCreateTool.NewBrushParameters(out float stepHeight, out float stepDepth, out float wall);
+            switch (shape)
+            {
+                case BrushShape.Cylinder:
+                case BrushShape.Cone:
+                    s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Sides"), s.newSides));
+                    break;
+                case BrushShape.Sphere:
+                    s.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.newTessellation, 1, 5);
+                    break;
+                case BrushShape.Stairs:
+                    s.newStepHeight = UnitsField(s, "Step height", "0 uses the grid (at most the max step)", s.newStepHeight, stepHeight);
+                    s.newStepDepth = UnitsField(s, "Step depth", "0 uses two grid steps", s.newStepDepth, stepDepth);
+                    break;
+            }
+            if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
+            {
+                s.newHollow = EditorGUILayout.Toggle(new GUIContent("Hollow", "Keep only the walls"), s.newHollow);
+                using (new EditorGUI.DisabledScope(!s.newHollow))
+                    s.newWallThickness = UnitsField(s, "Wall thickness", "0 uses one grid step", s.newWallThickness, wall);
+            }
+            if (EditorGUI.EndChangeCheck()) { s.NotifyChanged(); SceneView.RepaintAll(); }
         }
     }
 
@@ -250,7 +336,7 @@ namespace CsgBrush.Editor
         }
     }
 
-    [EditorTool("Create Box", variantGroup = typeof(BrushCreateTool), variantPriority = 0)]
+    [EditorTool("Box Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 0)]
     public sealed class CreateBoxBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Box;
@@ -258,7 +344,7 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Box", false, 1)] static void Menu() => ToolManager.SetActiveTool<CreateBoxBrushTool>();
     }
 
-    [EditorTool("Create Wedge", variantGroup = typeof(BrushCreateTool), variantPriority = 1)]
+    [EditorTool("Wedge Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 1)]
     public sealed class CreateWedgeBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Wedge;
@@ -266,7 +352,7 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Wedge", false, 2)] static void Menu() => ToolManager.SetActiveTool<CreateWedgeBrushTool>();
     }
 
-    [EditorTool("Create Cylinder", variantGroup = typeof(BrushCreateTool), variantPriority = 2)]
+    [EditorTool("Cylinder Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 2)]
     public sealed class CreateCylinderBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Cylinder;
@@ -274,7 +360,7 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Cylinder", false, 3)] static void Menu() => ToolManager.SetActiveTool<CreateCylinderBrushTool>();
     }
 
-    [EditorTool("Create Cone", variantGroup = typeof(BrushCreateTool), variantPriority = 3)]
+    [EditorTool("Cone Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 3)]
     public sealed class CreateConeBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Cone;
@@ -282,7 +368,7 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Cone", false, 4)] static void Menu() => ToolManager.SetActiveTool<CreateConeBrushTool>();
     }
 
-    [EditorTool("Create Sphere", variantGroup = typeof(BrushCreateTool), variantPriority = 4)]
+    [EditorTool("Sphere Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 4)]
     public sealed class CreateSphereBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Sphere;
@@ -290,7 +376,7 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Sphere", false, 5)] static void Menu() => ToolManager.SetActiveTool<CreateSphereBrushTool>();
     }
 
-    [EditorTool("Create Stairs", variantGroup = typeof(BrushCreateTool), variantPriority = 5)]
+    [EditorTool("Stairs Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 5)]
     public sealed class CreateStairsBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Stairs;
