@@ -166,10 +166,14 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>Nearest brush under the mouse by its own shape.</summary>
-        public static Brush PickBrush(Vector2 mouse)
+        public static Brush PickBrush(Vector2 mouse) => PickBrushSurface(mouse, out _, out _);
+
+        /// <summary>Nearest brush under the mouse with the hit point and face normal (world space); additive brushes win over subtractive ones.</summary>
+        public static Brush PickBrushSurface(Vector2 mouse, out Vector3 point, out Vector3 normal)
         {
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
             Brush bestAdd = null, bestSub = null; float tAdd = float.MaxValue, tSub = float.MaxValue;
+            Vector3 pAdd = Vector3.zero, nAdd = Vector3.up, pSub = Vector3.zero, nSub = Vector3.up;
             foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
             {
                 var poly = BrushGeometry.Polyhedron(brush);
@@ -184,12 +188,15 @@ namespace CsgBrush.Editor
                     float tt = -(Vector3.Dot(n, lo) + plane.w) / denom;
                     if (tt < 0f) continue;
                     if (!PointInFace(poly, f, lo + ld * tt)) continue;
-                    float world = (t.TransformPoint(lo + ld * tt) - ray.origin).magnitude;
-                    if (brush.operation == BrushOperation.Subtract) { if (world < tSub) { tSub = world; bestSub = brush; } }
-                    else if (world < tAdd) { tAdd = world; bestAdd = brush; }
+                    var worldPoint = t.TransformPoint(lo + ld * tt);
+                    float world = (worldPoint - ray.origin).magnitude;
+                    var worldNormal = t.TransformDirection(n).normalized;
+                    if (brush.operation == BrushOperation.Subtract) { if (world < tSub) { tSub = world; bestSub = brush; pSub = worldPoint; nSub = worldNormal; } }
+                    else if (world < tAdd) { tAdd = world; bestAdd = brush; pAdd = worldPoint; nAdd = worldNormal; }
                 }
             }
-            return bestAdd != null ? bestAdd : bestSub;
+            if (bestAdd != null) { point = pAdd; normal = nAdd; return bestAdd; }
+            point = pSub; normal = nSub; return bestSub;
         }
 
         static bool PointInFace(BrushPolyhedron poly, int face, Vector3 p)

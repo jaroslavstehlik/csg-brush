@@ -13,8 +13,12 @@ URL", the URL of this repository.
 
 ## Brushes (the student-facing layer)
 
-- **Create**: GameObject > Brush > Box / Wedge / Cylinder / Cone / Sphere / Stairs / Hollow room, or add the
-  `Brush` component to an empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
+- **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
+  Cone, Sphere, Stairs; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
+  base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool.
+  Everything snaps to the grid, and a wall makes the brush grow out of the wall. The "New" switch in the Brushes
+  overlay picks Add or Subtract for the brushes drawn next. GameObject > Brush > ... still creates a
+  default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
   generated under a hidden model object.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0 (2026-09-13)
+
+- Create tools, the ProBuilder way: one toolbar button with Box, Wedge, Cylinder, Cone, Sphere and Stairs
+  variants (also Tools > CSG Brush > Create). Press on a brush face or the ground, drag the base, release, move
+  for the height, click; Escape cancels or leaves the tool. Grid-snapped throughout; drawing on a wall builds
+  out of the wall with the brush's up along the wall normal. The Brushes overlay gains a "New: Add / Subtract"
+  switch for the brushes drawn next. Toolbar icons are drawn in code. Geometry helpers in `BrushDraw` are covered
+  by tests.
+
 ## 0.1.0 (2026-09-12) — CSG Brush
 
 - Renamed from the Chisel fork to CSG Brush (`com.scholastika.csgbrush`, namespace `CsgBrush`); fresh repository.
