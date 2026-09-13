@@ -370,11 +370,9 @@ namespace CsgBrush.Editor
                 case BrushShape.Cylinder:
                 case BrushShape.Cone:
                     s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Sides"), s.newSides));
-                    EditorGUILayout.LabelField(" ", "Press on the centre, drag the radius, then the height", EditorStyles.miniLabel);
                     break;
                 case BrushShape.Sphere:
                     s.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.newTessellation, 1, 5);
-                    EditorGUILayout.LabelField(" ", "Press on the centre, drag the radius; lift for an ellipsoid", EditorStyles.miniLabel);
                     break;
                 case BrushShape.Stairs:
                     s.newStepHeight = UnitsField(s, "Step height", "0 uses the grid (at most the max step)", s.newStepHeight, stepHeight);
@@ -385,7 +383,6 @@ namespace CsgBrush.Editor
                     s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
                     s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
-                    EditorGUILayout.LabelField(" ", "Press on the axis, drag the radius, then the height", EditorStyles.miniLabel);
                     break;
                 case BrushShape.SpiralStairs:
                     s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
@@ -395,7 +392,6 @@ namespace CsgBrush.Editor
                     s.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.newSlopedCeiling);
                     s.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.newSlopedFloor);
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
-                    EditorGUILayout.LabelField(" ", "Press on the axis, drag the radius, then the height", EditorStyles.miniLabel);
                     break;
             }
             if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
