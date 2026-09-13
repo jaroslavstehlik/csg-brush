@@ -82,6 +82,8 @@ namespace CsgBrush.Editor
         public const string PanelId = "CSG Brush/New Brush";
 
         public abstract BrushShape Shape { get; }
+        /// <summary>Exactly what the toolbar shows: "Box Brush", "Curved Stairs Brush".</summary>
+        public abstract string Title { get; }
         protected abstract string IconArt { get; }
 
         enum State { Idle, Base, Height }
@@ -95,7 +97,7 @@ namespace CsgBrush.Editor
         {
             get
             {
-                if (icon == null) icon = new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Shape + " Brush");
+                if (icon == null) icon = new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Title);
                 return icon;
             }
         }
@@ -314,7 +316,7 @@ namespace CsgBrush.Editor
             var tool = BrushCreateTool.Active;
             var shape = tool != null ? tool.Shape : BrushShape.Box;
             EditorGUIUtility.labelWidth = 96;
-            EditorGUILayout.LabelField(shape + " Brush", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(tool != null ? tool.Title : "Box Brush", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
             s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
             s.newSurface = (CsgBrush.Colliders.ControllerSurface.Kind)EditorGUILayout.EnumPopup(new GUIContent("Surface", "What the volume means to the character controller"), s.newSurface);
@@ -389,6 +391,7 @@ namespace CsgBrush.Editor
     public sealed class CreateBoxBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Box;
+        public override string Title => "Box Brush";
         protected override string IconArt => "................\n.....########...\n....#.......##..\n...#.......#.#..\n..########...#..\n..#......#...#..\n..#......#...#..\n..#......#...#..\n..#......#...#..\n..#......#...#..\n..#......#..#...\n..#......#.#....\n..#......##.....\n..########......\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Box", false, 1)] static void Menu() => ToolManager.SetActiveTool<CreateBoxBrushTool>();
     }
@@ -397,6 +400,7 @@ namespace CsgBrush.Editor
     public sealed class CreateWedgeBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Wedge;
+        public override string Title => "Wedge Brush";
         protected override string IconArt => "................\n................\n..........#.....\n.........##.....\n........#.#.....\n.......#..#.....\n......#...#.....\n.....#....#.....\n....#.....#.....\n...#......#.....\n..#.......#.....\n.###########....\n................\n................\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Wedge", false, 2)] static void Menu() => ToolManager.SetActiveTool<CreateWedgeBrushTool>();
     }
@@ -405,6 +409,7 @@ namespace CsgBrush.Editor
     public sealed class CreateCylinderBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Cylinder;
+        public override string Title => "Cylinder Brush";
         protected override string IconArt => "................\n....########....\n...#........#...\n..#..........#..\n..#..........#..\n...#........#...\n..#.########.#..\n..#..........#..\n..#..........#..\n..#..........#..\n..#..........#..\n..#..........#..\n...#........#...\n....########....\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Cylinder", false, 3)] static void Menu() => ToolManager.SetActiveTool<CreateCylinderBrushTool>();
     }
@@ -413,6 +418,7 @@ namespace CsgBrush.Editor
     public sealed class CreateConeBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Cone;
+        public override string Title => "Cone Brush";
         protected override string IconArt => "................\n.......##.......\n.......##.......\n......#..#......\n......#..#......\n.....#....#.....\n.....#....#.....\n....#......#....\n....#......#....\n...#........#...\n...#........#...\n..#..........#..\n..#..........#..\n...#........#...\n....########....\n................";
         [MenuItem("Tools/CSG Brush/Create/Cone", false, 4)] static void Menu() => ToolManager.SetActiveTool<CreateConeBrushTool>();
     }
@@ -421,6 +427,7 @@ namespace CsgBrush.Editor
     public sealed class CreateSphereBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Sphere;
+        public override string Title => "Sphere Brush";
         protected override string IconArt => "................\n.....######.....\n...##......##...\n..#..........#..\n.#............#.\n.#............#.\n#..............#\n#..............#\n#..............#\n#..............#\n.#............#.\n.#............#.\n..#..........#..\n...##......##...\n.....######.....\n................";
         [MenuItem("Tools/CSG Brush/Create/Sphere", false, 5)] static void Menu() => ToolManager.SetActiveTool<CreateSphereBrushTool>();
     }
@@ -429,6 +436,7 @@ namespace CsgBrush.Editor
     public sealed class CreateStairsBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Stairs;
+        public override string Title => "Linear Stairs Brush";
         protected override string IconArt => "................\n................\n..........#####.\n..........#...#.\n.......####...#.\n.......#......#.\n....####......#.\n....#.........#.\n.####.........#.\n.#............#.\n.#............#.\n.##############.\n................\n................\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Linear Stairs", false, 6)] static void Menu() => ToolManager.SetActiveTool<CreateStairsBrushTool>();
     }
@@ -437,6 +445,7 @@ namespace CsgBrush.Editor
     public sealed class CreateCurvedStairsBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.CurvedStairs;
+        public override string Title => "Curved Stairs Brush";
         protected override string IconArt => "................\n..............#.\n.............##.\n............#.#.\n..........###.#.\n..........#...#.\n.......####...#.\n.......#......#.\n....####......#.\n....#.........#.\n..###.........#.\n..#...........#.\n.##...........#.\n.##############.\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Curved Stairs", false, 7)] static void Menu() => ToolManager.SetActiveTool<CreateCurvedStairsBrushTool>();
     }
@@ -445,6 +454,7 @@ namespace CsgBrush.Editor
     public sealed class CreateSpiralStairsBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.SpiralStairs;
+        public override string Title => "Spiral Stairs Brush";
         protected override string IconArt => "................\n.......##.......\n.......##.......\n....#..##..#....\n...###.##.###...\n....#..##..#....\n.......##.......\n..####.##.####..\n.......##.......\n....#..##..#....\n...###.##.###...\n....#..##..#....\n.......##.......\n.......##.......\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Spiral Stairs", false, 8)] static void Menu() => ToolManager.SetActiveTool<CreateSpiralStairsBrushTool>();
     }
