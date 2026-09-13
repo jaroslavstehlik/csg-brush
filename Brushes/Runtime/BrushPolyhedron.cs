@@ -10,6 +10,15 @@ namespace CsgBrush
     /// from it (see ConvexDecomposition). Vertex and face indices are stable across edits so selection can
     /// refer to them.
     /// </summary>
+    /// <summary>Parameters of the curved and spiral stair generators (metres and degrees), named after Unreal's brush settings.</summary>
+    [Serializable]
+    public struct StairParams
+    {
+        public float innerRadius, stepWidth, stepHeight, stepThickness, curveAngle, addToFirstStep;
+        public int numSteps, stepsPer360;
+        public bool counterClockwise, slopedFloor, slopedCeiling;
+    }
+
     [Serializable]
     public sealed class BrushPolyhedron
     {
@@ -19,6 +28,8 @@ namespace CsgBrush
             public int[] indices;
             /// <summary>Index of the face this one was split from, or -1. Materials and surfaces follow it.</summary>
             public int source = -1;
+            /// <summary>Convex block this face belongs to in a shape made of several closed convex blocks (stairs), or -1.</summary>
+            public int group = -1;
             public Face() { }
             public Face(int[] indices, int source = -1) { this.indices = indices; this.source = source; }
         }
@@ -33,7 +44,7 @@ namespace CsgBrush
         public BrushPolyhedron Clone()
         {
             var c = new BrushPolyhedron { vertices = (Vector3[])vertices.Clone(), faces = new Face[faces.Length] };
-            for (int i = 0; i < faces.Length; i++) c.faces[i] = new Face((int[])faces[i].indices.Clone(), faces[i].source);
+            for (int i = 0; i < faces.Length; i++) c.faces[i] = new Face((int[])faces[i].indices.Clone(), faces[i].source) { group = faces[i].group };
             return c;
         }
 
@@ -225,6 +236,97 @@ namespace CsgBrush
                 Add(Vector3.forward, V(-w, levels[l], zBack), V(w, levels[l], zBack), V(w, levels[l + 1], zBack), V(-w, levels[l + 1], zBack));
             var p = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
             p.EnsureOutward();
+            return p;
+        }
+
+        /// <summary>
+        /// Curved stairs (Unreal's Curved Stair): steps wrapping around an inner column over an angle, each step a solid
+        /// block from the floor to its tread. Every step is its own closed convex block (Face.group), touching its
+        /// neighbours; the shape is centred on its bounds.
+        /// </summary>
+        public static BrushPolyhedron CurvedStairs(StairParams p)
+        {
+            int n = Mathf.Max(1, p.numSteps);
+            float a = Mathf.Max(1f, p.curveAngle) * Mathf.Deg2Rad / n * (p.counterClockwise ? 1f : -1f);
+            float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(0.001f, p.stepHeight);
+            var verts = new List<Vector3>(); var faces = new List<Face>();
+            for (int k = 0; k < n; k++)
+            {
+                float t0 = k * a, t1 = (k + 1) * a;
+                float yTop = p.addToFirstStep + (k + 1) * h;
+                if (yTop <= 0.001f) yTop = 0.001f;
+                int b0 = verts.Count;
+                verts.Add(new Vector3(ri * Mathf.Cos(t0), 0f, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), 0f, ro * Mathf.Sin(t0)));
+                verts.Add(new Vector3(ro * Mathf.Cos(t1), 0f, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), 0f, ri * Mathf.Sin(t1)));
+                for (int i = 0; i < 4; i++) verts.Add(new Vector3(verts[b0 + i].x, yTop, verts[b0 + i].z));
+                AddBlock(verts, faces, k, new[] { b0, b0 + 1, b0 + 2, b0 + 3 }, new[] { b0 + 4, b0 + 5, b0 + 6, b0 + 7 });
+            }
+            return Centred(verts, faces);
+        }
+
+        /// <summary>
+        /// Spiral stairs (Unreal's Spiral Stair): separate step slabs wrapping around an inner column, any number of
+        /// turns; sloped floor and ceiling turn the steps into a ramp. Each slab is its own closed block (Face.group).
+        /// </summary>
+        public static BrushPolyhedron SpiralStairs(StairParams p)
+        {
+            int n = Mathf.Max(1, p.numSteps);
+            float a = Mathf.PI * 2f / Mathf.Max(1, p.stepsPer360) * (p.counterClockwise ? 1f : -1f);
+            float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(0.001f, p.stepHeight), th = Mathf.Max(0.001f, p.stepThickness);
+            var verts = new List<Vector3>(); var faces = new List<Face>();
+            for (int k = 0; k < n; k++)
+            {
+                float t0 = k * a, t1 = (k + 1) * a;
+                float yTop1 = p.addToFirstStep + (k + 1) * h, yTop0 = p.slopedFloor ? yTop1 - h : yTop1;
+                float yBot1 = yTop1 - th, yBot0 = p.slopedCeiling ? yTop0 - th : (p.slopedFloor ? yTop1 - th : yTop1 - th);
+                if (!p.slopedFloor && p.slopedCeiling) yBot0 = yBot1 - h; // ceiling slopes under a flat tread
+                int b = verts.Count;
+                verts.Add(new Vector3(ri * Mathf.Cos(t0), yBot0, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), yBot0, ro * Mathf.Sin(t0)));
+                verts.Add(new Vector3(ro * Mathf.Cos(t1), yBot1, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), yBot1, ri * Mathf.Sin(t1)));
+                verts.Add(new Vector3(ri * Mathf.Cos(t0), yTop0, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), yTop0, ro * Mathf.Sin(t0)));
+                verts.Add(new Vector3(ro * Mathf.Cos(t1), yTop1, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), yTop1, ri * Mathf.Sin(t1)));
+                AddBlock(verts, faces, k, new[] { b, b + 1, b + 2, b + 3 }, new[] { b + 4, b + 5, b + 6, b + 7 }, splitCaps: p.slopedFloor || p.slopedCeiling);
+            }
+            return Centred(verts, faces);
+        }
+
+        /// <summary>
+        /// A closed block from a bottom and a top quad (same corner order). Faces are wound combinatorially, so every
+        /// edge is shared by exactly two faces whatever the geometry; the whole block is flipped when its signed volume
+        /// comes out negative. Caps are split into triangles when they are not planar (sloped treads).
+        /// </summary>
+        static void AddBlock(List<Vector3> verts, List<Face> faces, int group, int[] bottom, int[] top, bool splitCaps = false)
+        {
+            var block = new List<int[]>();
+            if (splitCaps)
+            {
+                block.Add(new[] { bottom[0], bottom[3], bottom[2] }); block.Add(new[] { bottom[0], bottom[2], bottom[1] });
+                block.Add(new[] { top[0], top[1], top[2] }); block.Add(new[] { top[0], top[2], top[3] });
+            }
+            else { block.Add(new[] { bottom[0], bottom[3], bottom[2], bottom[1] }); block.Add(new[] { top[0], top[1], top[2], top[3] }); }
+            for (int i = 0; i < 4; i++)
+            {
+                int j = (i + 1) % 4;
+                block.Add(new[] { bottom[i], bottom[j], top[j], top[i] });
+            }
+            double volume = 0;
+            foreach (var idx in block)
+            {
+                var a = verts[idx[0]];
+                for (int i = 1; i + 1 < idx.Length; i++) volume += Vector3.Dot(a, Vector3.Cross(verts[idx[i]], verts[idx[i + 1]]));
+            }
+            foreach (var idx in block)
+            {
+                if (volume < 0) Array.Reverse(idx);
+                faces.Add(new Face(idx) { group = group });
+            }
+        }
+
+        static BrushPolyhedron Centred(List<Vector3> verts, List<Face> faces)
+        {
+            var p = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+            var c = p.Bounds().center;
+            for (int i = 0; i < p.vertices.Length; i++) p.vertices[i] -= c;
             return p;
         }
 

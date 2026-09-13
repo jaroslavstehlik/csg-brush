@@ -13,9 +13,13 @@ namespace CsgBrush
         Cone = 3,
         Sphere = 4,
         /// <summary>Linear stairs climbing along the local Z axis.</summary>
-        Stairs = 5,
+        [InspectorName("Linear Stairs")] Stairs = 5,
         /// <summary>Edited by hand: the shape is the polyhedron on the brush, decomposed into convex pieces.</summary>
         Custom = 6,
+        /// <summary>Steps wrapping around an inner column over an angle; each step a solid block from the floor.</summary>
+        [InspectorName("Curved Stairs")] CurvedStairs = 7,
+        /// <summary>Separate step slabs wrapping around an inner column, possibly several turns.</summary>
+        [InspectorName("Spiral Stairs")] SpiralStairs = 8,
     }
 
     public enum BrushOperation
@@ -69,8 +73,27 @@ namespace CsgBrush
         [Range(1, 5)] public int tessellation = 2;
         [Tooltip("Stairs: metres.")]
         public float stepHeight = 0.5f;
-        [Tooltip("Stairs: metres.")]
+        [Tooltip("Linear stairs: length of each step along the run, metres.")]
         public float stepDepth = 1f;
+        [Tooltip("Curved and spiral stairs: radius of the inner column the steps wrap around, metres.")]
+        public float innerRadius = 0.5f;
+        [Tooltip("Curved and spiral stairs: width of the steps out from the column, metres.")]
+        public float stepWidth = 1.5f;
+        [Tooltip("Spiral stairs: thickness of each step slab, metres.")]
+        public float stepThickness = 0.25f;
+        [Tooltip("Curved stairs: total angle the steps cover, degrees.")]
+        public float curveAngle = 90f;
+        [Tooltip("Curved and spiral stairs.")]
+        [Min(1)] public int numSteps = 8;
+        [Tooltip("Spiral stairs: steps in one full turn.")]
+        [Min(1)] public int stepsPer360 = 16;
+        [Tooltip("Curved and spiral stairs: extra height under the first step (negative lowers it), metres.")]
+        public float addToFirstStep = 0f;
+        public bool counterClockwise;
+        [Tooltip("Spiral stairs: the treads slope instead of stepping (a spiral ramp).")]
+        public bool slopedFloor;
+        [Tooltip("Spiral stairs: the underside slopes instead of stepping.")]
+        public bool slopedCeiling;
 
         [Tooltip("Applied to every face. Per-face materials can be dropped onto faces in the Scene view.")]
         public Material material;
@@ -89,6 +112,16 @@ namespace CsgBrush
 
         public bool SupportsHollow => shape == BrushShape.Box || shape == BrushShape.Cylinder;
 
+        /// <summary>Shapes whose size follows from their parameters (like a Custom shape follows its vertices).</summary>
+        public bool HasParametricSize => shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs;
+
+        /// <summary>The stair parameters as the polyhedron generators take them.</summary>
+        public StairParams Stairs => new StairParams
+        {
+            innerRadius = innerRadius, stepWidth = stepWidth, stepHeight = stepHeight, stepThickness = stepThickness, curveAngle = curveAngle,
+            numSteps = numSteps, stepsPer360 = stepsPer360, addToFirstStep = addToFirstStep, counterClockwise = counterClockwise, slopedFloor = slopedFloor, slopedCeiling = slopedCeiling,
+        };
+
         /// <summary>True when a hollow (subtractive) child should exist for this brush.</summary>
         public bool IsHollow => hollow && SupportsHollow;
 
@@ -100,6 +133,12 @@ namespace CsgBrush
             if (wallThickness < 0f) wallThickness = 0f;
             if (stepHeight < 0.001f) stepHeight = 0.001f;
             if (stepDepth < 0.001f) stepDepth = 0.001f;
+            if (innerRadius < 0f) innerRadius = 0f;
+            if (stepWidth < 0.001f) stepWidth = 0.001f;
+            if (stepThickness < 0.001f) stepThickness = 0.001f;
+            if (curveAngle < 1f) curveAngle = 1f;
+            if (numSteps < 1) numSteps = 1;
+            if (stepsPer360 < 1) stepsPer360 = 1;
             SyncRequested?.Invoke(this);
         }
 

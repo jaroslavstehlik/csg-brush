@@ -9,6 +9,7 @@ namespace CsgBrush.Editor
     public sealed class BrushEditor : UnityEditor.Editor
     {
         SerializedProperty shapeProp, operationProp, surfaceProp, noFallDamageProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, stepDepthProp, materialProp;
+        SerializedProperty innerRadiusProp, stepWidthProp, stepThicknessProp, curveAngleProp, numStepsProp, stepsPer360Prop, addToFirstStepProp, ccwProp, slopedFloorProp, slopedCeilingProp;
 
         void OnEnable()
         {
@@ -24,6 +25,16 @@ namespace CsgBrush.Editor
             stepHeightProp = serializedObject.FindProperty(nameof(Brush.stepHeight));
             stepDepthProp = serializedObject.FindProperty(nameof(Brush.stepDepth));
             materialProp = serializedObject.FindProperty(nameof(Brush.material));
+            innerRadiusProp = serializedObject.FindProperty(nameof(Brush.innerRadius));
+            stepWidthProp = serializedObject.FindProperty(nameof(Brush.stepWidth));
+            stepThicknessProp = serializedObject.FindProperty(nameof(Brush.stepThickness));
+            curveAngleProp = serializedObject.FindProperty(nameof(Brush.curveAngle));
+            numStepsProp = serializedObject.FindProperty(nameof(Brush.numSteps));
+            stepsPer360Prop = serializedObject.FindProperty(nameof(Brush.stepsPer360));
+            addToFirstStepProp = serializedObject.FindProperty(nameof(Brush.addToFirstStep));
+            ccwProp = serializedObject.FindProperty(nameof(Brush.counterClockwise));
+            slopedFloorProp = serializedObject.FindProperty(nameof(Brush.slopedFloor));
+            slopedCeilingProp = serializedObject.FindProperty(nameof(Brush.slopedCeiling));
         }
 
         public override void OnInspectorGUI()
@@ -55,6 +66,11 @@ namespace CsgBrush.Editor
                 if (GUILayout.Button("Reset to " + brush.customFrom)) foreach (var t in targets) BrushApi.ResetShape((Brush)t);
                 EditorGUILayout.EndHorizontal();
             }
+            else if (shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
+            {
+                var sz = settings.ToUnits(sizeProp.vector3Value);
+                EditorGUILayout.LabelField("Size (" + settings.unitLabel + ")", sz.x.ToString("0.#") + " x " + sz.y.ToString("0.#") + " x " + sz.z.ToString("0.#") + "  (from the parameters)");
+            }
             else DrawSize(settings, shape);
 
             if (shape != BrushShape.Custom && BrushApi.CanConvertToCustom(shape))
@@ -79,9 +95,30 @@ namespace CsgBrush.Editor
                 case BrushShape.Sphere:
                     EditorGUILayout.PropertyField(tessProp, new GUIContent("Tessellation"));
                     break;
+                case BrushShape.CurvedStairs:
+                    DrawUnitsField(settings, innerRadiusProp, "Inner radius");
+                    DrawUnitsField(settings, stepWidthProp, "Step width");
+                    DrawUnitsField(settings, stepHeightProp, "Step height");
+                    EditorGUILayout.PropertyField(curveAngleProp, new GUIContent("Angle of curve"));
+                    EditorGUILayout.PropertyField(numStepsProp, new GUIContent("Num steps"));
+                    DrawUnitsField(settings, addToFirstStepProp, "Add to first step", true);
+                    EditorGUILayout.PropertyField(ccwProp, new GUIContent("Counter clockwise"));
+                    break;
+                case BrushShape.SpiralStairs:
+                    DrawUnitsField(settings, innerRadiusProp, "Inner radius");
+                    DrawUnitsField(settings, stepWidthProp, "Step width");
+                    DrawUnitsField(settings, stepHeightProp, "Step height");
+                    DrawUnitsField(settings, stepThicknessProp, "Step thickness");
+                    EditorGUILayout.PropertyField(stepsPer360Prop, new GUIContent("Num steps per 360"));
+                    EditorGUILayout.PropertyField(numStepsProp, new GUIContent("Num steps"));
+                    DrawUnitsField(settings, addToFirstStepProp, "Add to first step", true);
+                    EditorGUILayout.PropertyField(slopedCeilingProp, new GUIContent("Sloped ceiling"));
+                    EditorGUILayout.PropertyField(slopedFloorProp, new GUIContent("Sloped floor"));
+                    EditorGUILayout.PropertyField(ccwProp, new GUIContent("Counter clockwise"));
+                    break;
                 case BrushShape.Stairs:
                     DrawUnitsField(settings, stepHeightProp, "Step height");
-                    DrawUnitsField(settings, stepDepthProp, "Step depth");
+                    DrawUnitsField(settings, stepDepthProp, "Step length");
                     var sz = sizeProp.vector3Value;
                     int steps = Mathf.Max(1, Mathf.RoundToInt(sz.y / Mathf.Max(0.001f, stepHeightProp.floatValue)));
                     EditorGUILayout.LabelField(" ", steps + " steps over " + settings.FormatUnits(sz.z) + " (" + settings.FormatUnits(sz.z / steps) + " each)", EditorStyles.miniLabel);
@@ -133,12 +170,12 @@ namespace CsgBrush.Editor
             EditorGUILayout.LabelField(" ", size.x.ToString("0.00") + " x " + size.y.ToString("0.00") + " x " + size.z.ToString("0.00") + " m", EditorStyles.miniLabel);
         }
 
-        static void DrawUnitsField(BrushSettings settings, SerializedProperty prop, string label)
+        static void DrawUnitsField(BrushSettings settings, SerializedProperty prop, string label, bool allowNegative = false)
         {
             EditorGUI.BeginChangeCheck();
             float v = EditorGUILayout.FloatField(new GUIContent(label + " (" + settings.unitLabel + ")"), settings.ToUnits(prop.floatValue));
             if (EditorGUI.EndChangeCheck())
-                prop.floatValue = settings.ToMeters(Mathf.Max(0f, v));
+                prop.floatValue = settings.ToMeters(allowNegative ? v : Mathf.Max(0f, v));
         }
     }
 }

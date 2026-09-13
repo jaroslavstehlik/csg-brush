@@ -335,6 +335,21 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ParametricStairsAreCentredAndCollide([Values(BrushShape.CurvedStairs, BrushShape.SpiralStairs)] BrushShape shape)
+        {
+            var position = new Vector3(3f, 1.5f, -2f);
+            var brush = BrushApi.Create(shape, position, new Vector3(4f, 2f, 4f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            Physics.SyncTransforms();
+            var bounds = ColliderBounds();
+            Assert.Greater(bounds.size.magnitude, 0f, "no colliders generated for " + shape);
+            Assert.AreEqual(position.ToString("F1"), bounds.center.ToString("F1"), shape + " centred");
+            Assert.AreEqual(brush.size.ToString("F1"), bounds.size.ToString("F1"), "size follows the parameters");
+            Assert.AreEqual(brush.numSteps, UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "one convex collider per step");
+            Assert.Greater(RenderVertexCount(), 0, "renders");
+        }
+
+        [Test]
         public void HollowBoxIsARoom()
         {
             var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(8f, 4f, 8f), Quaternion.identity);

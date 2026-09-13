@@ -2,6 +2,12 @@
 
 ## 0.2.0 (2026-09-13)
 
+- Curved Stairs and Spiral Stairs, with Unreal's parameters (inner radius, step width, step height, angle of
+  curve / steps per 360, num steps, add to first step, counter clockwise; spirals also step thickness, sloped
+  floor, sloped ceiling). Every step is its own closed block (`Face.group`), so the mesh is closed by construction
+  and the colliders are one convex hull per step, no decomposition. Their size follows the parameters; the Create
+  tool takes the step width from the drawn footprint and the step height from the drawn height. The existing stairs
+  are "Linear Stairs" and their second field is "Step length". New Brush panel and Inspector show the fields.
 - Stairs are a closed mesh again: the side and back walls are built as one quad per step level, so no edge has
   a T-junction with its neighbour; steps that reach the box top early are flat. Covered by a test.
 - Create tools, the ProBuilder way: one toolbar button with Box, Wedge, Cylinder, Cone, Sphere and Stairs

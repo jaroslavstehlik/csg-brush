@@ -305,6 +305,34 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void CurvedAndSpiralStairsAreClosedBlocks([Values(false, true)] bool spiral, [Values(false, true)] bool sloped)
+        {
+            var p = new StairParams { innerRadius = 0.5f, stepWidth = 1.5f, stepHeight = 0.25f, stepThickness = 0.2f, curveAngle = 90f, numSteps = 6, stepsPer360 = 8, slopedFloor = sloped, slopedCeiling = sloped, counterClockwise = spiral };
+            var stairs = spiral ? BrushPolyhedron.SpiralStairs(p) : BrushPolyhedron.CurvedStairs(p);
+            Assert.IsTrue(stairs.IsValid);
+            Assert.IsTrue(stairs.IsClosed(), "every block closed");
+            Assert.Greater(stairs.Volume(), 0f);
+            Assert.AreEqual(Vector3.zero.ToString("F3"), stairs.Bounds().center.ToString("F3"), "centred on the transform");
+            var groups = new HashSet<int>(); foreach (var f in stairs.faces) groups.Add(f.group);
+            Assert.AreEqual(6, groups.Count, "one block per step");
+            // each block's collider is the convex hull of its corners, and they add up to the shape
+            float sum = 0f;
+            foreach (var g in groups)
+            {
+                var corners = new HashSet<int>();
+                for (int f = 0; f < stairs.faces.Length; f++) if (stairs.faces[f].group == g) foreach (var i in stairs.faces[f].indices) corners.Add(i);
+                var points = new List<Vector3>(); foreach (var i in corners) points.Add(stairs.vertices[i]);
+                var pt = BrushGeometry.ConvexHull(points);
+                Assert.IsNotNull(pt, "block " + g + " builds");
+                AssertClosed(pt, "block " + g);
+                sum += pt.Volume();
+            }
+            if (sloped) Assert.GreaterOrEqual(sum, stairs.Volume() * 0.999f, "hulls contain the twisted blocks");
+            if (sloped) Assert.LessOrEqual(sum, stairs.Volume() * 1.35f, "hulls of twisted ramp blocks stay close at 8 steps per turn (finer spirals twist less)");
+            else Assert.AreEqual(stairs.Volume(), sum, 1e-3f, "blocks add up");
+        }
+
+        [Test]
         public void SliverPiecesAreClosedMeshes()
         {
             // a thin wedge-like prism: the old face extraction lost edges on shapes like this

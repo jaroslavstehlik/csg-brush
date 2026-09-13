@@ -118,6 +118,36 @@ namespace CsgBrush.Editor
             wallThickness = s.newWallThickness > 0f ? s.ToMeters(s.newWallThickness) : s.GridMeters;
         }
 
+        /// <summary>
+        /// The parameters a brush drawn with the given size gets. Curved and spiral stairs take their step width from the
+        /// drawn footprint and their step height from the drawn height divided by the number of steps.
+        /// </summary>
+        public static BrushGeometry.ShapeParams ParametersFor(BrushShape shape, Vector3 size)
+        {
+            var s = BrushSettings.instance;
+            NewBrushParameters(out float stepHeight, out float stepDepth, out _);
+            float grid = s.GridMeters;
+            var p = BrushGeometry.ShapeParams.Default(size, s.newSides);
+            p.tessellation = s.newTessellation; p.stepHeight = stepHeight; p.stepDepth = stepDepth;
+            var st = p.stairs;
+            st.innerRadius = s.newInnerRadius > 0f ? s.ToMeters(s.newInnerRadius) : grid;
+            st.stepThickness = s.newStepThickness > 0f ? s.ToMeters(s.newStepThickness) : grid * 0.5f;
+            st.curveAngle = Mathf.Max(1f, s.newCurveAngle); st.numSteps = Mathf.Max(1, s.newNumSteps); st.stepsPer360 = Mathf.Max(1, s.newStepsPer360);
+            st.counterClockwise = s.newCounterClockwise; st.slopedFloor = s.newSlopedFloor; st.slopedCeiling = s.newSlopedCeiling;
+            if (shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
+            {
+                // step height from the drawn height; step width so the footprint's x extent matches the drawn one
+                st.stepHeight = Mathf.Max(grid > 0f ? grid : 0.01f, BrushSnap.Round(size.y / st.numSteps, grid));
+                st.stepWidth = 1f;
+                var trial = shape == BrushShape.CurvedStairs ? BrushPolyhedron.CurvedStairs(st) : BrushPolyhedron.SpiralStairs(st);
+                float trialX = trial.Bounds().size.x, ro = st.innerRadius + 1f;
+                float targetRo = trialX > 1e-4f ? ro * size.x / trialX : ro;
+                st.stepWidth = Mathf.Max(grid > 0f ? grid : 0.01f, BrushSnap.Round(targetRo - st.innerRadius, grid));
+            }
+            p.stairs = st;
+            return p;
+        }
+
         static float Grid => BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
 
         public override void OnToolGUI(EditorWindow window)
@@ -221,9 +251,7 @@ namespace CsgBrush.Editor
         void DrawPreview()
         {
             CurrentPose(out var centre, out var size, out var rotation);
-            var s = BrushSettings.instance;
-            NewBrushParameters(out float stepHeight, out float stepDepth, out _);
-            var poly = BrushGeometry.ShapePolyhedron(Shape, size, s.newSides, s.newTessellation, stepHeight, stepDepth);
+            var poly = BrushGeometry.ShapePolyhedron(Shape, ParametersFor(Shape, size));
             var m = Matrix4x4.TRS(centre, rotation, Vector3.one);
             Handles.color = Operation == BrushOperation.Subtract ? new Color(1f, 0.4f, 0.2f, 0.9f) : new Color(0.3f, 0.8f, 1f, 0.9f);
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
@@ -238,10 +266,14 @@ namespace CsgBrush.Editor
             var s = BrushSettings.instance;
             int group = Undo.GetCurrentGroup();
             var brush = BrushApi.Create(Shape, centre, size, rotation, null);
-            NewBrushParameters(out float stepHeight, out float stepDepth, out float wall);
+            NewBrushParameters(out _, out _, out float wall);
+            var p = ParametersFor(Shape, size);
             Undo.RecordObject(brush, "Create brush");
-            brush.sides = s.newSides; brush.tessellation = s.newTessellation;
-            brush.stepHeight = stepHeight; brush.stepDepth = stepDepth;
+            brush.sides = p.sides; brush.tessellation = p.tessellation;
+            brush.stepHeight = Shape == BrushShape.Stairs ? p.stepHeight : p.stairs.stepHeight; brush.stepDepth = p.stepDepth;
+            brush.innerRadius = p.stairs.innerRadius; brush.stepWidth = p.stairs.stepWidth; brush.stepThickness = p.stairs.stepThickness;
+            brush.curveAngle = p.stairs.curveAngle; brush.numSteps = p.stairs.numSteps; brush.stepsPer360 = p.stairs.stepsPer360;
+            brush.counterClockwise = p.stairs.counterClockwise; brush.slopedFloor = p.stairs.slopedFloor; brush.slopedCeiling = p.stairs.slopedCeiling;
             if (brush.SupportsHollow && s.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
             if (Operation != BrushOperation.Add) BrushApi.SetOperation(brush, Operation);
             if (s.newSurface != CsgBrush.Colliders.ControllerSurface.Kind.Solid) BrushApi.SetSurface(brush, s.newSurface);
@@ -298,7 +330,24 @@ namespace CsgBrush.Editor
                     break;
                 case BrushShape.Stairs:
                     s.newStepHeight = UnitsField(s, "Step height", "0 uses the grid (at most the max step)", s.newStepHeight, stepHeight);
-                    s.newStepDepth = UnitsField(s, "Step depth", "0 uses two grid steps", s.newStepDepth, stepDepth);
+                    s.newStepDepth = UnitsField(s, "Step length", "0 uses two grid steps", s.newStepDepth, stepDepth);
+                    break;
+                case BrushShape.CurvedStairs:
+                    s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
+                    s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
+                    s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
+                    s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
+                    EditorGUILayout.LabelField(" ", "Step width and height come from the drag", EditorStyles.miniLabel);
+                    break;
+                case BrushShape.SpiralStairs:
+                    s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
+                    s.newStepThickness = UnitsField(s, "Step thickness", "0 uses half a grid step", s.newStepThickness, s.GridMeters * 0.5f);
+                    s.newStepsPer360 = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps per 360"), s.newStepsPer360));
+                    s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
+                    s.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.newSlopedCeiling);
+                    s.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.newSlopedFloor);
+                    s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
+                    EditorGUILayout.LabelField(" ", "Step width and height come from the drag", EditorStyles.miniLabel);
                     break;
             }
             if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
@@ -376,11 +425,27 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Sphere", false, 5)] static void Menu() => ToolManager.SetActiveTool<CreateSphereBrushTool>();
     }
 
-    [EditorTool("Stairs Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 5)]
+    [EditorTool("Linear Stairs Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 5)]
     public sealed class CreateStairsBrushTool : BrushCreateTool
     {
         public override BrushShape Shape => BrushShape.Stairs;
         protected override string IconArt => "................\n................\n..........#####.\n..........#...#.\n.......####...#.\n.......#......#.\n....####......#.\n....#.........#.\n.####.........#.\n.#............#.\n.#............#.\n.##############.\n................\n................\n................\n................";
-        [MenuItem("Tools/CSG Brush/Create/Stairs", false, 6)] static void Menu() => ToolManager.SetActiveTool<CreateStairsBrushTool>();
+        [MenuItem("Tools/CSG Brush/Create/Linear Stairs", false, 6)] static void Menu() => ToolManager.SetActiveTool<CreateStairsBrushTool>();
+    }
+
+    [EditorTool("Curved Stairs Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 6)]
+    public sealed class CreateCurvedStairsBrushTool : BrushCreateTool
+    {
+        public override BrushShape Shape => BrushShape.CurvedStairs;
+        protected override string IconArt => "................\n..............#.\n.............##.\n............#.#.\n..........###.#.\n..........#...#.\n.......####...#.\n.......#......#.\n....####......#.\n....#.........#.\n..###.........#.\n..#...........#.\n.##...........#.\n.##############.\n................\n................";
+        [MenuItem("Tools/CSG Brush/Create/Curved Stairs", false, 7)] static void Menu() => ToolManager.SetActiveTool<CreateCurvedStairsBrushTool>();
+    }
+
+    [EditorTool("Spiral Stairs Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 7)]
+    public sealed class CreateSpiralStairsBrushTool : BrushCreateTool
+    {
+        public override BrushShape Shape => BrushShape.SpiralStairs;
+        protected override string IconArt => "................\n.......##.......\n.......##.......\n....#..##..#....\n...###.##.###...\n....#..##..#....\n.......##.......\n..####.##.####..\n.......##.......\n....#..##..#....\n...###.##.###...\n....#..##..#....\n.......##.......\n.......##.......\n................\n................";
+        [MenuItem("Tools/CSG Brush/Create/Spiral Stairs", false, 8)] static void Menu() => ToolManager.SetActiveTool<CreateSpiralStairsBrushTool>();
     }
 }

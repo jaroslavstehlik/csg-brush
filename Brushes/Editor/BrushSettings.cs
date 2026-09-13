@@ -35,6 +35,14 @@ namespace CsgBrush.Editor
         [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepHeight = 0f;
         [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepDepth = 0f;
         public bool newHollow = false;
+        [Tooltip("Units; 0 uses one grid step.")] public float newInnerRadius = 0f;
+        [Tooltip("Units; 0 uses half a grid step.")] public float newStepThickness = 0f;
+        public float newCurveAngle = 90f;
+        [Min(1)] public int newNumSteps = 8;
+        [Min(1)] public int newStepsPer360 = 16;
+        public bool newCounterClockwise = false;
+        public bool newSlopedFloor = false;
+        public bool newSlopedCeiling = false;
         [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
         [Header("Editor")]
         public bool showGenerated = false;

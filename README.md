@@ -14,7 +14,7 @@ URL", the URL of this repository.
 ## Brushes (the student-facing layer)
 
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
-  Cone, Sphere, Stairs; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
+  Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
   base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool.
   Everything snaps to the grid, and a wall makes the brush grow out of the wall. The "New Brush" panel that opens
   with the tool holds the values the next brush is made with: operation, surface, sides, tessellation, step
@@ -32,6 +32,11 @@ URL", the URL of this repository.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
   shape it came from) discards the edits. Concave shapes are allowed: the concave edges turn orange and dashed lines
   show where the shape is split into convex parts for the colliders. Every shape can be edited by hand.
+- **Stairs**: Linear Stairs fill their size box with steps of a given height and length. Curved Stairs and Spiral
+  Stairs follow Unreal's parameters (inner radius, step width, step height, angle of curve or steps per 360, num
+  steps, add to first step, counter clockwise, and for spirals step thickness, sloped floor, sloped ceiling);
+  their size follows the parameters. Each step is a closed block and gets its own convex collider; a sloped
+  spiral's collider is the hull of each twisted block, so use more steps per turn for a smoother ramp.
 - **Order**: the Hierarchy order is the CSG order. A subtract carves only the brushes above it, so a brush
   created after the cutter stays whole until it is moved above it. "To first" and "To last" change the sibling
   order.

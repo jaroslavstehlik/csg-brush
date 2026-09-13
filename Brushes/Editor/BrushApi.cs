@@ -19,11 +19,12 @@ namespace CsgBrush.Editor
             var brush = Undo.AddComponent<Brush>(go);
             brush.shape = shape;
             brush.size = sizeMeters;
-            if (shape == BrushShape.Stairs)
+            if (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
-                var s = BrushSettings.instance;
-                brush.stepHeight = s.ToMeters(Mathf.Min(s.maxStep, s.GridUnits));
-                brush.stepDepth = s.ToMeters(s.GridUnits * 2f);
+                var d = BrushGeometry.ShapeParams.Default(sizeMeters);
+                brush.stepHeight = d.stepHeight; brush.stepDepth = d.stepDepth;
+                brush.innerRadius = d.stairs.innerRadius; brush.stepWidth = d.stairs.stepWidth; brush.stepThickness = d.stairs.stepThickness;
+                brush.curveAngle = d.stairs.curveAngle; brush.numSteps = d.stairs.numSteps; brush.stepsPer360 = d.stairs.stepsPer360;
             }
             BrushSync.Ensure(brush);
             BrushSync.RequestFullUpdate(brush);
@@ -133,7 +134,7 @@ namespace CsgBrush.Editor
         /// <summary>The polyhedron of a parametric shape.</summary>
         public static BrushPolyhedron PolyhedronFor(BrushShape shape, Vector3 size, int sides)
         {
-            return BrushGeometry.ShapePolyhedron(shape, size, sides, 2, 0.5f, 1f);
+            return BrushGeometry.ShapePolyhedron(shape, BrushGeometry.ShapeParams.Default(size, sides));
         }
 
         /// <summary>Every parametric shape has a polyhedron now, so every shape can be edited by hand.</summary>
