@@ -9,7 +9,7 @@ namespace CsgBrush.Editor
 {
     /// <summary>
     /// The Tool Settings toolbar of brush edit mode, laid out like ProBuilder's: Vertex / Edge / Face selection,
-    /// select hidden elements, drag rectangle mode, and Push/Pull in face mode. Unity shows these elements in the
+    /// select hidden elements, drag rectangle mode, and the handle orientation (Global / Local / Element). Unity shows these elements in the
     /// Tool Settings overlay while one of the edit context's tools is active.
     /// </summary>
     [CustomEditor(typeof(BrushSelectionTool), true)]
@@ -20,10 +20,10 @@ namespace CsgBrush.Editor
             get
             {
                 yield return "Tool Settings/Pivot Mode";
+                yield return "CSG Brush/Handle Orientation";
                 yield return "CSG Brush/Select Mode";
                 yield return "CSG Brush/Select Hidden";
                 yield return "CSG Brush/Drag Rect Mode";
-                yield return "CSG Brush/Push Pull";
             }
         }
     }
@@ -94,23 +94,33 @@ namespace CsgBrush.Editor
         void Refresh() => SetValueWithoutNotify(BrushEditState.RectComplete);
     }
 
-    [EditorToolbarElement("CSG Brush/Push Pull")]
-    sealed class BrushPushPullToggle : EditorToolbarToggle
+    /// <summary>World / Local / Element, like ProBuilder's handle orientation dropdown; Element aligns the gizmo with the selection.</summary>
+    [EditorToolbarElement("CSG Brush/Handle Orientation")]
+    sealed class BrushHandleOrientationDropdown : EditorToolbarDropdown
     {
-        public BrushPushPullToggle()
+        readonly GUIContent[] options = new GUIContent[3];
+
+        public BrushHandleOrientationDropdown()
         {
-            icon = BrushIcons.Get("PushPull", BrushEditIcons.PushPull);
-            tooltip = "Push/Pull: move the selected faces along their normals with an arrow instead of the Move gizmo (or hold Shift)";
+            name = "Handle Rotation";
+            options[0] = new GUIContent("Global", EditorGUIUtility.IconContent("ToolHandleGlobal").image, "The gizmo is aligned with the world axes");
+            options[1] = new GUIContent("Local", EditorGUIUtility.IconContent("ToolHandleLocal").image, "The gizmo is aligned with the brush's axes");
+            options[2] = new GUIContent("Element", BrushIcons.Get("ToolHandleElement", BrushEditIcons.Element), "The gizmo is aligned with the selected face, edge or vertex: blue along the normal");
+            clicked += () =>
+            {
+                var menu = new GenericMenu();
+                for (int i = 0; i < 3; i++) { int o = i; menu.AddItem(options[i], (int)BrushEditState.Orientation == i, () => BrushEditState.Orientation = (BrushHandleOrientation)o); }
+                menu.DropDown(worldBound);
+            };
             RegisterCallback<AttachToPanelEvent>(evt => { BrushEditState.Changed += Refresh; Refresh(); });
             RegisterCallback<DetachFromPanelEvent>(evt => BrushEditState.Changed -= Refresh);
-            this.RegisterValueChangedCallback(evt => BrushEditState.PushPull = evt.newValue);
             Refresh();
         }
 
         void Refresh()
         {
-            SetValueWithoutNotify(BrushEditState.PushPull);
-            style.display = BrushEditState.Mode == BrushEditMode.Face ? DisplayStyle.Flex : DisplayStyle.None;
+            var c = options[(int)BrushEditState.Orientation];
+            text = c.text; tooltip = c.tooltip; icon = c.image as Texture2D;
         }
     }
 
@@ -121,6 +131,6 @@ namespace CsgBrush.Editor
         public const string Face = "................\n................\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n................\n................";
         public const string Hidden = "................\n................\n................\n.....######.....\n...##......##...\n..#...####...#..\n.#...######...#.\n#....######....#\n.#...######...#.\n..#...####...#..\n...##......##...\n.....######.....\n................\n................\n................\n................";
         public const string DragRect = "................\n.##.##.##.##.##.\n................\n#..............#\n#..............#\n................\n#..............#\n#..............#\n................\n#..............#\n#..............#\n................\n#..............#\n#..............#\n................\n.##.##.##.##.##.";
-        public const string PushPull = "................\n.......##.......\n......####......\n.....######.....\n....########....\n.......##.......\n.......##.......\n.......##.......\n.......##.......\n.......##.......\n.......##.......\n....########....\n.....######.....\n......####......\n.......##.......\n................";
+        public const string Element = "................\n.......##.......\n......####......\n.....##.###.....\n....##...##.....\n...##.....##....\n..##.......##...\n.##.........##..\n.##.........##..\n.##.........##..\n.#############..\n................\n.#############..\n.#############..\n................\n................";
     }
 }

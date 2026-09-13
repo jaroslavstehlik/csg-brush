@@ -2,6 +2,10 @@
 
 ## 0.2.0 (2026-09-13)
 
+- Handle orientation like ProBuilder's: Global, Local or Element in the Tool Settings toolbar. Element aligns
+  the Move, Rotate and Scale gizmos with the selection (blue axis along the face normal; edges and vertices
+  use their faces), fixed for the duration of a drag. Push/Pull and its Shift latch are gone: moving along the
+  Element gizmo's blue axis is the same operation.
 - The concave-edge and convex-cut overlay is gone: the edges are visible in edit mode anyway and the modeller
   handles concave shapes, so there is nothing to warn about.
 - Brush edit mode uses the Tool Settings toolbar the way ProBuilder does: Vertex / Edge / Face toggles, Select

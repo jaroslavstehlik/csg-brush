@@ -8,6 +8,9 @@ namespace CsgBrush.Editor
 {
     public enum BrushEditMode { Vertex = 0, Edge = 1, Face = 2 }
 
+    /// <summary>How the Move/Rotate/Scale gizmo is aligned in brush edit mode (ProBuilder's World / Local / Element).</summary>
+    public enum BrushHandleOrientation { World = 0, Local = 1, Element = 2 }
+
     /// <summary>
     /// Brush edit mode. While this context is active, Unity's Move, Rotate and Scale tools (toolbar and W/E/R)
     /// act on the selected vertices, edges or faces of the selected brushes instead of the GameObjects; leaving
@@ -45,29 +48,19 @@ namespace CsgBrush.Editor
     public static class BrushEditState
     {
         static BrushEditMode s_Mode = BrushEditMode.Face;
-        static bool s_PushPull, s_SelectHidden, s_RectComplete = true;
+        static bool s_SelectHidden, s_RectComplete = true;
+        static BrushHandleOrientation s_Orientation = BrushHandleOrientation.Element;
         /// <summary>Raised when the mode or one of the selection settings changes (the Tool Settings toolbar listens).</summary>
         public static event Action Changed;
         static void Notify() { Changed?.Invoke(); SceneView.RepaintAll(); }
 
         public static BrushEditMode Mode { get => s_Mode; set { if (s_Mode == value) return; s_Mode = value; Notify(); } }
-        /// <summary>Face mode only: the arrow that moves the selected face along its normal replaces the Move gizmo.</summary>
-        public static bool PushPull { get => s_PushPull; set { if (s_PushPull == value) return; s_PushPull = value; Notify(); } }
+        /// <summary>Gizmo alignment: world axes, the brush's axes, or the selected element (blue axis along the face normal).</summary>
+        public static BrushHandleOrientation Orientation { get => s_Orientation; set { if (s_Orientation == value) return; s_Orientation = value; Notify(); } }
         /// <summary>Select elements on faces that look away from the camera too (ProBuilder's "select hidden").</summary>
         public static bool SelectHidden { get => s_SelectHidden; set { if (s_SelectHidden == value) return; s_SelectHidden = value; Notify(); } }
         /// <summary>Drag rectangle: on selects only elements completely inside, off selects everything it touches.</summary>
         public static bool RectComplete { get => s_RectComplete; set { if (s_RectComplete == value) return; s_RectComplete = value; Notify(); } }
-        static bool s_PushPullLatched; // what was active when the current drag started, so releasing Shift mid-drag does not swap handles
-
-        /// <summary>Push/Pull is on when toggled or while Shift is held (latched for the duration of a drag).</summary>
-        public static bool PushPullActive
-        {
-            get
-            {
-                if (dragging) return s_PushPullLatched;
-                return Mode == BrushEditMode.Face && (PushPull || (Event.current != null && Event.current.shift));
-            }
-        }
         public static readonly Color SelectedColor = new Color(1f, 0.85f, 0.2f, 1f);
 
         public sealed class Selection { public HashSet<int> faces = new HashSet<int>(); public HashSet<int> vertices = new HashSet<int>(); public HashSet<long> edges = new HashSet<long>(); public bool Any => faces.Count > 0 || vertices.Count > 0 || edges.Count > 0; }
@@ -120,9 +113,7 @@ namespace CsgBrush.Editor
 
         static void HandleKeys(Event e)
         {
-            if (e.type == EventType.KeyUp && (e.keyCode == KeyCode.LeftShift || e.keyCode == KeyCode.RightShift)) { SceneView.RepaintAll(); return; }
             if (e.type != EventType.KeyDown) return;
-            if (e.keyCode == KeyCode.LeftShift || e.keyCode == KeyCode.RightShift) { SceneView.RepaintAll(); return; } // swap gizmo and arrows
             if (e.keyCode == KeyCode.Alpha1) { Mode = BrushEditMode.Vertex; e.Use(); SceneView.RepaintAll(); }
             else if (e.keyCode == KeyCode.Alpha2) { Mode = BrushEditMode.Edge; e.Use(); SceneView.RepaintAll(); }
             else if (e.keyCode == KeyCode.Alpha3) { Mode = BrushEditMode.Face; e.Use(); SceneView.RepaintAll(); }
@@ -232,7 +223,6 @@ namespace CsgBrush.Editor
                 menu.AddItem(new GUIContent("Vertex mode  1"), Mode == BrushEditMode.Vertex, () => { Mode = BrushEditMode.Vertex; SceneView.RepaintAll(); });
                 menu.AddItem(new GUIContent("Edge mode  2"), Mode == BrushEditMode.Edge, () => { Mode = BrushEditMode.Edge; SceneView.RepaintAll(); });
                 menu.AddItem(new GUIContent("Face mode  3"), Mode == BrushEditMode.Face, () => { Mode = BrushEditMode.Face; SceneView.RepaintAll(); });
-                if (Mode == BrushEditMode.Face) menu.AddItem(new GUIContent("Push/Pull  Shift"), PushPull, () => { PushPull = !PushPull; SceneView.RepaintAll(); });
                 menu.AddSeparator("");
                 menu.AddItem(new GUIContent("Stop Editing"), false, BrushEditContext.Exit);
                 menu.ShowAsContext();
@@ -403,6 +393,64 @@ namespace CsgBrush.Editor
             }
         }
 
+        /// <summary>
+        /// Gizmo rotation for a selection in the shape's local frame: the blue (z) axis along the normal of the selected
+        /// faces (an edge or vertex uses the average of its faces), the green (y) axis along an edge of the element.
+        /// Identity when nothing gives a direction.
+        /// </summary>
+        public static Quaternion ElementRotation(BrushPolyhedron poly, BrushEditMode mode, Selection sel)
+        {
+            var faces = new List<int>();
+            Vector3 up = Vector3.zero;
+            switch (mode)
+            {
+                case BrushEditMode.Face:
+                    foreach (var f in sel.faces) if (f < poly.faces.Length) faces.Add(f);
+                    if (faces.Count > 0) { var idx = poly.faces[faces[0]].indices; up = poly.vertices[idx[1]] - poly.vertices[idx[0]]; }
+                    break;
+                case BrushEditMode.Edge:
+                    foreach (var k in sel.edges)
+                    {
+                        int a = (int)(k >> 32), b = (int)(k & 0xffffffffL);
+                        if (a >= poly.vertices.Length || b >= poly.vertices.Length) continue;
+                        if (up == Vector3.zero) up = poly.vertices[b] - poly.vertices[a];
+                        for (int f = 0; f < poly.faces.Length; f++) { var idx = poly.faces[f].indices; bool ha = false, hb = false; foreach (var i in idx) { if (i == a) ha = true; if (i == b) hb = true; } if (ha && hb && !faces.Contains(f)) faces.Add(f); }
+                    }
+                    break;
+                default:
+                    foreach (var v in sel.vertices)
+                    {
+                        if (v >= poly.vertices.Length) continue;
+                        for (int f = 0; f < poly.faces.Length; f++)
+                        {
+                            var idx = poly.faces[f].indices;
+                            for (int i = 0; i < idx.Length; i++)
+                                if (idx[i] == v) { if (!faces.Contains(f)) faces.Add(f); if (up == Vector3.zero) up = poly.vertices[idx[(i + 1) % idx.Length]] - poly.vertices[v]; }
+                        }
+                    }
+                    break;
+            }
+            if (faces.Count == 0) return Quaternion.identity;
+            Vector3 normal = Vector3.zero;
+            foreach (var f in faces) { var pl = poly.Plane(f); normal += new Vector3(pl.x, pl.y, pl.z); }
+            if (normal.sqrMagnitude < 1e-8f) { var pl = poly.Plane(faces[0]); normal = new Vector3(pl.x, pl.y, pl.z); } // opposite faces cancel: use the first
+            normal.Normalize();
+            up -= normal * Vector3.Dot(up, normal);
+            if (up.sqrMagnitude < 1e-8f) up = Mathf.Abs(normal.y) < 0.9f ? Vector3.up : Vector3.right;
+            return Quaternion.LookRotation(normal, up.normalized);
+        }
+
+        /// <summary>World rotation of the gizmo for a brush's selection under the current orientation setting.</summary>
+        public static Quaternion HandleRotation(Brush brush, BrushPolyhedron poly, Selection sel)
+        {
+            switch (Orientation)
+            {
+                case BrushHandleOrientation.Local: return brush.transform.rotation;
+                case BrushHandleOrientation.Element: return brush.transform.rotation * ElementRotation(poly, Mode, sel);
+                default: return Quaternion.identity;
+            }
+        }
+
         public static Vector3 SelectionCentre(Brush brush, BrushPolyhedron poly, HashSet<int> vertices)
         {
             var c = Vector3.zero; foreach (var v in vertices) c += brush.transform.TransformPoint(poly.vertices[v]);
@@ -412,7 +460,6 @@ namespace CsgBrush.Editor
         public static void BeginDrag(Brush brush, BrushPolyhedron poly, HashSet<int> vertices, Vector3 origin)
         {
             if (dragging && dragBrush == brush) return;
-            s_PushPullLatched = Mode == BrushEditMode.Face && (PushPull || (Event.current != null && Event.current.shift));
             dragging = true; dragBrush = brush; dragStart = poly.Clone(); dragVertices = vertices; dragOrigin = origin;
         }
 
@@ -462,41 +509,20 @@ namespace CsgBrush.Editor
                 var sel = BrushEditState.Sel(brush);
                 var moving = BrushEditState.SelectedVertices(poly, sel);
                 if (moving.Count == 0) continue;
-                bool pushPull = BrushEditState.PushPullActive;
-                if (!pushPull)
+                var centre = BrushEditState.dragging && BrushEditState.dragBrush == brush ? BrushEditState.dragOrigin + offset : BrushEditState.SelectionCentre(brush, poly, moving);
+                if (!BrushEditState.dragging) frame = BrushEditState.HandleRotation(brush, poly, sel); // fixed for the whole drag
+                EditorGUI.BeginChangeCheck();
+                var moved = Handles.PositionHandle(centre, frame);
+                if (EditorGUI.EndChangeCheck())
                 {
-                    var centre = BrushEditState.dragging && BrushEditState.dragBrush == brush ? BrushEditState.dragOrigin + offset : BrushEditState.SelectionCentre(brush, poly, moving);
-                    EditorGUI.BeginChangeCheck();
-                    var moved = Handles.PositionHandle(centre, Tools.pivotRotation == PivotRotation.Local ? brush.transform.rotation : Quaternion.identity);
-                    if (EditorGUI.EndChangeCheck())
-                    {
-                        if (!BrushEditState.dragging || BrushEditState.dragBrush != brush) { BrushEditState.BeginDrag(brush, poly, moving, centre); offset = Vector3.zero; }
-                        offset = moved - BrushEditState.dragOrigin;
-                        var delta = offset;
-                        BrushEditState.ApplyDrag(brush, sel, p => p + delta);
-                    }
-                    continue;
-                }
-                // Push/Pull: one arrow per selected face, along its normal
-                foreach (var f in new List<int>(sel.faces))
-                {
-                    if (f >= poly.faces.Length) continue;
-                    var plane = poly.Plane(f); var normal = brush.transform.TransformDirection(new Vector3(plane.x, plane.y, plane.z)).normalized;
-                    var fc = brush.transform.TransformPoint(poly.FaceCentre(f));
-                    Handles.color = BrushEditState.SelectedColor;
-                    EditorGUI.BeginChangeCheck();
-                    var p = Handles.Slider(fc, normal, HandleUtility.GetHandleSize(fc) * 0.6f, Handles.ArrowHandleCap, 0f);
-                    if (EditorGUI.EndChangeCheck())
-                    {
-                        var faceVertices = poly.VerticesOfFaces(new[] { f });
-                        BrushEditState.BeginDrag(brush, poly, faceVertices, fc);
-                        var along = normal * Vector3.Dot(p - BrushEditState.dragOrigin, normal);
-                        BrushEditState.ApplyDrag(brush, sel, q => q + along);
-                    }
+                    if (!BrushEditState.dragging || BrushEditState.dragBrush != brush) { BrushEditState.BeginDrag(brush, poly, moving, centre); offset = Vector3.zero; }
+                    offset = moved - BrushEditState.dragOrigin;
+                    var delta = offset;
+                    BrushEditState.ApplyDrag(brush, sel, p => p + delta);
                 }
             }
         }
-        Vector3 offset;
+        Vector3 offset; Quaternion frame = Quaternion.identity;
     }
 
     /// <summary>Rotate tool inside brush edit mode: the selection turns about its centre in rotation-snap steps; positions land on the grid.</summary>
@@ -513,7 +539,7 @@ namespace CsgBrush.Editor
                 var moving = BrushEditState.SelectedVertices(poly, sel);
                 if (moving.Count == 0) continue;
                 var centre = BrushEditState.dragging && BrushEditState.dragBrush == brush ? BrushEditState.dragOrigin : BrushEditState.SelectionCentre(brush, poly, moving);
-                if (!BrushEditState.dragging) current = start = Quaternion.identity;
+                if (!BrushEditState.dragging) current = start = BrushEditState.HandleRotation(brush, poly, sel);
                 EditorGUI.BeginChangeCheck();
                 var rotated = Handles.RotationHandle(current, centre);
                 if (EditorGUI.EndChangeCheck())
@@ -521,7 +547,8 @@ namespace CsgBrush.Editor
                     BrushEditState.BeginDrag(brush, poly, moving, centre);
                     current = rotated;
                     var settings = BrushSettings.instance;
-                    var delta = settings.snapToGrid ? BrushSnap.SnapRotation(rotated, settings.rotationSnapDegrees) : rotated;
+                    var delta = rotated * Quaternion.Inverse(start);
+                    if (settings.snapToGrid) delta = BrushSnap.SnapRotation(delta, settings.rotationSnapDegrees);
                     var c = BrushEditState.dragOrigin;
                     BrushEditState.ApplyDrag(brush, sel, p => c + delta * (p - c));
                 }
@@ -533,7 +560,7 @@ namespace CsgBrush.Editor
     [EditorTool("Scale brush selection", typeof(Brush), typeof(BrushEditContext))]
     public sealed class BrushScaleTool : BrushSelectionTool
     {
-        Vector3 current = Vector3.one;
+        Vector3 current = Vector3.one; Quaternion frame = Quaternion.identity;
         public override void OnToolGUI(EditorWindow window)
         {
             foreach (var brush in BrushEditState.SelectedBrushes())
@@ -543,15 +570,15 @@ namespace CsgBrush.Editor
                 var moving = BrushEditState.SelectedVertices(poly, sel);
                 if (moving.Count == 0) continue;
                 var centre = BrushEditState.dragging && BrushEditState.dragBrush == brush ? BrushEditState.dragOrigin : BrushEditState.SelectionCentre(brush, poly, moving);
-                if (!BrushEditState.dragging) current = Vector3.one;
+                if (!BrushEditState.dragging) { current = Vector3.one; frame = BrushEditState.HandleRotation(brush, poly, sel); }
                 EditorGUI.BeginChangeCheck();
-                var scaled = Handles.ScaleHandle(current, centre, Quaternion.identity, HandleUtility.GetHandleSize(centre));
+                var scaled = Handles.ScaleHandle(current, centre, frame, HandleUtility.GetHandleSize(centre));
                 if (EditorGUI.EndChangeCheck())
                 {
                     BrushEditState.BeginDrag(brush, poly, moving, centre);
                     current = scaled;
-                    var c = BrushEditState.dragOrigin; var s = scaled;
-                    BrushEditState.ApplyDrag(brush, sel, p => c + Vector3.Scale(p - c, s));
+                    var c = BrushEditState.dragOrigin; var s = scaled; var r = frame; var ri = Quaternion.Inverse(frame);
+                    BrushEditState.ApplyDrag(brush, sel, p => c + r * Vector3.Scale(ri * (p - c), s));
                 }
             }
         }

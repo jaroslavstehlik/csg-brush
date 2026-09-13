@@ -88,6 +88,33 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ElementOrientationFollowsTheSelection()
+        {
+            var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
+            int top = -1, right = -1;
+            for (int f = 0; f < box.faces.Length; f++) { var n = box.Plane(f); if (n.y > 0.9f) top = f; if (n.x > 0.9f) right = f; }
+            var sel = new BrushEditState.Selection(); sel.faces.Add(top);
+            var rot = BrushEditState.ElementRotation(box, BrushEditMode.Face, sel);
+            Assert.AreEqual(Vector3.up.ToString("F3"), (rot * Vector3.forward).ToString("F3"), "blue axis along the top face normal");
+            sel.faces.Clear(); sel.faces.Add(right);
+            rot = BrushEditState.ElementRotation(box, BrushEditMode.Face, sel);
+            Assert.AreEqual(Vector3.right.ToString("F3"), (rot * Vector3.forward).ToString("F3"), "blue axis along the right face normal");
+            // an edge: the average of its two faces, green along the edge
+            var idx = box.faces[top].indices;
+            var edge = new BrushEditState.Selection(); edge.edges.Add(BrushEditState.EdgeKey(idx[0], idx[1]));
+            rot = BrushEditState.ElementRotation(box, BrushEditMode.Edge, edge);
+            var along = (box.vertices[idx[1]] - box.vertices[idx[0]]).normalized;
+            Assert.AreEqual(1f, Mathf.Abs(Vector3.Dot(rot * Vector3.up, along)), 1e-3f, "green axis along the edge");
+            Assert.Greater(Vector3.Dot(rot * Vector3.forward, Vector3.up), 0.5f, "blue axis leans out of the top face");
+            // a vertex: the average of its three faces
+            var vertex = new BrushEditState.Selection(); vertex.vertices.Add(idx[0]);
+            rot = BrushEditState.ElementRotation(box, BrushEditMode.Vertex, vertex);
+            var corner = box.vertices[idx[0]].normalized;
+            Assert.AreEqual(1f, Vector3.Dot(rot * Vector3.forward, corner), 1e-3f, "blue axis out of the corner");
+            Assert.AreEqual(Quaternion.identity.eulerAngles.ToString("F1"), BrushEditState.ElementRotation(box, BrushEditMode.Face, new BrushEditState.Selection()).eulerAngles.ToString("F1"), "nothing selected: world");
+        }
+
+        [Test]
         public void HeightFromRayIsTheNearestPointOnTheNormalLine()
         {
             var corner = new Vector3(1f, 0f, 1f);
