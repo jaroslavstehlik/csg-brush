@@ -110,28 +110,8 @@ namespace CsgBrush.Editor
         // Not cached: Unity keeps tool instances across domain reloads, and a cached GUIContent would keep an old tooltip.
         public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Title);
 
-        public override void OnActivated()
-        {
-            state = State.Idle; Active = this; ShowPanel(true);
-            ToolManager.activeContextChanged -= OnContextChanged; ToolManager.activeContextChanged += OnContextChanged;
-        }
-        public override void OnWillBeDeactivated()
-        {
-            state = State.Idle; if (Active == this) Active = null; ShowPanel(false);
-            ToolManager.activeContextChanged -= OnContextChanged;
-        }
-
-        /// <summary>
-        /// The Create tools are global, so they would stay active when another tool context takes over (ProBuilder's,
-        /// for instance) and hide that context's tool settings. Step aside instead.
-        /// </summary>
-        static void OnContextChanged()
-        {
-            if (Active == null) return;
-            var context = ToolManager.activeContextType;
-            if (context == typeof(GameObjectToolContext) || context == typeof(BrushEditContext)) return;
-            EditorApplication.delayCall += () => { if (Active != null && ToolManager.activeToolType == Active.GetType()) ToolManager.RestorePreviousPersistentTool(); };
-        }
+        public override void OnActivated() { state = State.Idle; Active = this; ShowPanel(true); }
+        public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; ShowPanel(false); }
 
         static void ShowPanel(bool show)
         {
