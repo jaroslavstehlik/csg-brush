@@ -44,9 +44,19 @@ namespace CsgBrush.Editor
     /// <summary>Selection, drawing, picking and drag bookkeeping shared by the edit context and its three tools.</summary>
     public static class BrushEditState
     {
-        public static BrushEditMode Mode = BrushEditMode.Face;
+        static BrushEditMode s_Mode = BrushEditMode.Face;
+        static bool s_PushPull, s_SelectHidden, s_RectComplete = true;
+        /// <summary>Raised when the mode or one of the selection settings changes (the Tool Settings toolbar listens).</summary>
+        public static event Action Changed;
+        static void Notify() { Changed?.Invoke(); SceneView.RepaintAll(); }
+
+        public static BrushEditMode Mode { get => s_Mode; set { if (s_Mode == value) return; s_Mode = value; Notify(); } }
         /// <summary>Face mode only: the arrow that moves the selected face along its normal replaces the Move gizmo.</summary>
-        public static bool PushPull;
+        public static bool PushPull { get => s_PushPull; set { if (s_PushPull == value) return; s_PushPull = value; Notify(); } }
+        /// <summary>Select elements on faces that look away from the camera too (ProBuilder's "select hidden").</summary>
+        public static bool SelectHidden { get => s_SelectHidden; set { if (s_SelectHidden == value) return; s_SelectHidden = value; Notify(); } }
+        /// <summary>Drag rectangle: on selects only elements completely inside, off selects everything it touches.</summary>
+        public static bool RectComplete { get => s_RectComplete; set { if (s_RectComplete == value) return; s_RectComplete = value; Notify(); } }
         static bool s_PushPullLatched; // what was active when the current drag started, so releasing Shift mid-drag does not swap handles
 
         /// <summary>Push/Pull is on when toggled or while Shift is held (latched for the duration of a drag).</summary>
@@ -247,22 +257,68 @@ namespace CsgBrush.Editor
         static void Apply(HashSet<int> set, int item, bool remove) { if (remove) set.Remove(item); else set.Add(item); }
         static void Apply(HashSet<long> set, long item, bool remove) { if (remove) set.Remove(item); else set.Add(item); }
 
+        /// <summary>Which faces look at the camera; vertices and edges are visible when one of their faces does.</summary>
+        sealed class Visibility
+        {
+            public bool[] face, vertex;
+            public Dictionary<long, bool> edge = new Dictionary<long, bool>();
+        }
+
+        static Visibility ComputeVisibility(Brush brush, BrushPolyhedron poly)
+        {
+            var vis = new Visibility { face = new bool[poly.faces.Length], vertex = new bool[poly.vertices.Length] };
+            var cam = Camera.current != null ? Camera.current : (SceneView.lastActiveSceneView != null ? SceneView.lastActiveSceneView.camera : null);
+            var t = brush.transform;
+            for (int f = 0; f < poly.faces.Length; f++)
+            {
+                if (cam == null || SelectHidden) { vis.face[f] = true; }
+                else
+                {
+                    var plane = poly.Plane(f);
+                    var n = t.TransformDirection(new Vector3(plane.x, plane.y, plane.z));
+                    var centre = t.TransformPoint(poly.FaceCentre(f));
+                    var view = cam.orthographic ? cam.transform.forward : centre - cam.transform.position;
+                    vis.face[f] = Vector3.Dot(n, view) < 0f;
+                }
+                if (!vis.face[f]) continue;
+                var idx = poly.faces[f].indices;
+                for (int i = 0; i < idx.Length; i++) { vis.vertex[idx[i]] = true; vis.edge[EdgeKey(idx[i], idx[(i + 1) % idx.Length])] = true; }
+            }
+            return vis;
+        }
+
+        /// <summary>Does the segment a-b touch the rectangle (either end inside, or the segment crosses an edge of it)?</summary>
+        public static bool SegmentTouchesRect(Vector2 a, Vector2 b, Rect r)
+        {
+            if (r.Contains(a) || r.Contains(b)) return true;
+            Vector2 p0 = new Vector2(r.xMin, r.yMin), p1 = new Vector2(r.xMax, r.yMin), p2 = new Vector2(r.xMax, r.yMax), p3 = new Vector2(r.xMin, r.yMax);
+            return Crosses(a, b, p0, p1) || Crosses(a, b, p1, p2) || Crosses(a, b, p2, p3) || Crosses(a, b, p3, p0);
+        }
+
+        static bool Crosses(Vector2 a, Vector2 b, Vector2 c, Vector2 d)
+        {
+            float Side(Vector2 p, Vector2 q, Vector2 x) => (q.x - p.x) * (x.y - p.y) - (q.y - p.y) * (x.x - p.x);
+            float s1 = Side(a, b, c), s2 = Side(a, b, d), s3 = Side(c, d, a), s4 = Side(c, d, b);
+            return s1 * s2 < 0f && s3 * s4 < 0f;
+        }
+
         static void PickClick(Brush brush, BrushPolyhedron poly, Selection sel, Vector2 mouse, bool remove)
         {
             var t = brush.transform;
+            var vis = ComputeVisibility(brush, poly);
             switch (Mode)
             {
                 case BrushEditMode.Vertex:
                 {
                     int best = -1; float bestD = 12f;
-                    for (int v = 0; v < poly.vertices.Length; v++) { float d = HandleUtility.DistanceToCircle(t.TransformPoint(poly.vertices[v]), 0f); if (d < bestD) { bestD = d; best = v; } }
+                    for (int v = 0; v < poly.vertices.Length; v++) { if (!vis.vertex[v]) continue; float d = HandleUtility.DistanceToCircle(t.TransformPoint(poly.vertices[v]), 0f); if (d < bestD) { bestD = d; best = v; } }
                     if (best >= 0) Apply(sel.vertices, best, remove);
                     break;
                 }
                 case BrushEditMode.Edge:
                 {
                     (int a, int b) best = (-1, -1); float bestD = 10f;
-                    foreach (var ed in poly.Edges()) { float d = HandleUtility.DistanceToLine(t.TransformPoint(poly.vertices[ed.a]), t.TransformPoint(poly.vertices[ed.b])); if (d < bestD) { bestD = d; best = ed; } }
+                    foreach (var ed in poly.Edges()) { if (!vis.edge.TryGetValue(EdgeKey(ed.a, ed.b), out var seen) || !seen) continue; float d = HandleUtility.DistanceToLine(t.TransformPoint(poly.vertices[ed.a]), t.TransformPoint(poly.vertices[ed.b])); if (d < bestD) { bestD = d; best = ed; } }
                     if (best.a >= 0) Apply(sel.edges, EdgeKey(best.a, best.b), remove);
                     break;
                 }
@@ -312,16 +368,24 @@ namespace CsgBrush.Editor
         static void PickRect(Brush brush, BrushPolyhedron poly, Selection sel, Rect rect, bool remove)
         {
             var t = brush.transform;
-            bool Inside(int v) => rect.Contains(HandleUtility.WorldToGUIPoint(t.TransformPoint(poly.vertices[v])));
+            var vis = ComputeVisibility(brush, poly);
+            var gui = new Vector2[poly.vertices.Length];
+            for (int v = 0; v < gui.Length; v++) gui[v] = HandleUtility.WorldToGUIPoint(t.TransformPoint(poly.vertices[v]));
+            bool Inside(int v) => rect.Contains(gui[v]);
+            bool EdgeIn(int a, int b) => RectComplete ? Inside(a) && Inside(b) : SegmentTouchesRect(gui[a], gui[b], rect);
             switch (Mode)
             {
-                case BrushEditMode.Vertex: for (int v = 0; v < poly.vertices.Length; v++) if (Inside(v)) Apply(sel.vertices, v, remove); break;
-                case BrushEditMode.Edge: foreach (var ed in poly.Edges()) if (Inside(ed.a) && Inside(ed.b)) Apply(sel.edges, EdgeKey(ed.a, ed.b), remove); break;
+                case BrushEditMode.Vertex: for (int v = 0; v < poly.vertices.Length; v++) if (vis.vertex[v] && Inside(v)) Apply(sel.vertices, v, remove); break;
+                case BrushEditMode.Edge: foreach (var ed in poly.Edges()) if (vis.edge.TryGetValue(EdgeKey(ed.a, ed.b), out var seen) && seen && EdgeIn(ed.a, ed.b)) Apply(sel.edges, EdgeKey(ed.a, ed.b), remove); break;
                 case BrushEditMode.Face:
                     for (int f = 0; f < poly.faces.Length; f++)
                     {
-                        bool all = true; foreach (var i in poly.faces[f].indices) if (!Inside(i)) { all = false; break; }
-                        if (all) Apply(sel.faces, f, remove);
+                        if (!vis.face[f]) continue;
+                        var idx = poly.faces[f].indices;
+                        bool hit;
+                        if (RectComplete) { hit = true; foreach (var i in idx) if (!Inside(i)) { hit = false; break; } }
+                        else { hit = false; for (int i = 0; i < idx.Length && !hit; i++) hit = EdgeIn(idx[i], idx[(i + 1) % idx.Length]); }
+                        if (hit) Apply(sel.faces, f, remove);
                     }
                     break;
             }
@@ -385,7 +449,10 @@ namespace CsgBrush.Editor
 
     /// <summary>Move tool inside brush edit mode: Unity's position gizmo on the selection, world-grid snapped.</summary>
     [EditorTool("Move brush selection", typeof(Brush), typeof(BrushEditContext))]
-    public sealed class BrushMoveTool : EditorTool
+    /// <summary>The three tools of the edit context share the Tool Settings toolbar (see BrushEditToolbar).</summary>
+    public abstract class BrushSelectionTool : EditorTool { }
+
+    public sealed class BrushMoveTool : BrushSelectionTool
     {
         public override void OnToolGUI(EditorWindow window)
         {
@@ -434,7 +501,7 @@ namespace CsgBrush.Editor
 
     /// <summary>Rotate tool inside brush edit mode: the selection turns about its centre in rotation-snap steps; positions land on the grid.</summary>
     [EditorTool("Rotate brush selection", typeof(Brush), typeof(BrushEditContext))]
-    public sealed class BrushRotateTool : EditorTool
+    public sealed class BrushRotateTool : BrushSelectionTool
     {
         Quaternion start = Quaternion.identity, current = Quaternion.identity;
         public override void OnToolGUI(EditorWindow window)
@@ -464,7 +531,7 @@ namespace CsgBrush.Editor
 
     /// <summary>Scale tool inside brush edit mode: the selection scales about its centre; positions land on the grid.</summary>
     [EditorTool("Scale brush selection", typeof(Brush), typeof(BrushEditContext))]
-    public sealed class BrushScaleTool : EditorTool
+    public sealed class BrushScaleTool : BrushSelectionTool
     {
         Vector3 current = Vector3.one;
         public override void OnToolGUI(EditorWindow window)

@@ -6,7 +6,7 @@ using UnityEngine.UIElements;
 
 namespace CsgBrush.Editor
 {
-    /// <summary>Scene view overlay: grid size and snap, generated objects toggle, edit mode row, lint.</summary>
+    /// <summary>Scene view overlay: grid size and snap, the edit mode toggle, lint.</summary>
     [Overlay(typeof(SceneView), "Brushes", true)]
     public sealed class BrushOverlay : Overlay
     {
@@ -45,24 +45,10 @@ namespace CsgBrush.Editor
             if (editing && !editable) BrushEditContext.Exit();
             using (new EditorGUI.DisabledScope(!editable))
             {
-                bool wantEditing = GUILayout.Toggle(editing, new GUIContent("Edit brush", editable ? "Move, Rotate and Scale then act on the selected vertices, edges or faces (1, 2, 3)" : "Select a Box, Wedge, Cylinder, Cone or Custom brush"), EditorStyles.miniButtonLeft);
+                bool wantEditing = GUILayout.Toggle(editing, new GUIContent("Edit brush", editable ? "Move, Rotate and Scale then act on the selected vertices, edges or faces; the selection mode is in the Tool Settings toolbar (1, 2, 3)" : "Select a brush"), EditorStyles.miniButton);
                 if (wantEditing != editing) { if (wantEditing) BrushEditContext.Enter(); else BrushEditContext.Exit(); }
             }
-            using (new EditorGUI.DisabledScope(!editing))
-            {
-                for (int i = 0; i < 3; i++)
-                {
-                    var m = (BrushEditMode)i;
-                    bool on = GUILayout.Toggle(BrushEditState.Mode == m, new GUIContent(m.ToString(), (i + 1).ToString()), i == 2 ? EditorStyles.miniButtonRight : EditorStyles.miniButtonMid);
-                    if (on && BrushEditState.Mode != m) { BrushEditState.Mode = m; SceneView.RepaintAll(); }
-                }
-            }
             EditorGUILayout.EndHorizontal();
-            if (editing && BrushEditState.Mode == BrushEditMode.Face)
-            {
-                bool pp = GUILayout.Toggle(BrushEditState.PushPull, new GUIContent("Push/Pull", "Move the selected faces along their normals with an arrow instead of the Move gizmo. Holding Shift does the same without the toggle."), EditorStyles.miniButton);
-                if (pp != BrushEditState.PushPull) { BrushEditState.PushPull = pp; SceneView.RepaintAll(); }
-            }
 
             // lint: what would make a level invalid for the controller
             var offGrid = BrushSnap.OffGridBrushes();

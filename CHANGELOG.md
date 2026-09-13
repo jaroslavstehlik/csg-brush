@@ -2,6 +2,10 @@
 
 ## 0.2.0 (2026-09-13)
 
+- Brush edit mode uses the Tool Settings toolbar the way ProBuilder does: Vertex / Edge / Face toggles, Select
+  Hidden (elements on faces looking away from the camera are otherwise left alone by clicks and rectangles),
+  Drag Rectangle Mode (complete or touching) and Push/Pull in face mode. The Brushes overlay keeps only the Edit
+  brush toggle.
 - Cylinder, Cone and Sphere are drawn from the centre of their base: press on the centre, drag the radius, then
   the height; a sphere with no height is round, lifting makes an ellipsoid.
 - Curved and Spiral Stairs are placed by their column axis: the transform is the axis at floor level (it snaps to

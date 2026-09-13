@@ -30,8 +30,11 @@ URL", the URL of this repository.
 - **Operation and surface**: Add or Subtract; Solid, Slick, Water, Trigger, No collision (the convex collider
   builder tags each piece for the character controller). Hollow turns a box or cylinder into a room with a wall
   thickness.
-- **Edit shape**: the Edit Shape tool (Inspector or overlay button, or the toolbar) has Face, Edge and Vertex
-  modes (keys 1, 2, 3). Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears.
+- **Edit shape**: the Edit Brush context (Inspector or overlay button, or the tool context dropdown in the Scene
+  view Tools overlay) puts Vertex, Edge and Face selection in the Tool Settings toolbar, laid out like ProBuilder:
+  the three mode toggles (keys 1, 2, 3), Select Hidden (also pick elements facing away from the camera), Drag
+  Rectangle Mode (only what is completely inside, or everything the rectangle touches) and Push/Pull in face
+  mode. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
   shape it came from) discards the edits. Concave shapes are allowed: the concave edges turn orange and dashed lines
   show where the shape is split into convex parts for the colliders. Every shape can be edited by hand.
