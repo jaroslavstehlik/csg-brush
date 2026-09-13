@@ -2,6 +2,7 @@
 
 ## 0.2.0 (2026-09-13)
 
+- Concave-edge and convex-cut feedback is grey instead of orange, so it cannot be mistaken for a selection.
 - Brush edit mode uses the Tool Settings toolbar the way ProBuilder does: Vertex / Edge / Face toggles, Select
   Hidden (elements on faces looking away from the camera are otherwise left alone by clicks and rectangles),
   Drag Rectangle Mode (complete or touching) and Push/Pull in face mode. The Brushes overlay keeps only the Edit

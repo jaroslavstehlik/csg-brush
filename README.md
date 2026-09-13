@@ -36,7 +36,7 @@ URL", the URL of this repository.
   Rectangle Mode (only what is completely inside, or everything the rectangle touches) and Push/Pull in face
   mode. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
-  shape it came from) discards the edits. Concave shapes are allowed: the concave edges turn orange and dashed lines
+  shape it came from) discards the edits. Concave shapes are allowed: the concave edges are drawn grey and dashed grey lines
   show where the shape is split into convex parts for the colliders. Every shape can be edited by hand.
 - **Stairs**: Linear Stairs fill their size box with steps of a given height and length. Curved Stairs and Spiral
   Stairs follow Unreal's parameters (inner radius, step width, step height, angle of curve or steps per 360, num

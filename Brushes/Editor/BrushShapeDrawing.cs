@@ -13,8 +13,9 @@ namespace CsgBrush.Editor
     public static class BrushShapeDrawing
     {
         public static readonly Color EdgeColor = new Color(0.3f, 0.8f, 1f, 0.9f);
-        public static readonly Color ReflexColor = new Color(1f, 0.55f, 0.1f, 1f);
-        public static readonly Color CutColor = new Color(1f, 0.8f, 0.3f, 0.9f);
+        /// <summary>Concave creases and convex-cut lines are grey, so they never read as a (yellow) selection.</summary>
+        public static readonly Color ReflexColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+        public static readonly Color CutColor = new Color(0.6f, 0.6f, 0.6f, 0.8f);
 
         /// <summary>Convex parts and cut faces of a brush's shape (cached per polyhedron instance and edit).</summary>
         public static int Parts(Brush brush, List<Vector3[]> cutFaces)
