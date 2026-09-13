@@ -285,6 +285,26 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void StairsAreClosedAndDecomposeIntoSteps([Values(1f, 0.75f, 0.5f)] float stepDepth)
+        {
+            // 3 m deep: 3, 4 or 6 steps (the last one shorter when the depth does not divide)
+            var stairs = BrushPolyhedron.Stairs(new Vector3(2f, 1.5f, 3f), 0.5f, stepDepth);
+            Assert.IsTrue(stairs.IsValid);
+            Assert.IsTrue(stairs.IsClosed(), "every edge shared by exactly two faces");
+            Assert.IsTrue(stairs.IsSound(out var why), why);
+            Assert.Greater(stairs.Volume(), 0f);
+            int steps = Mathf.CeilToInt(3f / stepDepth - 1e-4f);
+            // volume: each step column is a box from the floor to its tread
+            float expected = 0f; float z = -1.5f;
+            for (int k = 0; k < steps; k++) { float depth = Mathf.Min(stepDepth, 1.5f - z); float top = Mathf.Min(0.75f, -0.75f + (k + 1) * 0.5f); expected += 2f * (top + 0.75f) * depth; z += depth; }
+            Assert.AreEqual(expected, stairs.Volume(), 1e-3f, "volume of " + steps + " step columns");
+            var pieces = new List<ConvexPolytope>();
+            ConvexDecomposition.Decompose(stairs, pieces);
+            float sum = 0f; foreach (var piece in pieces) { AssertClosed(piece, "stairs piece"); sum += piece.Volume(); }
+            Assert.AreEqual(expected, sum, 1e-3f, "convex parts add up to the stairs");
+        }
+
+        [Test]
         public void SliverPiecesAreClosedMeshes()
         {
             // a thin wedge-like prism: the old face extraction lost edges on shapes like this

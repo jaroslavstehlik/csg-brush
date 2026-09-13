@@ -194,21 +194,35 @@ namespace CsgBrush
                 if (Vector3.Dot(n, outward) < 0f) Array.Reverse(idx);
                 faces.Add(new Face(idx));
             }
-            float yPrev = -h;
+            // the top of every step (capped at the box top: once the stairs reach it the remaining steps are flat)
+            var tops = new List<float>(); var zs = new List<float> { -d };
             for (int k = 0; k < steps; k++)
             {
-                float z0 = -d + k * stepDepth, z1 = Mathf.Min(d, z0 + stepDepth);
-                float yTop = Mathf.Min(h, -h + (k + 1) * stepHeight);
-                if (yTop <= yPrev + 1e-5f) yTop = Mathf.Min(h, yPrev + 0.001f);
-                // riser (front of this step), tread (its top), the two side columns, and the bottom strip
-                Add(Vector3.back, V(-w, yPrev, z0), V(w, yPrev, z0), V(w, yTop, z0), V(-w, yTop, z0));
-                Add(Vector3.up, V(-w, yTop, z0), V(w, yTop, z0), V(w, yTop, z1), V(-w, yTop, z1));
-                Add(Vector3.left, V(-w, -h, z0), V(-w, -h, z1), V(-w, yTop, z1), V(-w, yTop, z0));
-                Add(Vector3.right, V(w, -h, z0), V(w, -h, z1), V(w, yTop, z1), V(w, yTop, z0));
-                Add(Vector3.down, V(-w, -h, z0), V(w, -h, z0), V(w, -h, z1), V(-w, -h, z1));
-                yPrev = yTop;
-                if (z1 >= d - 1e-6f) { Add(Vector3.forward, V(-w, -h, z1), V(w, -h, z1), V(w, yTop, z1), V(-w, yTop, z1)); break; }
+                tops.Add(Mathf.Min(h, -h + (k + 1) * stepHeight));
+                float z1 = Mathf.Min(d, -d + (k + 1) * stepDepth);
+                zs.Add(z1);
+                if (z1 >= d - 1e-6f) break;
             }
+            int n = zs.Count - 1;
+            // distinct wall levels: every side wall and the back wall are split at all of them, so shared edges match exactly
+            var levels = new List<float> { -h };
+            foreach (var t in tops) if (t > levels[levels.Count - 1] + 1e-6f) levels.Add(t);
+            for (int k = 0; k < n; k++)
+            {
+                float z0 = zs[k], z1 = zs[k + 1], yPrev = k > 0 ? tops[k - 1] : -h, yTop = tops[k];
+                if (yTop > yPrev + 1e-6f) Add(Vector3.back, V(-w, yPrev, z0), V(w, yPrev, z0), V(w, yTop, z0), V(-w, yTop, z0)); // riser
+                Add(Vector3.up, V(-w, yTop, z0), V(w, yTop, z0), V(w, yTop, z1), V(-w, yTop, z1));       // tread
+                Add(Vector3.down, V(-w, -h, z0), V(w, -h, z0), V(w, -h, z1), V(-w, -h, z1));             // bottom strip
+                for (int l = 0; l + 1 < levels.Count && levels[l + 1] <= yTop + 1e-6f; l++)
+                {
+                    float ya = levels[l], yb = levels[l + 1];
+                    Add(Vector3.left, V(-w, ya, z0), V(-w, ya, z1), V(-w, yb, z1), V(-w, yb, z0));
+                    Add(Vector3.right, V(w, ya, z0), V(w, ya, z1), V(w, yb, z1), V(w, yb, z0));
+                }
+            }
+            float zBack = zs[n], yBack = tops[n - 1];
+            for (int l = 0; l + 1 < levels.Count && levels[l + 1] <= yBack + 1e-6f; l++)
+                Add(Vector3.forward, V(-w, levels[l], zBack), V(w, levels[l], zBack), V(w, levels[l + 1], zBack), V(-w, levels[l + 1], zBack));
             var p = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
             p.EnsureOutward();
             return p;

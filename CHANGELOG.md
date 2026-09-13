@@ -2,6 +2,8 @@
 
 ## 0.2.0 (2026-09-13)
 
+- Stairs are a closed mesh again: the side and back walls are built as one quad per step level, so no edge has
+  a T-junction with its neighbour; steps that reach the box top early are flat. Covered by a test.
 - Create tools, the ProBuilder way: one toolbar button with Box, Wedge, Cylinder, Cone, Sphere and Stairs
   variants (also Tools > CSG Brush > Create). Press on a brush face or the ground, drag the base, release, move
   for the height, click; Escape cancels or leaves the tool. Grid-snapped throughout; drawing on a wall builds
