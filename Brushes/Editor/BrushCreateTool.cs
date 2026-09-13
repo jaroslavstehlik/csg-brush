@@ -91,16 +91,8 @@ namespace CsgBrush.Editor
         Vector3 origin, opposite, normal; Quaternion planeRotation; float height;
         Vector3 hoverPoint; bool hoverValid;
         int controlId;
-        GUIContent icon;
-
-        public override GUIContent toolbarIcon
-        {
-            get
-            {
-                if (icon == null) icon = new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Title);
-                return icon;
-            }
-        }
+        // Not cached: Unity keeps tool instances across domain reloads, and a cached GUIContent would keep an old tooltip.
+        public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Title);
 
         public override void OnActivated() { state = State.Idle; Active = this; ShowPanel(true); }
         public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; ShowPanel(false); }
