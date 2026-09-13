@@ -56,6 +56,21 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void RoundBrushesAreDrawnFromTheirBaseCentre()
+        {
+            var rot = BrushDraw.PlaneRotation(Vector3.up);
+            BrushDraw.CentredPose(new Vector3(1f, 0f, 1f), new Vector3(3.2f, 0f, 1f), 1.5f, rot, 0.5f, false, out var centre, out var size, out _);
+            Assert.AreEqual(new Vector3(4f, 1.5f, 4f).ToString("F3"), size.ToString("F3"), "radius 2 rounded from 2.2, diameter 4");
+            Assert.AreEqual(new Vector3(1f, 0.75f, 1f).ToString("F3"), centre.ToString("F3"), "transform at mid height above the press point");
+            BrushDraw.CentredPose(Vector3.zero, new Vector3(0f, 0f, 1.5f), 0f, rot, 0.5f, true, out centre, out size, out _);
+            Assert.AreEqual(new Vector3(3f, 3f, 3f).ToString("F3"), size.ToString("F3"), "a sphere with no height is round");
+            Assert.AreEqual(new Vector3(0f, 1.5f, 0f).ToString("F3"), centre.ToString("F3"), "resting on the surface");
+            BrushDraw.CentredPose(Vector3.zero, new Vector3(1f, 0f, 0f), -2f, rot, 0.5f, false, out centre, out size, out _);
+            Assert.AreEqual(new Vector3(2f, 2f, 2f).ToString("F3"), size.ToString("F3"));
+            Assert.AreEqual(new Vector3(0f, -1f, 0f).ToString("F3"), centre.ToString("F3"), "downward height hangs below the surface");
+        }
+
+        [Test]
         public void RadialStairsTakeWidthAndRiseFromTheDrag()
         {
             var s = BrushSettings.instance; bool snap = s.snapToGrid; int grid = s.gridIndex;

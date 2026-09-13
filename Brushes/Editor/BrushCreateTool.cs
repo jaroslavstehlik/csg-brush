@@ -54,6 +54,22 @@ namespace CsgBrush.Editor
             rotation = planeRotation;
         }
 
+        /// <summary>
+        /// Pose of a round brush drawn from its base centre: the drag sets the radius, the height the size along the
+        /// normal (a sphere with no height is round). The transform sits at the middle of the height.
+        /// </summary>
+        public static void CentredPose(Vector3 origin, Vector3 opposite, float height, Quaternion planeRotation, float grid, bool sphere, out Vector3 centre, out Vector3 size, out Quaternion rotation)
+        {
+            var local = Quaternion.Inverse(planeRotation) * (opposite - origin);
+            float step = grid > 0f ? grid : 0.5f;
+            float radius = Mathf.Max(step, grid > 0f ? BrushSnap.Round(new Vector2(local.x, local.z).magnitude, grid) : new Vector2(local.x, local.z).magnitude);
+            float h = height;
+            if (Mathf.Abs(h) < 1e-6f) h = sphere ? radius * 2f : step;
+            size = new Vector3(radius * 2f, Mathf.Abs(h), radius * 2f);
+            centre = origin + planeRotation * new Vector3(0f, h * 0.5f, 0f);
+            rotation = planeRotation;
+        }
+
         /// <summary>Signed distance along the plane normal from <paramref name="corner"/> to the point on that line nearest the ray.</summary>
         public static float HeightFromRay(Vector3 corner, Vector3 normal, Ray ray)
         {
@@ -114,6 +130,9 @@ namespace CsgBrush.Editor
 
         /// <summary>Curved and spiral stairs are placed by their axis: press on the axis, drag the outer radius, then the height.</summary>
         public static bool IsRadial(BrushShape shape) => shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs;
+
+        /// <summary>Round brushes are drawn from the centre of their base: press on the centre, drag the radius, then the height.</summary>
+        public static bool IsCentred(BrushShape shape) => shape == BrushShape.Cylinder || shape == BrushShape.Cone || shape == BrushShape.Sphere;
 
         /// <summary>Parameters of a radial shape drawn with an outer radius and a total height: step width and step height from those, the rest from the panel.</summary>
         public static BrushGeometry.ShapeParams ParametersForRadial(BrushShape shape, float outerRadius, float height)
@@ -216,7 +235,7 @@ namespace CsgBrush.Editor
                         GUIUtility.hotControl = 0; e.Use();
                         var local = Quaternion.Inverse(planeRotation) * (opposite - origin);
                         float min = Grid > 0f ? Grid * 0.5f : 0.05f;
-                        bool tooSmall = IsRadial(Shape) ? new Vector2(local.x, local.z).magnitude < min : Mathf.Abs(local.x) < min && Mathf.Abs(local.z) < min;
+                        bool tooSmall = IsRadial(Shape) || IsCentred(Shape) ? new Vector2(local.x, local.z).magnitude < min : Mathf.Abs(local.x) < min && Mathf.Abs(local.z) < min;
                         if (tooSmall) { state = State.Idle; break; } // a click, not a drag
                         state = State.Height; height = 0f;
                     }
@@ -227,7 +246,7 @@ namespace CsgBrush.Editor
                     if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag)
                     {
                         var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
-                        float h = BrushDraw.HeightFromRay(IsRadial(Shape) ? origin : opposite, normal, ray);
+                        float h = BrushDraw.HeightFromRay(IsRadial(Shape) || IsCentred(Shape) ? origin : opposite, normal, ray);
                         height = Grid > 0f ? BrushSnap.Round(h, Grid) : h;
                         e.Use(); SceneView.RepaintAll();
                     }
@@ -269,6 +288,7 @@ namespace CsgBrush.Editor
                 rotation = planeRotation * Quaternion.Euler(0f, yaw, 0f);
                 return;
             }
+            if (IsCentred(Shape)) { BrushDraw.CentredPose(origin, opposite, height, planeRotation, Grid, Shape == BrushShape.Sphere, out centre, out size, out rotation); return; }
             BrushDraw.Pose(origin, opposite, height, planeRotation, Grid, out centre, out size, out rotation);
         }
 
@@ -350,9 +370,11 @@ namespace CsgBrush.Editor
                 case BrushShape.Cylinder:
                 case BrushShape.Cone:
                     s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Sides"), s.newSides));
+                    EditorGUILayout.LabelField(" ", "Press on the centre, drag the radius, then the height", EditorStyles.miniLabel);
                     break;
                 case BrushShape.Sphere:
                     s.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.newTessellation, 1, 5);
+                    EditorGUILayout.LabelField(" ", "Press on the centre, drag the radius; lift for an ellipsoid", EditorStyles.miniLabel);
                     break;
                 case BrushShape.Stairs:
                     s.newStepHeight = UnitsField(s, "Step height", "0 uses the grid (at most the max step)", s.newStepHeight, stepHeight);
