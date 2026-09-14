@@ -133,11 +133,11 @@ namespace CsgBrush.Editor
                 }
             }
             if (!ownsResult) { LastRefusal = "The prism could not be built."; return null; }
-            // the hair-sized steps and slivers the grown prisms leave are collapsed by Manifold itself, which keeps
-            // the mesh manifold while doing so; what remains is welded below
-            using var simplified = result.Simplify(1e-4);
+            // no simplification pass here: Manifold's own (inside the boolean) only touches vertices the boolean
+            // created, whereas Simplify() would also collapse the user's own collinear vertices across face
+            // boundaries and merge coplanar faces the user keeps apart
+            var mesh = result.ToMesh();
             result.Dispose();
-            var mesh = simplified.ToMesh();
             DebugLog.Clear();
             {
                 // nothing left (a cut that removed everything) is a refused edit, not a shape

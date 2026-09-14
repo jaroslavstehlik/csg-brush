@@ -28,7 +28,7 @@ namespace CsgBrush.Manifold
         public double Volume => manifold_volume(handle);
         public int TriangleCount => (int)(ulong)manifold_num_tri(handle);
         /// <summary>The id output runs refer to (see <see cref="ToMesh"/>); assigned by <see cref="FromFaces"/>.</summary>
-        public int OriginalId => manifold_original_id(handle);
+        public int OriginalId { get; private set; } = -1;
 
         public static ManifoldSolid Empty()
         {
@@ -60,6 +60,7 @@ namespace CsgBrush.Manifold
             foreach (var f in faces) { cornerCount += f.Length; triCount += Math.Max(0, f.Length - 2); }
             var vp = new double[cornerCount * props];
             var tris = new ulong[triCount * 3];
+            var triFace = new ulong[triCount];
             int vi = 0, ti = 0;
             var triangulated = new List<int>();
             for (int f = 0; f < faces.Count; f++)
@@ -75,15 +76,19 @@ namespace CsgBrush.Manifold
                 Triangulate(vertices, face, triangulated);
                 for (int k = 0; k + 2 < triangulated.Count; k += 3)
                 {
+                    triFace[ti / 3] = (ulong)(faceIds != null ? faceIds[f] : f);
                     tris[ti++] = (ulong)(first + triangulated[k]);
                     tris[ti++] = (ulong)(first + (flip ? triangulated[k + 2] : triangulated[k + 1]));
                     tris[ti++] = (ulong)(first + (flip ? triangulated[k + 1] : triangulated[k + 2]));
                 }
             }
-            if (ti < tris.Length) Array.Resize(ref tris, ti);
+            if (ti < tris.Length) { Array.Resize(ref tris, ti); Array.Resize(ref triFace, ti / 3); }
             triCount = ti / 3;
             var meshMem = manifold_alloc_meshgl64();
             var mesh = manifold_meshgl64(meshMem, vp, (UIntPtr)cornerCount, (UIntPtr)props, tris, (UIntPtr)triCount);
+            // the face id per triangle: Manifold keeps every edge between triangles of different ids through
+            // booleans, so coplanar neighbours the user keeps apart stay apart and no output triangle straddles two faces
+            manifoldc_unity_meshgl64_set_face_id(mesh, triFace, (UIntPtr)triCount);
             var mergedMem = manifold_alloc_meshgl64();
             var merged = manifold_meshgl64_merge(mergedMem, mesh); // returns `mesh` itself when nothing had to merge
             var solidMem = manifold_alloc_manifold();
@@ -92,10 +97,17 @@ namespace CsgBrush.Manifold
             manifold_delete_meshgl64(mesh);
             error = manifold_status(raw);
             if (error != Error.NoError) { manifold_delete_manifold(raw); return null; }
-            var origMem = manifold_alloc_manifold();
-            var orig = manifold_as_original(origMem, raw);
-            manifold_delete_manifold(raw);
-            return new ManifoldSolid(orig);
+            // not AsOriginal: that recomputes faces by coplanarity and forgets the face ids, after which Manifold's
+            // simplification may collapse across the boundary between two coplanar faces the user keeps apart.
+            // A fresh solid already has its own original id per triangle (the run id its triangles carry).
+            var solid = new ManifoldSolid(raw);
+            var outMem = manifold_alloc_meshgl64();
+            var outMesh = manifold_get_meshgl64(outMem, raw);
+            var runIds = new uint[(int)(ulong)manifold_meshgl64_run_original_id_length(outMesh)];
+            if (runIds.Length > 0) manifold_meshgl64_run_original_id(runIds, outMesh);
+            manifold_delete_meshgl64(outMesh);
+            solid.OriginalId = runIds.Length > 0 ? (int)runIds[0] : -1;
+            return solid;
         }
 
         /// <summary>
@@ -236,6 +248,8 @@ namespace CsgBrush.Manifold
             {
                 int a = (int)tv[t * 3], b = (int)tv[t * 3 + 1], c = (int)tv[t * 3 + 2];
                 data.triangles[t * 3] = a; data.triangles[t * 3 + 1] = b; data.triangles[t * 3 + 2] = c;
+                // the id comes from the vertex property (constant over a face, so it interpolates exactly); the output
+                // faceID is only Manifold's own numbering of coplanar groups within a run
                 data.triangleFace[t] = numProp > 3 ? (int)Math.Round(vp[a * numProp + 3]) : -1;
             }
             for (int r = 0; r + 1 < runIndex.Length && r < runIds.Length; r++)

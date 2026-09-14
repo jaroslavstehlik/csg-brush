@@ -103,6 +103,52 @@ namespace CsgBrush.Tests
             Assert.AreEqual(before, BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "mesh back to the two boxes");
         }
 
+        static int FaceAt(BrushPolyhedron p, Vector3 normal, int source, float along)
+        {
+            for (int f = 0; f < p.faces.Length; f++)
+            {
+                if (p.faces[f].source != source || Vector3.Dot(p.Plane(f), normal) < 0.99f) continue;
+                if (Mathf.Abs(Vector3.Dot(p.vertices[p.faces[f].indices[0]], normal) - along) < 1e-3f) return f;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// The user's own faces, edges and vertices survive an extrusion: the boolean only adds the walls and the
+        /// moved face. Coplanar neighbours stay separate faces (a belt of walls keeps its edges), a face split in
+        /// two keeps its other half, and extruding a wall does not redraw the faces next to it.
+        /// </summary>
+        [Test]
+        public void ExtrusionKeepsTheUsersTopology()
+        {
+            var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
+            int top = FaceAt(box, Vector3.up, -1, 1f);
+            var once = BrushBoolean.ExtrudeFaces(box, new[] { top }, 1f, true, out var remap1);
+            Assert.AreEqual(10, once.faces.Length, "box plus a belt of four walls");
+            var twice = BrushBoolean.ExtrudeFaces(once, new[] { remap1[top] }, 1f, true, out _);
+            Assert.AreEqual(14, twice.faces.Length, "the first belt keeps its edges under the second");
+            Assert.AreEqual(16, twice.vertices.Length);
+            foreach (var f in twice.faces) Assert.AreEqual(4, f.indices.Length, "every face is still a quad");
+            // the top face split in two: extrude one half
+            var split = new BrushPolyhedron
+            {
+                vertices = new[] { new Vector3(-1, -1, -1), new Vector3(1, -1, -1), new Vector3(1, -1, 1), new Vector3(-1, -1, 1), new Vector3(-1, 1, -1), new Vector3(1, 1, -1), new Vector3(1, 1, 1), new Vector3(-1, 1, 1), new Vector3(0, 1, -1), new Vector3(0, 1, 1) },
+                faces = new[] { new BrushPolyhedron.Face(new[] { 0, 3, 2, 1 }), new BrushPolyhedron.Face(new[] { 4, 8, 9, 7 }), new BrushPolyhedron.Face(new[] { 8, 5, 6, 9 }), new BrushPolyhedron.Face(new[] { 0, 1, 5, 8, 4 }), new BrushPolyhedron.Face(new[] { 3, 7, 9, 6, 2 }), new BrushPolyhedron.Face(new[] { 0, 4, 7, 3 }), new BrushPolyhedron.Face(new[] { 1, 2, 6, 5 }) }
+            };
+            split.EnsureOutward();
+            var half = BrushBoolean.ExtrudeFaces(split, new[] { 1 }, 1f, true, out var remap3);
+            Assert.AreEqual(11, half.faces.Length, "the other half, a raised half and four walls");
+            Assert.AreEqual(2, remap3[2], "the other half keeps its index");
+            Assert.AreEqual(4, half.faces[remap3[2]].indices.Length, "and stays a quad at its height");
+            Assert.AreEqual(1f, half.vertices[half.faces[remap3[2]].indices[0]].y, 1e-4f);
+            Assert.AreEqual(5, half.faces[remap3[3]].indices.Length, "the side keeps the vertex where the top was split");
+            // extrude a belt wall: the faces next to it keep their shape
+            int wall = FaceAt(once, Vector3.right, top, 1f);
+            var side = BrushBoolean.ExtrudeFaces(once, new[] { wall }, 1f, true, out _);
+            Assert.AreEqual(14, side.faces.Length);
+            foreach (var f in side.faces) Assert.AreEqual(4, f.indices.Length, "every face is still a quad, none was redrawn with a diagonal");
+        }
+
         [Test]
         public void ExtrudeThenUndoRestoresTheBrush()
         {

@@ -44,6 +44,8 @@ namespace CsgBrush.Manifold
         [DllImport(Lib)] public static extern IntPtr manifold_boolean(IntPtr mem, IntPtr a, IntPtr b, OpType op);
         /// <summary>Our own addition to the C binding (Manifold/native/empty.cpp): Manifold::Simplify.</summary>
         [DllImport(Lib)] public static extern IntPtr manifoldc_unity_simplify(IntPtr mem, IntPtr m, double tolerance);
+        /// <summary>Our own addition: per-triangle face ids on a mesh about to become a solid (MeshGL64.faceID).</summary>
+        [DllImport(Lib)] public static extern void manifoldc_unity_meshgl64_set_face_id(IntPtr m, [In] ulong[] ids, UIntPtr count);
         [DllImport(Lib)] public static extern IntPtr manifold_batch_boolean(IntPtr mem, IntPtr ms, OpType op);
 
         // info
