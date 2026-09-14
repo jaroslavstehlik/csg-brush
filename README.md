@@ -19,9 +19,9 @@ URL", the URL of this repository.
   Everything snaps to the grid, and a wall makes the brush grow out of the wall. Cylinder, Cone and Sphere are drawn from the centre of
   their base: press on the centre, drag the radius, then the height (a sphere with no height is round; lift for an
   ellipsoid). Curved and Spiral Stairs are drawn by their axis: press where the column axis goes, drag the outer radius (the drag direction is
-  where the first step starts), then the height; the transform of those brushes is the axis at floor level. The "New Brush" panel that opens
-  with the tool holds the values the next brush is made with: operation, surface, sides, tessellation, step
-  sizes, hollow and wall thickness. GameObject > Brush > ... still creates a
+  where the first step starts), then the height; the transform of those brushes is the axis at floor level. The values a new brush is made with
+  (operation, surface, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
+  edited on the brush afterwards. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
   generated under a hidden model object.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
@@ -35,9 +35,9 @@ URL", the URL of this repository.
   the three mode toggles (keys 1, 2, 3), Select Hidden (also pick elements facing away from the camera), Drag
   Rectangle Mode (only what is completely inside, or everything the rectangle touches) and the handle
   orientation: Global, Local, or Element, which aligns the gizmo with the selection so the blue axis runs along
-  the face normal, the natural way to push a face in or out. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears. The Extrude row in the
-  Brushes overlay (edit mode) extrudes the selected faces by a distance in world units (negative cuts a pocket),
-  either the whole selection as one block or each face on its own; it is a boolean, so the block may run through
+  the face normal, the natural way to push a face in or out. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears. The Extrude button in the
+  Brushes overlay (edit mode) opens the Extrude panel: a distance in world units (negative cuts a pocket), the
+  whole selection as one block or each face on its own, and Extrude. It is a boolean, so the block may run through
   other parts of the brush, and the faces stay selected for the next extrusion.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
   shape it came from) discards the edits. Concave shapes are allowed; they are split into convex parts for the colliders

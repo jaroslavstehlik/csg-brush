@@ -73,41 +73,18 @@ namespace CsgBrush.Editor
             EditorGUILayout.EndVertical();
         }
 
-        /// <summary>Extrude the selected faces: distance, whole selection or individual, confirm. The faces stay selected.</summary>
+        /// <summary>The edit actions: Extrude opens its panel (distance, whole selection or individual, confirm).</summary>
         static void DrawExtrude(BrushSettings s)
         {
-            float placeholder = s.ToUnits(s.GridMeters);
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.Label(new GUIContent("Extrude", "Extrude the selected faces along their normal; negative cuts a pocket"), GUILayout.Width(48));
-            EditorGUI.BeginChangeCheck();
-            float d = EditorGUILayout.FloatField(s.extrudeDistance != 0f ? s.extrudeDistance : placeholder, GUILayout.Width(44));
-            if (EditorGUI.EndChangeCheck()) s.extrudeDistance = d;
-            GUILayout.Label(s.unitLabel, GUILayout.Width(14));
-            int mode = EditorGUILayout.Popup(s.extrudeIndividual ? 1 : 0, new[] { "Selection", "Individual" }, GUILayout.Width(78));
-            s.extrudeIndividual = mode == 1;
             int faces = 0;
             foreach (var b in BrushEditState.SelectedBrushes()) faces += BrushEditState.Sel(b).faces.Count;
+            EditorGUILayout.BeginHorizontal();
             using (new EditorGUI.DisabledScope(faces == 0 || BrushEditState.Mode != BrushEditMode.Face))
             {
-                if (GUILayout.Button(new GUIContent("Go", faces > 0 ? "Extrude " + faces + (faces == 1 ? " face" : " faces") : "Select faces first"), GUILayout.Width(34)))
-                {
-                    float meters = s.ToMeters(s.extrudeDistance != 0f ? s.extrudeDistance : placeholder);
-                    int group = Undo.GetCurrentGroup();
-                    foreach (var b in BrushEditState.SelectedBrushes())
-                    {
-                        var sel = BrushEditState.Sel(b);
-                        if (sel.faces.Count == 0) continue;
-                        var remap = BrushApi.ExtrudeFaces(b, new System.Collections.Generic.List<int>(sel.faces), meters, s.extrudeIndividual);
-                        if (remap == null) continue;
-                        var kept = new System.Collections.Generic.HashSet<int>();
-                        foreach (var f in sel.faces) if (f < remap.Length && remap[f] >= 0) kept.Add(remap[f]);
-                        sel.faces = kept; sel.vertices.Clear(); sel.edges.Clear();
-                    }
-                    Undo.CollapseUndoOperations(group);
-                    BrushApi.ForceUpdate();
-                    SceneView.RepaintAll();
-                }
+                if (GUILayout.Button(new GUIContent("Extrude", faces > 0 ? "Extrude the selected faces (opens the Extrude panel)" : "Select faces first"), EditorStyles.miniButton))
+                    BrushExtrudeOverlay.Toggle();
             }
+            GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
         }
 

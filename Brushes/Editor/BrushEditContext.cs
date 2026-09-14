@@ -37,6 +37,8 @@ namespace CsgBrush.Editor
             }
         }
 
+        public override void OnWillBeDeactivated() { BrushExtrudeOverlay.Hide(); }
+
         public override void OnToolGUI(EditorWindow window)
         {
             if (!(window is SceneView)) return;

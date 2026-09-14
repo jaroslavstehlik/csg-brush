@@ -90,12 +90,11 @@ namespace CsgBrush.Editor
     /// </summary>
     public abstract class BrushCreateTool : EditorTool
     {
-        /// <summary>Operation of the brushes drawn next (set in the New Brush panel).</summary>
+        /// <summary>Operation of the brushes drawn next (Project Settings > Brushes).</summary>
         public static BrushOperation Operation { get => BrushSettings.instance.newOperation; set => BrushSettings.instance.newOperation = value; }
 
         /// <summary>The Create tool that is active, if any.</summary>
         public static BrushCreateTool Active { get; private set; }
-        public const string PanelId = "CSG Brush/New Brush";
 
         public abstract BrushShape Shape { get; }
         /// <summary>Exactly what the toolbar shows: "Box Brush", "Curved Stairs Brush".</summary>
@@ -110,14 +109,8 @@ namespace CsgBrush.Editor
         // Not cached: Unity keeps tool instances across domain reloads, and a cached GUIContent would keep an old tooltip.
         public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get(Shape.ToString(), IconArt), Title);
 
-        public override void OnActivated() { state = State.Idle; Active = this; ShowPanel(true); }
-        public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; ShowPanel(false); }
-
-        static void ShowPanel(bool show)
-        {
-            foreach (SceneView view in SceneView.sceneViews)
-                if (view.TryGetOverlay(PanelId, out var overlay)) overlay.displayed = show;
-        }
+        public override void OnActivated() { state = State.Idle; Active = this; }
+        public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; }
 
         /// <summary>Step sizes and wall thickness for new brushes: the settings, or grid-derived defaults when left at 0.</summary>
         public static void NewBrushParameters(out float stepHeight, out float stepDepth, out float wallThickness)
@@ -329,78 +322,6 @@ namespace CsgBrush.Editor
             Selection.activeGameObject = brush.gameObject;
             state = State.Idle; hoverValid = false;
             SceneView.RepaintAll();
-        }
-    }
-
-    /// <summary>
-    /// Shown with the Create tools: the values the next brush is created with (what ProBuilder's Shape Settings does).
-    /// Only the fields that apply to the active shape are shown.
-    /// </summary>
-    [Overlay(typeof(SceneView), BrushCreateTool.PanelId, "New Brush", false)]
-    public sealed class NewBrushOverlay : UnityEditor.Overlays.Overlay
-    {
-        public override UnityEngine.UIElements.VisualElement CreatePanelContent()
-        {
-            var container = new UnityEngine.UIElements.IMGUIContainer(Draw);
-            container.style.minWidth = 200;
-            return container;
-        }
-
-        static float UnitsField(BrushSettings s, string label, string tooltip, float units, float placeholderMeters)
-        {
-            EditorGUI.BeginChangeCheck();
-            float shown = units > 0f ? units : s.ToUnits(placeholderMeters);
-            float v = EditorGUILayout.FloatField(new GUIContent(label + " (" + s.unitLabel + ")", tooltip), shown);
-            return EditorGUI.EndChangeCheck() ? Mathf.Max(0f, v) : units;
-        }
-
-        static void Draw()
-        {
-            var s = BrushSettings.instance;
-            var tool = BrushCreateTool.Active;
-            var shape = tool != null ? tool.Shape : BrushShape.Box;
-            EditorGUIUtility.labelWidth = 96;
-            EditorGUILayout.LabelField(tool != null ? tool.Title : "Box Brush", EditorStyles.boldLabel);
-            EditorGUI.BeginChangeCheck();
-            s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
-            s.newSurface = (CsgBrush.Colliders.ControllerSurface.Kind)EditorGUILayout.EnumPopup(new GUIContent("Surface", "What the volume means to the character controller"), s.newSurface);
-            BrushCreateTool.NewBrushParameters(out float stepHeight, out float stepDepth, out float wall);
-            switch (shape)
-            {
-                case BrushShape.Cylinder:
-                case BrushShape.Cone:
-                    s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Sides"), s.newSides));
-                    break;
-                case BrushShape.Sphere:
-                    s.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.newTessellation, 1, 5);
-                    break;
-                case BrushShape.Stairs:
-                    s.newStepHeight = UnitsField(s, "Step height", "0 uses the grid (at most the max step)", s.newStepHeight, stepHeight);
-                    s.newStepDepth = UnitsField(s, "Step length", "0 uses two grid steps", s.newStepDepth, stepDepth);
-                    break;
-                case BrushShape.CurvedStairs:
-                    s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
-                    s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
-                    s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
-                    s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
-                    break;
-                case BrushShape.SpiralStairs:
-                    s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
-                    s.newStepThickness = UnitsField(s, "Step thickness", "0 uses half a grid step", s.newStepThickness, s.GridMeters * 0.5f);
-                    s.newStepsPer360 = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps per 360"), s.newStepsPer360));
-                    s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
-                    s.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.newSlopedCeiling);
-                    s.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.newSlopedFloor);
-                    s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
-                    break;
-            }
-            if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
-            {
-                s.newHollow = EditorGUILayout.Toggle(new GUIContent("Hollow", "Keep only the walls"), s.newHollow);
-                using (new EditorGUI.DisabledScope(!s.newHollow))
-                    s.newWallThickness = UnitsField(s, "Wall thickness", "0 uses one grid step", s.newWallThickness, wall);
-            }
-            if (EditorGUI.EndChangeCheck()) { s.NotifyChanged(); SceneView.RepaintAll(); }
         }
     }
 

@@ -3,8 +3,9 @@
 ## 0.2.0 (2026-09-14)
 
 - Extrusion runs as a boolean through Manifold (union outward, difference inward) and the polyhedron is rebuilt
-  from the result with face identities preserved, so it works whatever the block passes through; the controls
-  sit in the Brushes overlay under Edit brush. The soundness check that guards vertex drags uses an exact
+  from the result with face identities preserved, so it works whatever the block passes through; the Brushes overlay
+  has an Extrude button under Edit brush that opens the Extrude panel. The New Brush panel is gone; a new
+  brush's values come from Project Settings > Brushes and are edited on the brush. The soundness check that guards vertex drags uses an exact
   face-piercing test with bounds culling (skipped for convex shapes) instead of the decomposition-volume
   heuristic; a 32-step staircase checks in a few milliseconds.
 - Extrude faces in edit mode: an Extrude panel opens with the edit context with Distance (world units,
