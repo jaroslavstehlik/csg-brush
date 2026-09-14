@@ -73,7 +73,7 @@ namespace CsgBrush.Editor
             EditorGUILayout.EndVertical();
         }
 
-        /// <summary>The edit actions: Extrude opens its panel (distance, whole selection or individual, confirm).</summary>
+        /// <summary>The edit actions: Extrude applies the Extrude panel's distance and mode to the selected faces.</summary>
         static void DrawExtrude(BrushSettings s)
         {
             int faces = 0;
@@ -81,8 +81,8 @@ namespace CsgBrush.Editor
             EditorGUILayout.BeginHorizontal();
             using (new EditorGUI.DisabledScope(faces == 0 || BrushEditState.Mode != BrushEditMode.Face))
             {
-                if (GUILayout.Button(new GUIContent("Extrude", faces > 0 ? "Extrude the selected faces (opens the Extrude panel)" : "Select faces first"), EditorStyles.miniButton))
-                    BrushExtrudeOverlay.Toggle();
+                if (GUILayout.Button(new GUIContent("Extrude", faces > 0 ? "Extrude " + faces + (faces == 1 ? " face" : " faces") + " with the settings in the Extrude panel" : "Select faces first"), EditorStyles.miniButton))
+                    BrushExtrudeOverlay.ExtrudeSelection();
             }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();

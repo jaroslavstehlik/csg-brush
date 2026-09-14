@@ -37,7 +37,8 @@ namespace CsgBrush.Editor
             }
         }
 
-        public override void OnWillBeDeactivated() { BrushExtrudeOverlay.Hide(); }
+        public override void OnActivated() { BrushExtrudeOverlay.Show(true); }
+        public override void OnWillBeDeactivated() { BrushExtrudeOverlay.Show(false); }
 
         public override void OnToolGUI(EditorWindow window)
         {

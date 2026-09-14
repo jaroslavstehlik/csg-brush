@@ -6,24 +6,18 @@ using UnityEngine.UIElements;
 namespace CsgBrush.Editor
 {
     /// <summary>
-    /// Extrude settings and confirmation, opened from the Extrude button in the Brushes overlay: distance, whole
-    /// selection or individual faces, then Extrude. The faces stay selected, so a second press extrudes again.
+    /// Extrude settings, shown with brush edit mode: distance and whole selection or individual faces. The Extrude
+    /// button in the Brushes overlay applies them. The faces stay selected, so a second press extrudes again.
     /// </summary>
     [Overlay(typeof(SceneView), PanelId, "Extrude", false)]
     public sealed class BrushExtrudeOverlay : Overlay
     {
         public const string PanelId = "CSG Brush/Extrude";
 
-        public static void Toggle()
+        public static void Show(bool show)
         {
             foreach (SceneView view in SceneView.sceneViews)
-                if (view.TryGetOverlay(PanelId, out var overlay)) overlay.displayed = !overlay.displayed;
-        }
-
-        public static void Hide()
-        {
-            foreach (SceneView view in SceneView.sceneViews)
-                if (view.TryGetOverlay(PanelId, out var overlay)) overlay.displayed = false;
+                if (view.TryGetOverlay(PanelId, out var overlay)) overlay.displayed = show;
         }
 
         public override VisualElement CreatePanelContent()
@@ -43,13 +37,14 @@ namespace CsgBrush.Editor
             if (EditorGUI.EndChangeCheck()) s.extrudeDistance = d;
             int mode = EditorGUILayout.Popup(new GUIContent("Faces"), s.extrudeIndividual ? 1 : 0, new[] { "Whole selection", "Individual" });
             s.extrudeIndividual = mode == 1;
-            int faces = 0;
-            foreach (var b in BrushEditState.SelectedBrushes()) faces += BrushEditState.Sel(b).faces.Count;
-            using (new EditorGUI.DisabledScope(faces == 0 || BrushEditState.Mode != BrushEditMode.Face || !BrushEditContext.IsActive))
-            {
-                if (GUILayout.Button(faces > 0 ? "Extrude " + faces + (faces == 1 ? " face" : " faces") : "Extrude"))
-                    Extrude(s.ToMeters(s.extrudeDistance != 0f ? s.extrudeDistance : placeholder), s.extrudeIndividual);
-            }
+        }
+
+        /// <summary>Extrude the selected faces with the panel's settings (the Extrude button in the Brushes overlay).</summary>
+        public static void ExtrudeSelection()
+        {
+            var s = BrushSettings.instance;
+            float meters = s.ToMeters(s.extrudeDistance != 0f ? s.extrudeDistance : s.ToUnits(s.GridMeters));
+            Extrude(meters, s.extrudeIndividual);
         }
 
         public static void Extrude(float meters, bool individual)
