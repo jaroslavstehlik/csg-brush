@@ -37,6 +37,17 @@ namespace CsgBrush.Editor
             }
         }
 
+        public const string ExtrudePanelId = "CSG Brush/Extrude";
+
+        public override void OnActivated() { ShowExtrudePanel(true); }
+        public override void OnWillBeDeactivated() { ShowExtrudePanel(false); }
+
+        static void ShowExtrudePanel(bool show)
+        {
+            foreach (SceneView view in SceneView.sceneViews)
+                if (view.TryGetOverlay(ExtrudePanelId, out var overlay)) overlay.displayed = show;
+        }
+
         public override void OnToolGUI(EditorWindow window)
         {
             if (!(window is SceneView)) return;

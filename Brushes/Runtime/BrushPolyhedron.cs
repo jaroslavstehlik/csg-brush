@@ -599,6 +599,57 @@ namespace CsgBrush
             foreach (var i in faces[face].indices) vertices[i] += n * distance;
         }
 
+        /// <summary>
+        /// Extrude faces: the faces move along a normal and side walls are added along the boundary of what moved.
+        /// Individual: every face moves along its own normal and gets its own walls. Otherwise the whole selection
+        /// moves as one along the average normal, and only the boundary of the selection gets walls (shared edges
+        /// stay open, like ProBuilder's group extrude). Face indices are kept; the walls are appended with the
+        /// extruded face as their source. A negative distance cuts a pocket. Returns the number of walls added.
+        /// </summary>
+        public int ExtrudeFaces(IEnumerable<int> faceIndices, float distance, bool individual)
+        {
+            var groups = new List<List<int>>();
+            if (individual) { foreach (var f in faceIndices) if (f >= 0 && f < faces.Length) groups.Add(new List<int> { f }); }
+            else { var all = new List<int>(); foreach (var f in faceIndices) if (f >= 0 && f < faces.Length && !all.Contains(f)) all.Add(f); if (all.Count > 0) groups.Add(all); }
+            var verts = new List<Vector3>(vertices);
+            var newFaces = new List<Face>(faces);
+            int walls = 0;
+            foreach (var group in groups)
+            {
+                Vector3 normal = Vector3.zero;
+                foreach (var f in group) { var pl = Plane(f); normal += new Vector3(pl.x, pl.y, pl.z); }
+                if (normal.sqrMagnitude < 1e-10f) { var pl = Plane(group[0]); normal = new Vector3(pl.x, pl.y, pl.z); }
+                var offset = normal.normalized * distance;
+                // boundary edges: used once within the group (as a directed edge a->b of a group face)
+                var edgeCount = new Dictionary<long, int>();
+                foreach (var f in group)
+                {
+                    var idx = newFaces[f].indices;
+                    for (int i = 0; i < idx.Length; i++) { long k = EdgeKey(idx[i], idx[(i + 1) % idx.Length]); edgeCount[k] = edgeCount.TryGetValue(k, out var c) ? c + 1 : 1; }
+                }
+                var dup = new Dictionary<int, int>();
+                int Dup(int v) { if (!dup.TryGetValue(v, out int d)) { d = verts.Count; verts.Add(verts[v] + offset); dup[v] = d; } return d; }
+                foreach (var f in group)
+                {
+                    var idx = newFaces[f].indices;
+                    for (int i = 0; i < idx.Length; i++)
+                    {
+                        int a = idx[i], b = idx[(i + 1) % idx.Length];
+                        if (edgeCount[EdgeKey(a, b)] != 1) continue; // shared with another face of the group: stays open
+                        newFaces.Add(new Face(new[] { a, b, Dup(b), Dup(a) }, f));
+                        walls++;
+                    }
+                    var moved = new int[idx.Length];
+                    for (int i = 0; i < idx.Length; i++) moved[i] = Dup(idx[i]);
+                    newFaces[f] = new Face(moved, newFaces[f].source) { group = newFaces[f].group };
+                }
+            }
+            vertices = verts.ToArray(); faces = newFaces.ToArray();
+            return walls;
+        }
+
+        static long EdgeKey(int a, int b) => ((long)Mathf.Min(a, b) << 32) | (uint)Mathf.Max(a, b);
+
         /// <summary>Move one vertex and keep the faces around it planar by splitting the bent ones into triangles fanned from it.</summary>
         public void MoveVertex(int vertex, Vector3 position)
         {

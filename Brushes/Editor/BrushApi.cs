@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -184,6 +185,25 @@ namespace CsgBrush.Editor
             Undo.RecordObject(brush, "Push face");
             brush.polyhedron.PushFace(face, distanceMeters);
             BrushSync.Ensure(brush);
+        }
+
+        /// <summary>
+        /// Extrude the selected faces by a distance (rounded to the grid when snapping is on), each on its own or the
+        /// whole selection as one. The result must stay a sound shape; otherwise nothing changes and false is returned.
+        /// </summary>
+        public static bool ExtrudeFaces(Brush brush, IEnumerable<int> faces, float distanceMeters, bool individual)
+        {
+            if (!ConvertToCustom(brush)) return false;
+            if (BrushSettings.instance.snapToGrid) distanceMeters = BrushSnap.Round(distanceMeters, BrushSettings.instance.GridMeters);
+            if (Mathf.Abs(distanceMeters) < 1e-6f) return false;
+            var result = brush.polyhedron.Clone();
+            if (result.ExtrudeFaces(faces, distanceMeters, individual) == 0) return false;
+            result.WeldCoincident(1e-4f);
+            if (!result.IsSound(out _)) return false;
+            Undo.RecordObject(brush, "Extrude faces");
+            brush.polyhedron = result;
+            BrushSync.Ensure(brush);
+            return true;
         }
 
         /// <summary>Move a vertex to a world position (snapped to the world grid when snapping is on); bent faces split into triangles.</summary>

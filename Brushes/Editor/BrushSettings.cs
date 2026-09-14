@@ -44,6 +44,9 @@ namespace CsgBrush.Editor
         public bool newSlopedFloor = false;
         public bool newSlopedCeiling = false;
         [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
+        [Header("Extrude (edit mode)")]
+        [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
+        public bool extrudeIndividual = false;
         [Header("Editor")]
         public bool showGenerated = false;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]

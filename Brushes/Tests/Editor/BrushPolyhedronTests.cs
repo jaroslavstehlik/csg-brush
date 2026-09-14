@@ -333,6 +333,50 @@ namespace CsgBrush.Tests
             else Assert.AreEqual(stairs.Volume(), sum, 1e-3f, "blocks add up");
         }
 
+        static int FaceWithNormal(BrushPolyhedron p, Vector3 n) { for (int f = 0; f < p.faces.Length; f++) if (Vector3.Dot(p.Plane(f), n) > 0.9f) return f; return -1; }
+
+        [Test]
+        public void ExtrudingOneFaceAddsABlock()
+        {
+            var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
+            int top = FaceWithNormal(box, Vector3.up);
+            int walls = box.ExtrudeFaces(new[] { top }, 1f, true);
+            Assert.AreEqual(4, walls);
+            Assert.AreEqual(10, box.faces.Length, "the face plus four walls");
+            Assert.IsTrue(box.IsClosed(), "closed"); Assert.IsTrue(box.IsSound(out var why), why);
+            Assert.AreEqual(12f, box.Volume(), 1e-3f, "2x2x2 plus a 2x1x2 block");
+            Assert.AreEqual(2f, box.Bounds().max.y, 1e-4f, "the top moved up by one; its index is unchanged");
+            Assert.IsTrue(Vector3.Dot(box.Plane(top), Vector3.up) > 0.99f);
+            foreach (var f in box.faces) if (f.source == top) Assert.AreEqual(4, f.indices.Length, "walls are quads with the extruded face as source");
+        }
+
+        [Test]
+        public void ExtrudingInwardCutsAPocket()
+        {
+            var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
+            int top = FaceWithNormal(box, Vector3.up);
+            box.ExtrudeFaces(new[] { top }, -0.5f, true);
+            Assert.IsTrue(box.IsClosed()); Assert.IsTrue(box.IsSound(out var why), why);
+            Assert.AreEqual(6f, box.Volume(), 1e-3f, "a 2x0.5x2 pocket removed");
+        }
+
+        [Test]
+        public void GroupAndIndividualExtrusionsOfAdjacentFaces()
+        {
+            var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
+            int top = FaceWithNormal(box, Vector3.up), right = FaceWithNormal(box, Vector3.right);
+            var group = box.Clone();
+            int walls = group.ExtrudeFaces(new[] { top, right }, 1f, false);
+            Assert.AreEqual(6, walls, "the shared edge gets no wall: 4 + 4 - 2");
+            Assert.IsTrue(group.IsClosed()); Assert.IsTrue(group.IsSound(out var why), why);
+            Assert.Greater(group.Volume(), 8f);
+            var single = box.Clone();
+            walls = single.ExtrudeFaces(new[] { top, right }, 1f, true);
+            Assert.AreEqual(8, walls, "each face gets its own four walls");
+            Assert.IsTrue(single.IsClosed()); Assert.IsTrue(single.IsSound(out why), why);
+            Assert.AreEqual(16f, single.Volume(), 1e-3f, "two 2x1x2 blocks on a 2x2x2 box");
+        }
+
         [Test]
         public void SliverPiecesAreClosedMeshes()
         {

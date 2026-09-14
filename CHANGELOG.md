@@ -1,7 +1,11 @@
 # Changelog
 
-## 0.2.0 (2026-09-13)
+## 0.2.0 (2026-09-14)
 
+- Extrude faces in edit mode: an Extrude panel opens with the edit context with Distance (world units,
+  negative for a pocket), Whole selection / Individual, and an Extrude button. Group extrusion moves the
+  selection along its average normal and walls only its boundary; individual extrusion walls every face. Faces
+  keep their indices and stay selected. `BrushPolyhedron.ExtrudeFaces` is covered by tests.
 - Handle orientation like ProBuilder's: Global, Local or Element in the Tool Settings toolbar. Element aligns
   the Move, Rotate and Scale gizmos with the selection (blue axis along the face normal; edges and vertices
   use their faces), fixed for the duration of a drag. Push/Pull and its Shift latch are gone: moving along the
