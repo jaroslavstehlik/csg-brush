@@ -150,6 +150,43 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void OverlayExtrudeTwiceThenUndoTwiceRestoresTheBrush()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Undo.ClearAll();
+            BrushSettings.instance.snapToGrid = true;
+            BrushSettings.instance.extrudeDistance = 0f; BrushSettings.instance.extrudeIndividual = true;
+            var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            var model = Object.FindFirstObjectByType<BrushModel>();
+            var mesh = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>();
+            int before = mesh.sharedMesh.vertexCount;
+            Selection.activeGameObject = brush.gameObject;
+            BrushEditState.Mode = BrushEditMode.Face;
+            var poly = BrushGeometry.Polyhedron(brush);
+            int top = 0; for (int f = 0; f < poly.faces.Length; f++) if (Vector3.Dot(poly.Plane(f), Vector3.up) > 0.9f) top = f;
+            BrushEditState.Sel(brush).faces = new HashSet<int> { top };
+            Undo.IncrementCurrentGroup();
+            BrushExtrudeOverlay.Extrude(1f, true);
+            Assert.IsNull(brush.problem, "after first extrude: " + brush.problem);
+            Assert.AreEqual(1, BrushEditState.Sel(brush).faces.Count, "the moved face stays selected");
+            Undo.IncrementCurrentGroup();
+            BrushExtrudeOverlay.Extrude(1f, true);
+            BrushApi.ForceUpdate();
+            Assert.IsNull(brush.problem, "after second extrude: " + brush.problem);
+            Assert.AreEqual(14, brush.polyhedron.faces.Length);
+            Undo.PerformUndo(); BrushApi.ForceUpdate();
+            Assert.IsNull(brush.problem, "after first undo: " + brush.problem);
+            Assert.AreEqual(10, brush.polyhedron.faces.Length, "back to one belt");
+            Undo.PerformUndo(); BrushApi.ForceUpdate();
+            Assert.IsNull(brush.problem, "after second undo: " + brush.problem);
+            Assert.AreEqual(before, mesh.sharedMesh.vertexCount, "mesh back to the box");
+            Undo.PerformRedo(); BrushApi.ForceUpdate();
+            Assert.IsNull(brush.problem, "after redo: " + brush.problem);
+            Assert.AreEqual(10, brush.polyhedron.faces.Length, "redo brings the belt back");
+        }
+
+        [Test]
         public void ExtrudeThenUndoRestoresTheBrush()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
