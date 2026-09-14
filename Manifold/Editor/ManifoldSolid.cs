@@ -163,6 +163,16 @@ namespace CsgBrush.Manifold
             return new ManifoldSolid(manifold_boolean(mem, a.handle, b.handle, op));
         }
 
+        /// <summary>
+        /// A copy with every feature smaller than the tolerance collapsed: surfaces move by less than the tolerance
+        /// and the result stays manifold. Cleans the slivers a boolean between nearly coincident faces leaves.
+        /// </summary>
+        public ManifoldSolid Simplify(double tolerance)
+        {
+            var mem = manifold_alloc_manifold();
+            return new ManifoldSolid(manifoldc_unity_simplify(mem, handle, tolerance));
+        }
+
         /// <summary>Union (or intersection) of many solids at once; cheaper than a chain of pairwise operations.</summary>
         public static ManifoldSolid Batch(IList<ManifoldSolid> solids, OpType op)
         {
@@ -183,6 +193,11 @@ namespace CsgBrush.Manifold
             public int[] triangleSource;
             /// <summary>Per triangle: index of the source face within that solid (the property set by <see cref="FromFaces"/>).</summary>
             public int[] triangleFace;
+            /// <summary>
+            /// Vertices Manifold split because their face ids differ: mergeFrom[i] and mergeTo[i] are one vertex of the
+            /// solid (same position). Merging exactly these, and nothing else, recovers the manifold topology.
+            /// </summary>
+            public int[] mergeFrom, mergeTo;
         }
 
         public MeshData ToMesh()
@@ -200,6 +215,9 @@ namespace CsgBrush.Manifold
             if (runIndex.Length > 0) manifold_meshgl64_run_index(runIndex, mesh);
             var runIds = new uint[(int)(ulong)manifold_meshgl64_run_original_id_length(mesh)];
             if (runIds.Length > 0) manifold_meshgl64_run_original_id(runIds, mesh);
+            int mergeCount = (int)(ulong)manifold_meshgl64_merge_length(mesh);
+            var mergeFrom = new ulong[mergeCount]; var mergeTo = new ulong[mergeCount];
+            if (mergeCount > 0) { manifold_meshgl64_merge_from_vert(mergeFrom, mesh); manifold_meshgl64_merge_to_vert(mergeTo, mesh); }
             manifold_delete_meshgl64(mesh);
 
             var data = new MeshData
@@ -208,7 +226,10 @@ namespace CsgBrush.Manifold
                 triangles = new int[numTri * 3],
                 triangleSource = new int[numTri],
                 triangleFace = new int[numTri],
+                mergeFrom = new int[mergeCount],
+                mergeTo = new int[mergeCount],
             };
+            for (int i = 0; i < mergeCount; i++) { data.mergeFrom[i] = (int)mergeFrom[i]; data.mergeTo[i] = (int)mergeTo[i]; }
             for (int v = 0; v < numVert; v++)
                 data.vertices[v] = new Vector3((float)vp[v * numProp], (float)vp[v * numProp + 1], (float)vp[v * numProp + 2]);
             for (int t = 0; t < numTri; t++)

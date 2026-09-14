@@ -2,6 +2,16 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Extrusion never hands the brush a broken shape. The prism a face is extruded by is grown by a hair at both
+  ends and around its outline, so none of its faces ever coincides with a face of the brush (coincident faces
+  are where a boolean can leave zero-thickness sheets), and the rebuilt corners snap back to where they belong.
+  Faces that only touch at a corner are extruded as separate prisms (one prism sharing that vertex was not a
+  manifold and corrupted the boolean). The result is checked before it is applied: if it would not be a sound
+  shape (a prism ending exactly where the solid would touch itself, or a cut that removes everything), the
+  brush is left as it was and the Extrude panel says why. Manifold's own simplification (`Simplify`, added to
+  the native library as `manifoldc_unity_simplify`) cleans the hair-sized leftovers. A fuzz test over random
+  extrusions on random shapes checks that every result is sound and refusals stay rare; a test breaks a brush on
+  purpose and checks the model still builds and undo restores it.
 - Extrusion runs as a boolean through Manifold (union outward, difference inward) and the polyhedron is rebuilt
   from the result with face identities preserved, so it works whatever the block passes through; the Extrude panel
   (settings only) opens with edit mode and the Extrude button in the Brushes overlay applies it. The New Brush panel is gone; a new

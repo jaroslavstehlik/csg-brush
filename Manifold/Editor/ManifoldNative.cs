@@ -42,6 +42,8 @@ namespace CsgBrush.Manifold
         [DllImport(Lib)] public static extern IntPtr manifold_manifold_empty_vec(IntPtr mem);
         [DllImport(Lib)] public static extern void manifold_manifold_vec_push_back(IntPtr ms, IntPtr m);
         [DllImport(Lib)] public static extern IntPtr manifold_boolean(IntPtr mem, IntPtr a, IntPtr b, OpType op);
+        /// <summary>Our own addition to the C binding (Manifold/native/empty.cpp): Manifold::Simplify.</summary>
+        [DllImport(Lib)] public static extern IntPtr manifoldc_unity_simplify(IntPtr mem, IntPtr m, double tolerance);
         [DllImport(Lib)] public static extern IntPtr manifold_batch_boolean(IntPtr mem, IntPtr ms, OpType op);
 
         // info
@@ -64,5 +66,8 @@ namespace CsgBrush.Manifold
         [DllImport(Lib)] public static extern IntPtr manifold_meshgl64_tri_verts([Out] ulong[] mem, IntPtr m);
         [DllImport(Lib)] public static extern IntPtr manifold_meshgl64_run_index([Out] ulong[] mem, IntPtr m);
         [DllImport(Lib)] public static extern IntPtr manifold_meshgl64_run_original_id([Out] uint[] mem, IntPtr m);
+        [DllImport(Lib)] public static extern UIntPtr manifold_meshgl64_merge_length(IntPtr m);
+        [DllImport(Lib)] public static extern IntPtr manifold_meshgl64_merge_from_vert([Out] ulong[] mem, IntPtr m);
+        [DllImport(Lib)] public static extern IntPtr manifold_meshgl64_merge_to_vert([Out] ulong[] mem, IntPtr m);
     }
 }

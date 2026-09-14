@@ -435,24 +435,27 @@ namespace CsgBrush
             return (float)(v / 6.0);
         }
 
-        /// <summary>Every edge must be shared by exactly two faces in opposite directions.</summary>
+        /// <summary>
+        /// Closed: every directed edge a-b is matched by a b-a. Usually that is two faces per edge; two parts of one
+        /// solid touching along an edge (two extruded blocks meeting at a corner) give four, still balanced.
+        /// </summary>
         public bool IsClosed()
         {
-            var directed = new HashSet<long>();
+            if (!IsValid) return false;
+            var balance = new Dictionary<long, int>();
             foreach (var face in faces)
             {
                 var idx = face.indices;
+                if (idx.Length < 3) return false;
                 for (int i = 0; i < idx.Length; i++)
                 {
-                    long key = ((long)idx[i] << 32) | (uint)idx[(i + 1) % idx.Length];
-                    if (!directed.Add(key)) return false; // an edge used twice in the same direction
+                    int a = idx[i], b = idx[(i + 1) % idx.Length];
+                    if (a == b || a < 0 || b < 0 || a >= vertices.Length || b >= vertices.Length) return false;
+                    long key = ((long)Mathf.Min(a, b) << 32) | (uint)Mathf.Max(a, b);
+                    balance[key] = balance.TryGetValue(key, out var n) ? n + (a < b ? 1 : -1) : (a < b ? 1 : -1);
                 }
             }
-            foreach (var key in directed)
-            {
-                long twin = ((key & 0xffffffffL) << 32) | (uint)(key >> 32);
-                if (!directed.Contains(twin)) return false;
-            }
+            foreach (var kv in balance) if (kv.Value != 0) return false;
             return true;
         }
 
@@ -524,11 +527,16 @@ namespace CsgBrush
         {
             var idx = faces[face].indices; int n = idx.Length;
             if (n < 4) return true;
-            // a bow-tie's Newell normal cancels out, so take the plane from the first three corners that span one
-            Vector3 nrm = Vector3.zero;
-            for (int i = 0; i < n && nrm.sqrMagnitude < 1e-12f; i++)
-                nrm = Vector3.Cross(vertices[idx[(i + 1) % n]] - vertices[idx[i]], vertices[idx[(i + 2) % n]] - vertices[idx[i]]);
-            if (nrm.sqrMagnitude < 1e-12f) return false; // every corner collinear: no polygon at all
+            // a bow-tie's Newell normal cancels out, so take the plane from the three consecutive corners that span
+            // the most (a nearly collinear triple would give a plane the polygon does not lie in)
+            Vector3 nrm = Vector3.zero; float longest = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                var c = Vector3.Cross(vertices[idx[(i + 1) % n]] - vertices[idx[i]], vertices[idx[(i + 2) % n]] - vertices[idx[i]]);
+                if (c.sqrMagnitude > nrm.sqrMagnitude) nrm = c;
+                longest = Mathf.Max(longest, (vertices[idx[(i + 1) % n]] - vertices[idx[i]]).sqrMagnitude);
+            }
+            if (nrm.sqrMagnitude < 1e-12f * longest * longest) return false; // every corner collinear (relative to the polygon's size): no polygon at all
             nrm.Normalize();
             var u = Vector3.Cross(nrm, Mathf.Abs(nrm.y) < 0.9f ? Vector3.up : Vector3.right).normalized; var w = Vector3.Cross(nrm, u);
             var pts = new Vector2[n];
@@ -546,6 +554,9 @@ namespace CsgBrush
 
         static float Cross2(Vector2 p, Vector2 q, Vector2 x) => (q.x - p.x) * (x.y - p.y) - (q.y - p.y) * (x.x - p.x);
 
+        /// <summary>Which pair the last SelfIntersects found, for diagnostics.</summary>
+        public static string LastIntersection;
+
         /// <summary>
         /// Exact test: do two non-coplanar faces cross? The faces' planes meet in a line; where that line runs inside
         /// both polygons for more than a point, and that stretch is inside at least one of them rather than along
@@ -554,9 +565,11 @@ namespace CsgBrush
         /// </summary>
         public bool SelfIntersects()
         {
+            LastIntersection = null;
             int n = faces.Length;
             var planes = new Vector4[n]; var mins = new Vector3[n]; var maxs = new Vector3[n];
-            float scale = Bounds().size.magnitude; float eps = Mathf.Max(1e-5f, scale * 1e-6f);
+            // tolerance above the noise a boolean rebuild leaves (a 0.5 mm weld): a crossing thinner than that is not one
+            float scale = Bounds().size.magnitude; float eps = Mathf.Max(2e-3f, scale * 1e-5f);
             for (int f = 0; f < n; f++)
             {
                 planes[f] = Plane(f);
@@ -571,25 +584,43 @@ namespace CsgBrush
                     var nf = new Vector3(planes[f].x, planes[f].y, planes[f].z); var ng = new Vector3(planes[g].x, planes[g].y, planes[g].z);
                     var dir = Vector3.Cross(nf, ng);
                     if (dir.sqrMagnitude < 1e-10f) continue; // parallel planes
+                    if (WithinPlane(g, planes[f], eps * 2f) || WithinPlane(f, planes[g], eps * 2f)) continue; // as good as coplanar: the line of two such planes is noise
                     dir.Normalize();
                     // a point on both planes: solve in the plane spanned by the two normals
                     float d1 = -planes[f].w, d2 = -planes[g].w, dot = Vector3.Dot(nf, ng), det = 1f - dot * dot;
                     var origin = ((d1 - d2 * dot) * nf + (d2 - d1 * dot) * ng) / det;
-                    if (!InsideSpans(f, origin, dir, spansF) || !InsideSpans(g, origin, dir, spansG)) continue;
+                    if (!InsideSpans(f, origin, dir, spansF, eps) || !InsideSpans(g, origin, dir, spansG, eps)) continue;
                     for (int i = 0; i + 1 < spansF.Count; i += 2)
                         for (int j = 0; j + 1 < spansG.Count; j += 2)
                         {
                             float lo = Mathf.Max(spansF[i], spansG[j]), hi = Mathf.Min(spansF[i + 1], spansG[j + 1]);
                             if (hi - lo <= eps * 4f) continue;
                             var mid = origin + dir * ((lo + hi) * 0.5f);
-                            if (StrictlyInside(f, mid, planes[f], eps) || StrictlyInside(g, mid, planes[g], eps)) return true;
+                            bool inF = StrictlyInside(f, mid, planes[f], eps), inG = StrictlyInside(g, mid, planes[g], eps);
+                            if (inF || inG)
+                            {
+                                var sbi = new System.Text.StringBuilder();
+                                sbi.Append("faces " + f + " [" + string.Join(",", faces[f].indices) + "] and " + g + " [" + string.Join(",", faces[g].indices) + "] cross at " + mid.ToString("F3") + " span " + (hi - lo).ToString("F4") + (inF ? " inside " + f : "") + (inG ? " inside " + g : ""));
+                                sbi.Append("; f verts:"); foreach (var vi in faces[f].indices) sbi.Append(" " + vertices[vi].ToString("F3"));
+                                sbi.Append("; g verts:"); foreach (var vi in faces[g].indices) sbi.Append(" " + vertices[vi].ToString("F3"));
+                                sbi.Append("; line origin " + origin.ToString("F3") + " dir " + dir.ToString("F3") + "; spansF"); foreach (var sp in spansF) sbi.Append(" " + sp.ToString("F3"));
+                                sbi.Append("; spansG"); foreach (var sp in spansG) sbi.Append(" " + sp.ToString("F3"));
+                                LastIntersection = sbi.ToString(); return true;
+                            }
                         }
                 }
             return false;
         }
 
+        /// <summary>Every corner of a face lies within a distance of a plane.</summary>
+        bool WithinPlane(int face, Vector4 plane, float distance)
+        {
+            foreach (var i in faces[face].indices) if (Mathf.Abs(Distance(plane, vertices[i])) > distance) return false;
+            return true;
+        }
+
         /// <summary>Parameter spans along a line (in the face's plane) where the line is inside the polygon: pairs of t values. False when the line misses it.</summary>
-        bool InsideSpans(int face, Vector3 origin, Vector3 dir, List<float> spans)
+        bool InsideSpans(int face, Vector3 origin, Vector3 dir, List<float> spans, float eps)
         {
             spans.Clear();
             var plane = Plane(face); var nrm = new Vector3(plane.x, plane.y, plane.z);
@@ -600,6 +631,7 @@ namespace CsgBrush
             {
                 var a = vertices[idx[i]]; var b = vertices[idx[(i + 1) % idx.Length]];
                 float sa = Vector3.Dot(a - origin, side), sb = Vector3.Dot(b - origin, side);
+                if (Mathf.Abs(sa) < eps) sa = 0f; if (Mathf.Abs(sb) < eps) sb = 0f; // on the line is exactly on the line: no phantom crossing between two such endpoints
                 if ((sa >= 0f) == (sb >= 0f)) continue; // half-open rule: an endpoint on the line counts once
                 var p = Vector3.Lerp(a, b, sa / (sa - sb));
                 crossings.Add(Vector3.Dot(p - origin, dir));
