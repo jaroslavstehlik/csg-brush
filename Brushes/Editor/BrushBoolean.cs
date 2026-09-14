@@ -133,6 +133,61 @@ namespace CsgBrush.Editor
                 }
             }
             if (!ownsResult) { LastRefusal = "The prism could not be built."; return null; }
+            return Finish(result, poly, sourceOf, expected, out faceRemap);
+        }
+
+        /// <summary>
+        /// Bridge two faces of one shape: the volume lofted between them is added, so the faces vanish into the
+        /// join and the walls between corresponding edges become new faces (source: the first face). The faces
+        /// need the same number of corners; corners are paired the way that needs the least stretch. Returns
+        /// null (with <see cref="LastRefusal"/>) when the bridge cannot be built or the result is not sound.
+        /// </summary>
+        public static BrushPolyhedron BridgeFaces(BrushPolyhedron poly, int faceA, int faceB, out int[] faceRemap)
+        {
+            faceRemap = null; LastRefusal = null;
+            if (faceA == faceB || faceA < 0 || faceB < 0 || faceA >= poly.faces.Length || faceB >= poly.faces.Length) { LastRefusal = "Select two faces of one brush."; return null; }
+            var a = poly.faces[faceA].indices; var b = poly.faces[faceB].indices; int n = a.Length;
+            if (b.Length != n) { LastRefusal = "Both faces need the same number of corners (" + n + " and " + b.Length + ")."; return null; }
+            var pa = poly.Plane(faceA); var pb = poly.Plane(faceB);
+            var na = new Vector3(pa.x, pa.y, pa.z); var nb = new Vector3(pb.x, pb.y, pb.z);
+            // pair the corners: B walked backwards (the faces look at each other) or forwards, from any start, whichever stretches least
+            int[] best = null; float bestCost = float.MaxValue;
+            for (int dir = -1; dir <= 1; dir += 2)
+                for (int k = 0; k < n; k++)
+                {
+                    var pairing = new int[n]; float cost = 0f;
+                    for (int i = 0; i < n; i++) { pairing[i] = b[((k + dir * i) % n + n) % n]; cost += (poly.vertices[a[i]] - poly.vertices[pairing[i]]).magnitude; }
+                    if (cost < bestCost) { bestCost = cost; best = pairing; }
+                }
+            var brushFaces = new List<int[]>(); foreach (var f in poly.faces) brushFaces.Add(f.indices);
+            using var brush = ManifoldSolid.FromFaces(poly.vertices, brushFaces, out _);
+            if (brush == null) { LastRefusal = "The brush could not be built."; return null; }
+            var expected = new List<Vector3>(poly.vertices);
+            var sourceOf = new Dictionary<int, int>();
+            // the loft: both caps pulled a hair into the brush so they never coincide with the faces they replace
+            const float hair = Hair;
+            var verts = new List<Vector3>(); var faces = new List<int[]>(); var ids = new List<int>();
+            var capA = new int[n]; var capB = new int[n];
+            for (int i = 0; i < n; i++) { capA[n - 1 - i] = verts.Count; verts.Add(poly.vertices[a[i]] - na * hair); }
+            for (int i = 0; i < n; i++) { capB[i] = verts.Count; verts.Add(poly.vertices[best[i]] - nb * hair); }
+            faces.Add(capA); ids.Add(faceA);
+            faces.Add(capB); ids.Add(faceB);
+            int nextId = poly.faces.Length;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                faces.Add(new[] { capA[n - 1 - i], capA[n - 1 - j], capB[j], capB[i] }); ids.Add(nextId); sourceOf[nextId] = faceA; nextId++;
+            }
+            using var loft = ManifoldSolid.FromFaces(verts, faces, out _, ids);
+            if (loft == null) { LastRefusal = "These two faces cannot be bridged."; return null; }
+            var result = ManifoldSolid.Boolean(brush, loft, ManifoldNative.OpType.Add);
+            return Finish(result, poly, sourceOf, expected, out faceRemap);
+        }
+
+        /// <summary>The boolean's result back into a polyhedron, or null (with <see cref="LastRefusal"/>) when it is empty or not sound. Disposes the result.</summary>
+        static BrushPolyhedron Finish(ManifoldSolid result, BrushPolyhedron poly, Dictionary<int, int> sourceOf, List<Vector3> expected, out int[] faceRemap)
+        {
+            faceRemap = null;
             // no simplification pass here: Manifold's own (inside the boolean) only touches vertices the boolean
             // created, whereas Simplify() would also collapse the user's own collinear vertices across face
             // boundaries and merge coplanar faces the user keeps apart
@@ -152,7 +207,7 @@ namespace CsgBrush.Editor
             string why = null;
             if (rebuilt == null || !rebuilt.IsValid || !rebuilt.IsClosed() || !rebuilt.IsSound(out why))
             {
-                LastRefusal = "The result would be " + (why ?? "invalid") + ". Try another distance.";
+                LastRefusal = "The result would be " + (why ?? "invalid") + ". Try another distance or other faces.";
                 faceRemap = null;
                 return null;
             }

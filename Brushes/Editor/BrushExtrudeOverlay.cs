@@ -43,6 +43,39 @@ namespace CsgBrush.Editor
         /// <summary>Why the last extrude left a brush untouched, shown in the panel until the next extrude.</summary>
         static string lastRefusal;
 
+        /// <summary>The one brush with exactly two faces selected, or null (the Bridge button's condition).</summary>
+        public static Brush BridgeCandidate()
+        {
+            Brush found = null;
+            foreach (var b in BrushEditState.SelectedBrushes())
+            {
+                int count = BrushEditState.Sel(b).faces.Count;
+                if (count == 0) continue;
+                if (count != 2 || found != null) return null;
+                found = b;
+            }
+            return found;
+        }
+
+        /// <summary>Bridge the two selected faces of the selected brush (the Bridge button in the Brushes overlay); the new walls end up selected.</summary>
+        public static void BridgeSelection()
+        {
+            var b = BridgeCandidate();
+            if (b == null) return;
+            int group = Undo.GetCurrentGroup();
+            lastRefusal = null;
+            var sel = BrushEditState.Sel(b);
+            var two = new System.Collections.Generic.List<int>(sel.faces);
+            var remap = BrushApi.BridgeFaces(b, two[0], two[1]);
+            if (remap == null) { lastRefusal = BrushBoolean.LastRefusal; SceneView.RepaintAll(); return; }
+            var walls = new System.Collections.Generic.HashSet<int>();
+            for (int f = 0; f < b.polyhedron.faces.Length; f++) if (b.polyhedron.faces[f].source == two[0] && (f >= remap.Length || remap[two[0]] != f)) walls.Add(f);
+            sel.faces = walls; sel.vertices.Clear(); sel.edges.Clear();
+            Undo.CollapseUndoOperations(group);
+            BrushApi.ForceUpdate();
+            SceneView.RepaintAll();
+        }
+
         /// <summary>Extrude the selected faces with the panel's settings (the Extrude button in the Brushes overlay).</summary>
         public static void ExtrudeSelection()
         {

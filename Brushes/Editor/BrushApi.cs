@@ -205,6 +205,22 @@ namespace CsgBrush.Editor
             return remap;
         }
 
+        /// <summary>
+        /// Bridge two faces of a brush: the volume between them is added, the faces vanish into the join and the
+        /// walls become new faces. Returns per original face index its index afterwards (-1 when gone), or null
+        /// when nothing was done (<see cref="BrushBoolean.LastRefusal"/> says why).
+        /// </summary>
+        public static int[] BridgeFaces(Brush brush, int faceA, int faceB)
+        {
+            if (!ConvertToCustom(brush)) return null;
+            var result = BrushBoolean.BridgeFaces(brush.polyhedron, faceA, faceB, out var remap);
+            if (result == null || !result.IsValid) return null;
+            Undo.RecordObject(brush, "Bridge faces");
+            brush.polyhedron = result;
+            BrushSync.Ensure(brush);
+            return remap;
+        }
+
         /// <summary>Move a vertex to a world position (snapped to the world grid when snapping is on); bent faces split into triangles.</summary>
         public static void MoveVertex(Brush brush, int vertex, Vector3 worldPosition)
         {

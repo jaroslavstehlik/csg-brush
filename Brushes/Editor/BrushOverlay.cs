@@ -84,6 +84,11 @@ namespace CsgBrush.Editor
                 if (GUILayout.Button(new GUIContent("Extrude", faces > 0 ? "Extrude " + faces + (faces == 1 ? " face" : " faces") + " with the settings in the Extrude panel" : "Select faces first"), EditorStyles.miniButton))
                     BrushExtrudeOverlay.ExtrudeSelection();
             }
+            using (new EditorGUI.DisabledScope(BrushEditState.Mode != BrushEditMode.Face || BrushExtrudeOverlay.BridgeCandidate() == null))
+            {
+                if (GUILayout.Button(new GUIContent("Bridge", "Connect the two selected faces of one brush with a block between them"), EditorStyles.miniButton))
+                    BrushExtrudeOverlay.BridgeSelection();
+            }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
         }

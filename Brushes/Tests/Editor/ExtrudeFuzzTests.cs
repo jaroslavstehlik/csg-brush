@@ -186,6 +186,87 @@ namespace CsgBrush.Tests
             Assert.AreEqual(10, brush.polyhedron.faces.Length, "redo brings the belt back");
         }
 
+        /// <summary>A U: a 6 x 1 x 2 base with two 2 x 2 x 2 arms, the gap between them x in [-1, 1], y in [0, 2].</summary>
+        static BrushPolyhedron U()
+        {
+            var xy = new[] { new Vector2(-3, -1), new Vector2(3, -1), new Vector2(3, 2), new Vector2(1, 2), new Vector2(1, 0), new Vector2(-1, 0), new Vector2(-1, 2), new Vector2(-3, 2) };
+            var verts = new Vector3[16];
+            for (int i = 0; i < 8; i++) { verts[i] = new Vector3(xy[i].x, xy[i].y, 1f); verts[8 + i] = new Vector3(xy[i].x, xy[i].y, -1f); }
+            var faces = new List<BrushPolyhedron.Face> { new BrushPolyhedron.Face(new[] { 0, 1, 2, 3, 4, 5, 6, 7 }), new BrushPolyhedron.Face(new[] { 15, 14, 13, 12, 11, 10, 9, 8 }) };
+            for (int i = 0; i < 8; i++) { int j = (i + 1) % 8; faces.Add(new BrushPolyhedron.Face(new[] { j, i, 8 + i, 8 + j })); } // against the front face's direction, so every edge is balanced
+            var u = new BrushPolyhedron { vertices = verts, faces = faces.ToArray() };
+            u.EnsureOutward();
+            return u;
+        }
+
+        [Test]
+        public void BridgingTheArmsOfAUFillsTheGap()
+        {
+            var u = U();
+            Assert.IsTrue(u.IsSound(out var w0), w0);
+            Assert.AreEqual(28f, u.Volume(), 1e-3f);
+            int rightInner = -1, leftInner = -1;
+            for (int f = 0; f < u.faces.Length; f++)
+            {
+                var n = (Vector3)u.Plane(f); float x = u.vertices[u.faces[f].indices[0]].x;
+                if (Vector3.Dot(n, Vector3.left) > 0.99f && Mathf.Abs(x - 1f) < 1e-4f) rightInner = f;
+                if (Vector3.Dot(n, Vector3.right) > 0.99f && Mathf.Abs(x + 1f) < 1e-4f) leftInner = f;
+            }
+            Assert.GreaterOrEqual(rightInner, 0); Assert.GreaterOrEqual(leftInner, 0);
+            var result = BrushBoolean.BridgeFaces(u, rightInner, leftInner, out var remap);
+            Assert.IsNotNull(result, BrushBoolean.LastRefusal);
+            Assert.IsTrue(result.IsSound(out var why), why);
+            Assert.AreEqual(36f, result.Volume(), 1e-3f, "the gap is filled: a 6 x 3 x 2 block");
+            Assert.AreEqual(-1, remap[rightInner]); Assert.AreEqual(-1, remap[leftInner]);
+            int walls = 0; foreach (var f in result.faces) if (f.source == rightInner) walls++;
+            Assert.AreEqual(3, walls, "front, back and top walls remain (the top stays its own face beside the arm tops); the floor side vanishes into the base");
+            Assert.AreEqual(8, result.faces[remap[0]].indices.Length, "the front face keeps its eight corners: the bridge's wall beside it is its own face");
+            foreach (var f in result.faces) if (f.source == rightInner) Assert.AreEqual(4, f.indices.Length, "the walls are quads");
+        }
+
+        [Test]
+        public void BridgingFacesWithDifferentCornerCountsIsRefused()
+        {
+            var u = U();
+            var result = BrushBoolean.BridgeFaces(u, 0, 2, out var remap);
+            Assert.IsNull(result); Assert.IsNull(remap);
+            StringAssert.Contains("same number of corners", BrushBoolean.LastRefusal);
+        }
+
+        [Test]
+        public void BridgeOnABrushIsUndoable()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Undo.ClearAll();
+            var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
+            Assert.IsTrue(BrushApi.ConvertToCustom(brush));
+            brush.polyhedron = U(); BrushSync.Ensure(brush);
+            BrushApi.ForceUpdate();
+            var model = Object.FindFirstObjectByType<BrushModel>();
+            var mesh = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>();
+            int before = mesh.sharedMesh.vertexCount;
+            int rightInner = -1, leftInner = -1;
+            for (int f = 0; f < brush.polyhedron.faces.Length; f++)
+            {
+                var n = (Vector3)brush.polyhedron.Plane(f); float x = brush.polyhedron.vertices[brush.polyhedron.faces[f].indices[0]].x;
+                if (Vector3.Dot(n, Vector3.left) > 0.99f && Mathf.Abs(x - 1f) < 1e-4f) rightInner = f;
+                if (Vector3.Dot(n, Vector3.right) > 0.99f && Mathf.Abs(x + 1f) < 1e-4f) leftInner = f;
+            }
+            Selection.activeGameObject = brush.gameObject;
+            BrushEditState.Mode = BrushEditMode.Face;
+            BrushEditState.Sel(brush).faces = new HashSet<int> { rightInner, leftInner };
+            Assert.AreEqual(brush, BrushExtrudeOverlay.BridgeCandidate());
+            Undo.IncrementCurrentGroup();
+            BrushExtrudeOverlay.BridgeSelection();
+            Assert.IsNull(brush.problem, brush.problem);
+            Assert.AreEqual(36f, brush.polyhedron.Volume(), 1e-3f);
+            Assert.AreEqual(3, BrushEditState.Sel(brush).faces.Count, "the bridge's walls are selected");
+            Undo.PerformUndo(); BrushApi.ForceUpdate();
+            Assert.IsNull(brush.problem, brush.problem);
+            Assert.AreEqual(28f, brush.polyhedron.Volume(), 1e-3f);
+            Assert.AreEqual(before, mesh.sharedMesh.vertexCount);
+        }
+
         [Test]
         public void ExtrudeThenUndoRestoresTheBrush()
         {

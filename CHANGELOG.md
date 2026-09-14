@@ -2,6 +2,10 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Bridge: select two faces of one brush (same number of corners) and press Bridge in the Brushes overlay; the
+  block between them is added as a boolean, the two faces vanish into the join, the walls become new faces and
+  stay selected. Corners are paired the way that stretches least. Refused, with the reason in the Extrude panel,
+  when the corner counts differ or the result would not be a sound shape. Undoable like an extrusion.
 - Extrusion never hands the brush a broken shape. The prism a face is extruded by is grown by a hair at both
   ends and around its outline, so none of its faces ever coincides with a face of the brush (coincident faces
   are where a boolean can leave zero-thickness sheets), and the rebuilt corners snap back to where they belong.
