@@ -41,7 +41,10 @@ namespace CsgBrush.Manifold
         /// its own vertices so the face index can ride along as a property; Manifold merges them by position.
         /// Returns null when Manifold rejects the input (not closed, degenerate).
         /// </summary>
-        public static ManifoldSolid FromFaces(IList<Vector3> vertices, IList<int[]> faces, out Error error)
+        public static ManifoldSolid FromFaces(IList<Vector3> vertices, IList<int[]> faces, out Error error) => FromFaces(vertices, faces, out error, null);
+
+        /// <summary>As above, with an explicit id per face carried as the vertex property (default: the face index).</summary>
+        public static ManifoldSolid FromFaces(IList<Vector3> vertices, IList<int[]> faces, out Error error, IList<int> faceIds)
         {
             const int props = 4;
             // winding-agnostic: orient by the signed volume so the normals point outward whichever way the faces are wound
@@ -66,7 +69,7 @@ namespace CsgBrush.Manifold
                 for (int k = 0; k < face.Length; k++, vi++)
                 {
                     var p = vertices[face[k]];
-                    vp[vi * props] = p.x; vp[vi * props + 1] = p.y; vp[vi * props + 2] = p.z; vp[vi * props + 3] = f;
+                    vp[vi * props] = p.x; vp[vi * props + 1] = p.y; vp[vi * props + 2] = p.z; vp[vi * props + 3] = faceIds != null ? faceIds[f] : f;
                 }
                 // Unity's front-face winding already gives outward normals for cross(b - a, c - a), which is what Manifold expects
                 Triangulate(vertices, face, triangulated);

@@ -35,9 +35,10 @@ URL", the URL of this repository.
   the three mode toggles (keys 1, 2, 3), Select Hidden (also pick elements facing away from the camera), Drag
   Rectangle Mode (only what is completely inside, or everything the rectangle touches) and the handle
   orientation: Global, Local, or Element, which aligns the gizmo with the selection so the blue axis runs along
-  the face normal, the natural way to push a face in or out. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears. The Extrude panel that
-  opens with edit mode extrudes the selected faces by a distance in world units (negative cuts a pocket), either
-  the whole selection as one block or each face on its own; the faces stay selected for the next extrusion.
+  the face normal, the natural way to push a face in or out. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears. The Extrude row in the
+  Brushes overlay (edit mode) extrudes the selected faces by a distance in world units (negative cuts a pocket),
+  either the whole selection as one block or each face on its own; it is a boolean, so the block may run through
+  other parts of the brush, and the faces stay selected for the next extrusion.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
   shape it came from) discards the edits. Concave shapes are allowed; they are split into convex parts for the colliders
   automatically. Every shape can be edited by hand.

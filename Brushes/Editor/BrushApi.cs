@@ -189,21 +189,20 @@ namespace CsgBrush.Editor
 
         /// <summary>
         /// Extrude the selected faces by a distance (rounded to the grid when snapping is on), each on its own or the
-        /// whole selection as one. The result must stay a sound shape; otherwise nothing changes and false is returned.
+        /// whole selection as one. Runs as a boolean, so it works whatever the block passes through. Returns per
+        /// original face index its index afterwards (-1 when gone), or null when nothing was done.
         /// </summary>
-        public static bool ExtrudeFaces(Brush brush, IEnumerable<int> faces, float distanceMeters, bool individual)
+        public static int[] ExtrudeFaces(Brush brush, IEnumerable<int> faces, float distanceMeters, bool individual)
         {
-            if (!ConvertToCustom(brush)) return false;
+            if (!ConvertToCustom(brush)) return null;
             if (BrushSettings.instance.snapToGrid) distanceMeters = BrushSnap.Round(distanceMeters, BrushSettings.instance.GridMeters);
-            if (Mathf.Abs(distanceMeters) < 1e-6f) return false;
-            var result = brush.polyhedron.Clone();
-            if (result.ExtrudeFaces(faces, distanceMeters, individual) == 0) return false;
-            result.WeldCoincident(1e-4f);
-            if (!result.IsSound(out _)) return false;
+            if (Mathf.Abs(distanceMeters) < 1e-6f) return null;
+            var result = BrushBoolean.ExtrudeFaces(brush.polyhedron, faces, distanceMeters, individual, out var remap);
+            if (result == null || !result.IsValid) return null;
             Undo.RecordObject(brush, "Extrude faces");
             brush.polyhedron = result;
             BrushSync.Ensure(brush);
-            return true;
+            return remap;
         }
 
         /// <summary>Move a vertex to a world position (snapped to the world grid when snapping is on); bent faces split into triangles.</summary>

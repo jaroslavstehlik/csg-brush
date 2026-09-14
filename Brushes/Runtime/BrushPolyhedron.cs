@@ -514,11 +514,122 @@ namespace CsgBrush
                 if (faces[f].indices.Length < 3) { reason = "degenerate face"; return false; }
                 if (PlanarityError(f) > Epsilon * 10f) { reason = "non-planar face"; return false; }
             }
-            var pieces = new List<CsgBrush.Colliders.ConvexPolytope>();
-            if (!ConvexDecomposition.Decompose(this, pieces)) { reason = "cannot be split into convex parts"; return false; }
-            float sum = 0f; foreach (var piece in pieces) sum += piece.Volume();
-            if (Mathf.Abs(sum - volume) > Mathf.Max(1e-3f + ConvexDecomposition.MinPieceVolume * 8f, volume * 0.01f)) { reason = "self-intersecting"; return false; }
+            for (int f = 0; f < faces.Length; f++) if (!FaceIsSimple(f)) { reason = "self-intersecting"; return false; } // a bow-tie face, whatever the rest looks like
+            if (!IsConvex() && SelfIntersects()) { reason = "self-intersecting"; return false; } // a closed convex shape cannot self-intersect
             return true;
+        }
+
+        /// <summary>A face polygon is simple when no two of its non-adjacent edges cross (in its plane).</summary>
+        public bool FaceIsSimple(int face)
+        {
+            var idx = faces[face].indices; int n = idx.Length;
+            if (n < 4) return true;
+            // a bow-tie's Newell normal cancels out, so take the plane from the first three corners that span one
+            Vector3 nrm = Vector3.zero;
+            for (int i = 0; i < n && nrm.sqrMagnitude < 1e-12f; i++)
+                nrm = Vector3.Cross(vertices[idx[(i + 1) % n]] - vertices[idx[i]], vertices[idx[(i + 2) % n]] - vertices[idx[i]]);
+            if (nrm.sqrMagnitude < 1e-12f) return false; // every corner collinear: no polygon at all
+            nrm.Normalize();
+            var u = Vector3.Cross(nrm, Mathf.Abs(nrm.y) < 0.9f ? Vector3.up : Vector3.right).normalized; var w = Vector3.Cross(nrm, u);
+            var pts = new Vector2[n];
+            for (int i = 0; i < n; i++) pts[i] = new Vector2(Vector3.Dot(vertices[idx[i]], u), Vector3.Dot(vertices[idx[i]], w));
+            for (int i = 0; i < n; i++)
+                for (int j = i + 2; j < n; j++)
+                {
+                    if (i == 0 && j == n - 1) continue; // adjacent around the loop
+                    var a = pts[i]; var b = pts[(i + 1) % n]; var c = pts[j]; var d = pts[(j + 1) % n];
+                    float s1 = Cross2(a, b, c), s2 = Cross2(a, b, d), s3 = Cross2(c, d, a), s4 = Cross2(c, d, b);
+                    if (s1 * s2 < 0f && s3 * s4 < 0f) return false;
+                }
+            return true;
+        }
+
+        static float Cross2(Vector2 p, Vector2 q, Vector2 x) => (q.x - p.x) * (x.y - p.y) - (q.y - p.y) * (x.x - p.x);
+
+        /// <summary>
+        /// Exact test: do two non-coplanar faces cross? The faces' planes meet in a line; where that line runs inside
+        /// both polygons for more than a point, and that stretch is inside at least one of them rather than along
+        /// both boundaries (the case of two faces sharing an edge), the faces intersect. Pairs whose bounds do not
+        /// overlap are skipped. Coplanar overlaps are not detected.
+        /// </summary>
+        public bool SelfIntersects()
+        {
+            int n = faces.Length;
+            var planes = new Vector4[n]; var mins = new Vector3[n]; var maxs = new Vector3[n];
+            float scale = Bounds().size.magnitude; float eps = Mathf.Max(1e-5f, scale * 1e-6f);
+            for (int f = 0; f < n; f++)
+            {
+                planes[f] = Plane(f);
+                var idx = faces[f].indices; mins[f] = maxs[f] = vertices[idx[0]];
+                foreach (var i in idx) { mins[f] = Vector3.Min(mins[f], vertices[i]); maxs[f] = Vector3.Max(maxs[f], vertices[i]); }
+            }
+            var spansF = new List<float>(); var spansG = new List<float>();
+            for (int f = 0; f < n; f++)
+                for (int g = f + 1; g < n; g++)
+                {
+                    if (mins[f].x > maxs[g].x + eps || maxs[f].x < mins[g].x - eps || mins[f].y > maxs[g].y + eps || maxs[f].y < mins[g].y - eps || mins[f].z > maxs[g].z + eps || maxs[f].z < mins[g].z - eps) continue;
+                    var nf = new Vector3(planes[f].x, planes[f].y, planes[f].z); var ng = new Vector3(planes[g].x, planes[g].y, planes[g].z);
+                    var dir = Vector3.Cross(nf, ng);
+                    if (dir.sqrMagnitude < 1e-10f) continue; // parallel planes
+                    dir.Normalize();
+                    // a point on both planes: solve in the plane spanned by the two normals
+                    float d1 = -planes[f].w, d2 = -planes[g].w, dot = Vector3.Dot(nf, ng), det = 1f - dot * dot;
+                    var origin = ((d1 - d2 * dot) * nf + (d2 - d1 * dot) * ng) / det;
+                    if (!InsideSpans(f, origin, dir, spansF) || !InsideSpans(g, origin, dir, spansG)) continue;
+                    for (int i = 0; i + 1 < spansF.Count; i += 2)
+                        for (int j = 0; j + 1 < spansG.Count; j += 2)
+                        {
+                            float lo = Mathf.Max(spansF[i], spansG[j]), hi = Mathf.Min(spansF[i + 1], spansG[j + 1]);
+                            if (hi - lo <= eps * 4f) continue;
+                            var mid = origin + dir * ((lo + hi) * 0.5f);
+                            if (StrictlyInside(f, mid, planes[f], eps) || StrictlyInside(g, mid, planes[g], eps)) return true;
+                        }
+                }
+            return false;
+        }
+
+        /// <summary>Parameter spans along a line (in the face's plane) where the line is inside the polygon: pairs of t values. False when the line misses it.</summary>
+        bool InsideSpans(int face, Vector3 origin, Vector3 dir, List<float> spans)
+        {
+            spans.Clear();
+            var plane = Plane(face); var nrm = new Vector3(plane.x, plane.y, plane.z);
+            var side = Vector3.Cross(nrm, dir); // in-plane normal of the line
+            var idx = faces[face].indices;
+            var crossings = new List<float>();
+            for (int i = 0; i < idx.Length; i++)
+            {
+                var a = vertices[idx[i]]; var b = vertices[idx[(i + 1) % idx.Length]];
+                float sa = Vector3.Dot(a - origin, side), sb = Vector3.Dot(b - origin, side);
+                if ((sa >= 0f) == (sb >= 0f)) continue; // half-open rule: an endpoint on the line counts once
+                var p = Vector3.Lerp(a, b, sa / (sa - sb));
+                crossings.Add(Vector3.Dot(p - origin, dir));
+            }
+            if (crossings.Count < 2) return false;
+            crossings.Sort();
+            for (int i = 0; i + 1 < crossings.Count; i += 2) { spans.Add(crossings[i]); spans.Add(crossings[i + 1]); }
+            return spans.Count > 0;
+        }
+
+        /// <summary>Point on the plane of a face, strictly inside its polygon (not on the boundary).</summary>
+        bool StrictlyInside(int face, Vector3 p, Vector4 plane, float eps)
+        {
+            var n = new Vector3(plane.x, plane.y, plane.z);
+            var u = Vector3.Cross(n, Mathf.Abs(n.y) < 0.9f ? Vector3.up : Vector3.right).normalized; var w = Vector3.Cross(n, u);
+            var idx = faces[face].indices;
+            float px = Vector3.Dot(p, u), py = Vector3.Dot(p, w); int winding = 0;
+            for (int i = 0; i < idx.Length; i++)
+            {
+                var a = vertices[idx[i]]; var b = vertices[idx[(i + 1) % idx.Length]];
+                float ax = Vector3.Dot(a, u) - px, ay = Vector3.Dot(a, w) - py, bx = Vector3.Dot(b, u) - px, by = Vector3.Dot(b, w) - py;
+                // distance from the point to the edge: on the boundary is not inside
+                float ex = bx - ax, ey = by - ay, len2 = ex * ex + ey * ey;
+                float t = len2 > 0f ? Mathf.Clamp01(-(ax * ex + ay * ey) / len2) : 0f;
+                float dx = ax + ex * t, dy = ay + ey * t;
+                if (dx * dx + dy * dy < eps * eps) return false;
+                if (ay <= 0f) { if (by > 0f && ax * by - bx * ay > 0f) winding++; }
+                else if (by <= 0f && ax * by - bx * ay < 0f) winding--;
+            }
+            return winding != 0;
         }
 
         /// <summary>Undirected edges as vertex pairs (a &lt; b), each once.</summary>

@@ -340,14 +340,17 @@ namespace CsgBrush.Tests
         {
             var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
             int top = FaceWithNormal(box, Vector3.up);
-            int walls = box.ExtrudeFaces(new[] { top }, 1f, true);
-            Assert.AreEqual(4, walls);
-            Assert.AreEqual(10, box.faces.Length, "the face plus four walls");
-            Assert.IsTrue(box.IsClosed(), "closed"); Assert.IsTrue(box.IsSound(out var why), why);
-            Assert.AreEqual(12f, box.Volume(), 1e-3f, "2x2x2 plus a 2x1x2 block");
-            Assert.AreEqual(2f, box.Bounds().max.y, 1e-4f, "the top moved up by one; its index is unchanged");
-            Assert.IsTrue(Vector3.Dot(box.Plane(top), Vector3.up) > 0.99f);
-            foreach (var f in box.faces) if (f.source == top) Assert.AreEqual(4, f.indices.Length, "walls are quads with the extruded face as source");
+            var result = BrushBoolean.ExtrudeFaces(box, new[] { top }, 1f, true, out var remap);
+            Assert.IsNotNull(result);
+            Assert.AreEqual(10, result.faces.Length, "the face plus four walls");
+            Assert.IsTrue(result.IsClosed(), "closed"); Assert.IsTrue(result.IsSound(out var why), why);
+            Assert.AreEqual(12f, result.Volume(), 1e-3f, "2x2x2 plus a 2x1x2 block");
+            Assert.AreEqual(2f, result.Bounds().max.y, 1e-4f, "the top moved up by one");
+            Assert.AreEqual(top, remap[top], "the extruded face keeps its index");
+            for (int f = 0; f < box.faces.Length; f++) Assert.AreEqual(f, remap[f], "untouched faces keep their indices");
+            Assert.IsTrue(Vector3.Dot(result.Plane(top), Vector3.up) > 0.99f, "and it is still the top");
+            int walls = 0; foreach (var f in result.faces) if (f.source == top) { walls++; Assert.AreEqual(4, f.indices.Length, "walls are quads"); }
+            Assert.AreEqual(4, walls, "walls carry the extruded face as source");
         }
 
         [Test]
@@ -355,9 +358,12 @@ namespace CsgBrush.Tests
         {
             var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
             int top = FaceWithNormal(box, Vector3.up);
-            box.ExtrudeFaces(new[] { top }, -0.5f, true);
-            Assert.IsTrue(box.IsClosed()); Assert.IsTrue(box.IsSound(out var why), why);
-            Assert.AreEqual(6f, box.Volume(), 1e-3f, "a 2x0.5x2 pocket removed");
+            var result = BrushBoolean.ExtrudeFaces(box, new[] { top }, -0.5f, true, out var remap);
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.IsClosed()); Assert.IsTrue(result.IsSound(out var why), why);
+            Assert.AreEqual(6f, result.Volume(), 1e-3f, "the whole top moved down by half: a 2x1.5x2 box");
+            Assert.AreEqual(0.5f, result.Bounds().max.y, 1e-4f);
+            Assert.AreEqual(0.5f, result.vertices[result.faces[remap[top]].indices[0]].y, 1e-4f, "the face keeps its identity at its new height");
         }
 
         [Test]
@@ -365,16 +371,57 @@ namespace CsgBrush.Tests
         {
             var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
             int top = FaceWithNormal(box, Vector3.up), right = FaceWithNormal(box, Vector3.right);
-            var group = box.Clone();
-            int walls = group.ExtrudeFaces(new[] { top, right }, 1f, false);
-            Assert.AreEqual(6, walls, "the shared edge gets no wall: 4 + 4 - 2");
+            var group = BrushBoolean.ExtrudeFaces(box, new[] { top, right }, 1f, false, out _);
             Assert.IsTrue(group.IsClosed()); Assert.IsTrue(group.IsSound(out var why), why);
             Assert.Greater(group.Volume(), 8f);
-            var single = box.Clone();
-            walls = single.ExtrudeFaces(new[] { top, right }, 1f, true);
-            Assert.AreEqual(8, walls, "each face gets its own four walls");
+            var single = BrushBoolean.ExtrudeFaces(box, new[] { top, right }, 1f, true, out _);
             Assert.IsTrue(single.IsClosed()); Assert.IsTrue(single.IsSound(out why), why);
             Assert.AreEqual(16f, single.Volume(), 1e-3f, "two 2x1x2 blocks on a 2x2x2 box");
+        }
+
+        [Test]
+        public void ExtrudingThroughAnotherPartOfTheShapeStaysValid()
+        {
+            // the L's notch has two inner faces (x = 0 facing +x, z = 0 facing +z); blocks from both run through each other
+            var l = LShape();
+            int innerX = -1, innerZ = -1;
+            for (int f = 0; f < l.faces.Length; f++) { var c = l.FaceCentre(f); var n = l.Plane(f); if (n.x > 0.9f && c.x < 0.1f) innerX = f; if (n.z > 0.9f && c.z < 0.1f) innerZ = f; }
+            Assert.GreaterOrEqual(innerX, 0); Assert.GreaterOrEqual(innerZ, 0);
+            var result = BrushBoolean.ExtrudeFaces(l, new[] { innerX, innerZ }, 1.5f, true, out var remap);
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.IsClosed()); Assert.IsTrue(result.IsSound(out var why), why);
+            Assert.IsFalse(result.SelfIntersects());
+            Assert.AreEqual(3f + 1.5f + 1.5f - 1f, result.Volume(), 1e-3f, "two 1x1x1.5 blocks overlapping in a 1x1x1 cube, counted once");
+            Assert.GreaterOrEqual(remap[innerX], 0); Assert.GreaterOrEqual(remap[innerZ], 0);
+            // and a cut that goes right through the other arm and out the far side
+            var cut = BrushBoolean.ExtrudeFaces(l, new[] { innerX }, -3f, true, out _);
+            Assert.IsNotNull(cut);
+            Assert.IsTrue(cut.IsSound(out why), why);
+            Assert.AreEqual(2f, cut.Volume(), 1e-3f, "a 1x1 tunnel through the 1-thick arm");
+        }
+
+        [Test]
+        public void SelfIntersectionIsDetectedExactlyAndCheaply()
+        {
+            var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
+            Assert.IsFalse(box.SelfIntersects());
+            var stairs = BrushPolyhedron.Stairs(new Vector3(2f, 4f, 8f), 0.25f, 0.25f); // 32 steps, concave, many faces
+            Assert.IsFalse(stairs.SelfIntersects());
+            var sw = System.Diagnostics.Stopwatch.StartNew(); Assert.IsTrue(stairs.IsSound(out _)); double stairsMs = sw.Elapsed.TotalMilliseconds;
+            var sphere = BrushPolyhedron.Sphere(new Vector3(4f, 4f, 4f), 5);
+            sw.Restart(); Assert.IsTrue(sphere.IsSound(out _)); double sphereMs = sw.Elapsed.TotalMilliseconds;
+            // fold a corner of the L through the other arm: an edge of the moved faces pierces a face
+            var l = LShape();
+            var bad = l.Clone(); bad.vertices[3] = new Vector3(2f, -0.5f, -2f); bad.vertices[9] = new Vector3(2f, 0.5f, -2f); // the inner corner dragged across the far arm
+            Assert.IsTrue(bad.SelfIntersects(), "crossing faces are found");
+            var twisted = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f)); // the top rotated half a turn: bow-tie sides
+            var top = new[] { 4, 5, 6, 7 }; var tv = new Vector3[4]; for (int i = 0; i < 4; i++) tv[i] = twisted.vertices[top[i]];
+            for (int i = 0; i < 4; i++) twisted.vertices[top[i]] = tv[(i + 2) % 4];
+            Assert.IsFalse(twisted.FaceIsSimple(2), "a bow-tie side is not a simple polygon");
+            Assert.IsFalse(twisted.IsSound(out _));
+            Assert.IsFalse(bad.IsSound(out var why)); Assert.AreEqual("self-intersecting", why);
+            Debug.Log("PERF IsSound: stairs " + stairs.faces.Length + " faces " + stairsMs.ToString("F1") + " ms, sphere " + sphere.faces.Length + " faces " + sphereMs.ToString("F1") + " ms");
+            Assert.Less(stairsMs, 50.0, "concave check stays cheap"); Assert.Less(sphereMs, 20.0, "convex shapes skip the check");
         }
 
         [Test]
