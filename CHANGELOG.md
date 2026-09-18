@@ -2,6 +2,8 @@
 
 ## 0.2.0 (2026-09-14)
 
+- The Brushes overlay shows the next brush's parameters (operation, surface, sides, steps, arch thickness and
+  angle, hollow) while a Create tool is active; they are the Project Settings > Brushes values.
 - Arch brush (Unreal's Arch): fills its box like a Box, drawn the same way, standing on the floor; Thickness,
   Angle (180 is a full arch, less keeps the top part) and Segments in the Inspector. Each segment is its own
   convex block, so the mesh is closed by construction and the colliders are one hull per segment.

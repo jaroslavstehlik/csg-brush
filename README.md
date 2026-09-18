@@ -15,7 +15,8 @@ URL", the URL of this repository.
 
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
   Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
-  base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool.
+  base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool. While a Create tool is active the
+  Brushes overlay shows what the next brush gets (operation, surface, sides, steps, arch thickness and angle, hollow).
   Everything snaps to the grid, and a wall makes the brush grow out of the wall. Cylinder, Cone and Sphere are drawn from the centre of
   their base: press on the centre, drag the radius, then the height (a sphere with no height is round; lift for an
   ellipsoid). Curved and Spiral Stairs are drawn by their axis: press where the column axis goes, drag the outer radius (the drag direction is

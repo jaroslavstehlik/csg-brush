@@ -166,7 +166,7 @@ namespace CsgBrush.Editor
                 float targetRo = trialX > 1e-4f ? ro * size.x / trialX : ro;
                 st.stepWidth = Mathf.Max(grid > 0f ? grid : 0.01f, BrushSnap.Round(targetRo - st.innerRadius, grid));
             }
-            if (shape == BrushShape.Arch) { st.curveAngle = 180f; NewBrushParameters(out _, out _, out p.wallThickness); }
+            if (shape == BrushShape.Arch) { st.curveAngle = Mathf.Clamp(s.newArchAngle, 1f, 180f); NewBrushParameters(out _, out _, out p.wallThickness); }
             p.stairs = st;
             return p;
         }

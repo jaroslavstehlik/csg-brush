@@ -27,7 +27,7 @@ namespace CsgBrush.Editor
                 brush.innerRadius = d.stairs.innerRadius; brush.stepWidth = d.stairs.stepWidth; brush.stepThickness = d.stairs.stepThickness;
                 brush.curveAngle = d.stairs.curveAngle; brush.numSteps = d.stairs.numSteps; brush.stepsPer360 = d.stairs.stepsPer360;
             }
-            if (shape == BrushShape.Arch) { brush.curveAngle = 180f; brush.wallThickness = BrushSettings.instance.GridMeters; }
+            if (shape == BrushShape.Arch) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.curveAngle = p.stairs.curveAngle; brush.wallThickness = p.wallThickness; brush.sides = p.sides; }
             BrushSync.Ensure(brush);
             BrushSync.RequestFullUpdate(brush);
             return brush;

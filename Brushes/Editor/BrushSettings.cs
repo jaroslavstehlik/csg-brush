@@ -44,6 +44,7 @@ namespace CsgBrush.Editor
         public bool newSlopedFloor = false;
         public bool newSlopedCeiling = false;
         [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
+        [Range(1f, 180f)] public float newArchAngle = 180f;
         [Header("Extrude (edit mode)")]
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
