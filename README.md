@@ -40,7 +40,8 @@ URL", the URL of this repository.
   extrudes as one block or each face on its own; the Extrude button in the Brushes overlay applies it. It is a boolean, so the block may run through
   other parts of the brush, and the faces stay selected for the next extrusion. Your own faces, edges and vertices survive it: the boolean only adds the walls
   and moves the face, so coplanar faces you keep apart stay apart (a belt of walls keeps its edges, a split face keeps its other half) and per-face materials hold.
-  Bridge (next to Extrude) connects two selected faces of one brush with a block between them, the way a corridor joins two rooms; the faces need the same
+  Holding Shift when you start dragging the Move gizmo on selected faces extrudes them by the dragged distance along their normal instead of moving them
+  (drag into the brush to cut). Bridge (next to Extrude) connects two selected faces of one brush with a block between them, the way a corridor joins two rooms; the faces need the same
   number of corners, and the new walls stay selected. When the result would not be a sound shape (a block ending exactly where the
   brush would touch itself, or a cut that removes everything) the brush is left as it was and the panel says so; pick another distance.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the

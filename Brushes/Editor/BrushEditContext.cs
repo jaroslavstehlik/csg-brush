@@ -489,6 +489,34 @@ namespace CsgBrush.Editor
             if (result.vertices.Length != dragStart.vertices.Length) Remap(sel, remap, result);
         }
 
+        /// <summary>
+        /// Shift-drag of the Move gizmo on selected faces: instead of moving them, extrude them (a boolean, like the
+        /// Extrude button) by the drag's distance along the selection's normal, rounded to the grid when snapping
+        /// is on. Recomputed from the shape at drag start each step, so the drag can go back and forth; a negative
+        /// distance cuts. A step whose result is refused keeps the last valid one.
+        /// </summary>
+        public static void ApplyExtrudeDrag(Brush brush, Selection sel, List<int> faces, Vector3 worldDelta)
+        {
+            var settings = BrushSettings.instance;
+            var t = brush.transform;
+            Vector3 normal = Vector3.zero;
+            foreach (var f in faces) if (f < dragStart.faces.Length) { var pl = dragStart.Plane(f); normal += t.TransformDirection(new Vector3(pl.x, pl.y, pl.z)); }
+            if (normal.sqrMagnitude < 1e-10f) return;
+            float distance = Vector3.Dot(worldDelta, normal.normalized);
+            if (settings.snapToGrid) distance = BrushSnap.Round(distance, settings.GridMeters);
+            BrushPolyhedron result; int[] remap = null;
+            if (Mathf.Abs(distance) < 1e-6f) result = dragStart.Clone();
+            else
+            {
+                result = BrushBoolean.ExtrudeFaces(dragStart, faces, distance, settings.extrudeIndividual, out remap);
+                if (result == null) return; // refused (the block would end where the shape touches itself): keep the last valid step
+            }
+            BrushApi.SetPolyhedron(brush, result);
+            var kept = new HashSet<int>();
+            foreach (var f in faces) { int r = remap == null ? f : (f < remap.Length ? remap[f] : -1); if (r >= 0) kept.Add(r); }
+            sel.faces = kept; sel.vertices.Clear(); sel.edges.Clear();
+        }
+
         static void Remap(Selection sel, int[] remap, BrushPolyhedron result)
         {
             var v = new HashSet<int>(); foreach (var i in sel.vertices) if (i < remap.Length) v.Add(remap[i]); sel.vertices = v;
@@ -518,14 +546,20 @@ namespace CsgBrush.Editor
                 var moved = Handles.PositionHandle(centre, frame);
                 if (EditorGUI.EndChangeCheck())
                 {
-                    if (!BrushEditState.dragging || BrushEditState.dragBrush != brush) { BrushEditState.BeginDrag(brush, poly, moving, centre); offset = Vector3.zero; }
+                    if (!BrushEditState.dragging || BrushEditState.dragBrush != brush)
+                    {
+                        BrushEditState.BeginDrag(brush, poly, moving, centre); offset = Vector3.zero;
+                        // Shift at the start of a face drag: the drag extrudes instead of moving
+                        extrudeFaces = Event.current.shift && BrushEditState.Mode == BrushEditMode.Face && sel.faces.Count > 0 ? new List<int>(sel.faces) : null;
+                    }
                     offset = moved - BrushEditState.dragOrigin;
                     var delta = offset;
-                    BrushEditState.ApplyDrag(brush, sel, p => p + delta);
+                    if (extrudeFaces != null) BrushEditState.ApplyExtrudeDrag(brush, sel, extrudeFaces, delta);
+                    else BrushEditState.ApplyDrag(brush, sel, p => p + delta);
                 }
             }
         }
-        Vector3 offset; Quaternion frame = Quaternion.identity;
+        Vector3 offset; Quaternion frame = Quaternion.identity; List<int> extrudeFaces;
     }
 
     /// <summary>Rotate tool inside brush edit mode: the selection turns about its centre in rotation-snap steps; positions land on the grid.</summary>

@@ -2,6 +2,10 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Shift-drag the Move gizmo on selected faces to extrude them instead of moving them: the distance along the
+  selection's normal is the extrusion (grid-rounded, negative cuts), recomputed from the shape at drag start each
+  step, using the Extrude panel's Whole selection / Individual setting; a step that would be refused keeps the last
+  valid one. Same boolean as the Extrude button.
 - Bridge: select two faces of one brush (same number of corners) and press Bridge in the Brushes overlay; the
   block between them is added as a boolean, the two faces vanish into the join, the walls become new faces and
   stay selected. Corners are paired the way that stretches least. Refused, with the reason in the Extrude panel,

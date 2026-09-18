@@ -268,6 +268,32 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ShiftDragOfAFaceExtrudesByTheDraggedDistance()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Undo.ClearAll();
+            BrushSettings.instance.snapToGrid = true; BrushSettings.instance.extrudeIndividual = true;
+            var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
+            Assert.IsTrue(BrushApi.ConvertToCustom(brush));
+            var poly = brush.polyhedron;
+            int top = 0; for (int f = 0; f < poly.faces.Length; f++) if (Vector3.Dot(poly.Plane(f), Vector3.up) > 0.9f) top = f;
+            var sel = BrushEditState.Sel(brush); sel.faces = new HashSet<int> { top };
+            var faces = new List<int>(sel.faces);
+            BrushEditState.BeginDrag(brush, poly, BrushEditState.SelectedVertices(poly, sel), Vector3.up);
+            BrushEditState.ApplyExtrudeDrag(brush, sel, faces, new Vector3(0.3f, 1f, 0f));
+            Assert.AreEqual(12f, brush.polyhedron.Volume(), 1e-3f, "one unit up along the normal; the sideways part of the drag is ignored");
+            Assert.AreEqual(10, brush.polyhedron.faces.Length);
+            Assert.AreEqual(1, sel.faces.Count, "the moved face stays selected");
+            BrushEditState.ApplyExtrudeDrag(brush, sel, faces, new Vector3(0f, 2f, 0f));
+            Assert.AreEqual(16f, brush.polyhedron.Volume(), 1e-3f, "recomputed from the drag start, not stacked");
+            BrushEditState.ApplyExtrudeDrag(brush, sel, faces, Vector3.zero);
+            Assert.AreEqual(8f, brush.polyhedron.Volume(), 1e-3f, "back at the start: the box");
+            BrushEditState.ApplyExtrudeDrag(brush, sel, faces, new Vector3(0f, -0.5f, 0f));
+            Assert.AreEqual(6f, brush.polyhedron.Volume(), 1e-3f, "dragging into the brush cuts");
+            BrushEditState.dragging = false; BrushEditState.dragBrush = null; BrushEditState.dragStart = null;
+        }
+
+        [Test]
         public void ExtrudeThenUndoRestoresTheBrush()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
