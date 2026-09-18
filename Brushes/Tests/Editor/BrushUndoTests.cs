@@ -353,6 +353,21 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ArchBrushBuildsAndCollidesPerSegment()
+        {
+            var brush = BrushApi.Create(BrushShape.Arch, new Vector3(0f, 1f, 0f), new Vector3(4f, 2f, 1f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            Physics.SyncTransforms();
+            Assert.IsNull(brush.problem, brush.problem);
+            Assert.AreEqual(180f, brush.curveAngle); Assert.Greater(brush.wallThickness, 0f);
+            var bounds = ColliderBounds();
+            Assert.AreEqual(0f, bounds.min.y, 0.05f, "stands on the floor");
+            Assert.AreEqual(brush.sides, UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "one convex collider per segment");
+            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(0f, 0.5f, 0f), new Vector3(0.3f, 0.3f, 0.3f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, "the opening under the arch is empty");
+            Assert.Greater(RenderVertexCount(), 0, "renders");
+        }
+
+        [Test]
         public void HollowBoxIsARoom()
         {
             var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(8f, 4f, 8f), Quaternion.identity);

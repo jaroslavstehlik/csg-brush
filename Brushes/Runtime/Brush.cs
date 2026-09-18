@@ -20,6 +20,8 @@ namespace CsgBrush
         [InspectorName("Curved Stairs")] CurvedStairs = 7,
         /// <summary>Separate step slabs wrapping around an inner column, possibly several turns.</summary>
         [InspectorName("Spiral Stairs")] SpiralStairs = 8,
+        /// <summary>An arch filling its box: a ring of segments between an outer and an inner ellipse, standing on the floor.</summary>
+        Arch = 9,
     }
 
     public enum BrushOperation
@@ -64,10 +66,10 @@ namespace CsgBrush
 
         [Tooltip("Box and cylinder: keep only the walls.")]
         public bool hollow;
-        [Tooltip("Metres.")]
+        [Tooltip("Hollow walls, and the thickness of an arch: metres.")]
         public float wallThickness = 0.5f;
 
-        [Tooltip("Cylinder and cone.")]
+        [Tooltip("Cylinder and cone; segments of an arch.")]
         [Min(3)] public int sides = 16;
         [Tooltip("Sphere: 1 is coarse, 5 is smooth.")]
         [Range(1, 5)] public int tessellation = 2;
@@ -81,7 +83,7 @@ namespace CsgBrush
         public float stepWidth = 1.5f;
         [Tooltip("Spiral stairs: thickness of each step slab, metres.")]
         public float stepThickness = 0.25f;
-        [Tooltip("Curved stairs: total angle the steps cover, degrees.")]
+        [Tooltip("Curved stairs: total angle the steps cover; arch: the angle it spans, up to 180. Degrees.")]
         public float curveAngle = 90f;
         [Tooltip("Curved and spiral stairs.")]
         [Min(1)] public int numSteps = 8;

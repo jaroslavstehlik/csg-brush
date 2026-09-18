@@ -33,6 +33,7 @@ namespace CsgBrush.Editor
         [MenuItem(kMenu + "Linear Stairs", false, 15)] static void Stairs() => CreateAtPivot(BrushShape.Stairs);
         [MenuItem(kMenu + "Curved Stairs", false, 16)] static void CurvedStairs() => CreateAtPivot(BrushShape.CurvedStairs);
         [MenuItem(kMenu + "Spiral Stairs", false, 17)] static void SpiralStairs() => CreateAtPivot(BrushShape.SpiralStairs);
+        [MenuItem(kMenu + "Arch", false, 18)] static void Arch() => CreateAtPivot(BrushShape.Arch);
 
         [MenuItem(kMenu + "Hollow room", false, 30)]
         static void Room()

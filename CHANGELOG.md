@@ -2,6 +2,9 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Arch brush (Unreal's Arch): fills its box like a Box, drawn the same way, standing on the floor; Thickness,
+  Angle (180 is a full arch, less keeps the top part) and Segments in the Inspector. Each segment is its own
+  convex block, so the mesh is closed by construction and the colliders are one hull per segment.
 - Shift-drag the Move gizmo on selected faces to extrude them instead of moving them: the distance along the
   selection's normal is the extrusion (grid-rounded, negative cuts), recomputed from the shape at drag start each
   step, using the Extrude panel's Whole selection / Individual setting; a step that would be refused keeps the last

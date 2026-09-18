@@ -15,10 +15,10 @@ namespace CsgBrush.Editor
         {
             public Vector3 size;
             public int sides, tessellation;
-            public float stepHeight, stepDepth;
+            public float stepHeight, stepDepth, wallThickness;
             public StairParams stairs;
 
-            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, stepDepth = b.stepDepth, stairs = b.Stairs };
+            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, stepDepth = b.stepDepth, wallThickness = b.wallThickness, stairs = b.Stairs };
 
             /// <summary>Defaults for a shape of a given size (menus, conversions).</summary>
             public static ShapeParams Default(Vector3 size, int sides = 16)
@@ -27,7 +27,7 @@ namespace CsgBrush.Editor
                 float stepHeight = s.ToMeters(Mathf.Min(s.maxStep, s.GridUnits)), stepDepth = s.ToMeters(s.GridUnits * 2f);
                 return new ShapeParams
                 {
-                    size = size, sides = sides, tessellation = 2, stepHeight = stepHeight, stepDepth = stepDepth,
+                    size = size, sides = sides, tessellation = 2, stepHeight = stepHeight, stepDepth = stepDepth, wallThickness = s.GridMeters,
                     stairs = new StairParams { innerRadius = s.GridMeters, stepWidth = Mathf.Max(s.GridMeters, size.x - s.GridMeters), stepHeight = stepHeight, stepThickness = s.GridMeters * 0.5f, curveAngle = 90f, numSteps = 8, stepsPer360 = 16 },
                 };
             }
@@ -45,6 +45,7 @@ namespace CsgBrush.Editor
                 case BrushShape.Stairs: return BrushPolyhedron.Stairs(p.size, p.stepHeight, p.stepDepth);
                 case BrushShape.CurvedStairs: return BrushPolyhedron.CurvedStairs(p.stairs);
                 case BrushShape.SpiralStairs: return BrushPolyhedron.SpiralStairs(p.stairs);
+                case BrushShape.Arch: return BrushPolyhedron.Arch(p.size, p.wallThickness, p.stairs.curveAngle, p.sides);
                 default: return BrushPolyhedron.Box(p.size);
             }
         }

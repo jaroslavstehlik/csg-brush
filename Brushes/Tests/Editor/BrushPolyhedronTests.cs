@@ -559,5 +559,29 @@ namespace CsgBrush.Tests
             Assert.AreEqual(BrushShape.Box, a.shape);
             Assert.AreEqual(1, Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length);
         }
+
+        [Test]
+        public void ArchIsAClosedRingOfConvexSegments()
+        {
+            var size = new Vector3(4f, 2f, 1f);
+            var arch = BrushPolyhedron.Arch(size, 0.5f, 180f, 16);
+            Assert.IsTrue(arch.IsClosed(), "closed"); Assert.IsTrue(arch.IsSound(out var why), why);
+            Assert.AreEqual(16 * 6, arch.faces.Length, "six faces per segment block");
+            var b = arch.Bounds();
+            Assert.AreEqual(size.x, b.size.x, 1e-3f); Assert.AreEqual(size.y, b.size.y, 1e-3f); Assert.AreEqual(size.z, b.size.z, 1e-3f);
+            Assert.AreEqual(-1f, b.min.y, 1e-4f, "stands on the floor of its box, centred on the transform");
+            // half an elliptical ring: outer 2 x 2, inner 1.5 x 1.5, times the depth; the polygonal ring is a little under it
+            float exact = Mathf.PI * (2f * 2f - 1.5f * 1.5f) * 0.5f * size.z;
+            Assert.Less(arch.Volume(), exact); Assert.Greater(arch.Volume(), exact * 0.97f);
+            for (int g = 0; g < 16; g++)
+            {
+                var block = new List<int>(); for (int f = 0; f < arch.faces.Length; f++) if (arch.faces[f].group == g) block.Add(f);
+                Assert.AreEqual(6, block.Count, "segment " + g);
+            }
+            var quarter = BrushPolyhedron.Arch(size, 0.5f, 90f, 8);
+            Assert.IsTrue(quarter.IsSound(out why), why);
+            Assert.AreEqual(2f, quarter.Bounds().max.y + 1f, 1e-3f, "a partial arch keeps the top of the ellipse");
+            Assert.Less(quarter.Bounds().size.x, size.x, "and does not reach the box's sides");
+        }
     }
 }

@@ -166,6 +166,7 @@ namespace CsgBrush.Editor
                 float targetRo = trialX > 1e-4f ? ro * size.x / trialX : ro;
                 st.stepWidth = Mathf.Max(grid > 0f ? grid : 0.01f, BrushSnap.Round(targetRo - st.innerRadius, grid));
             }
+            if (shape == BrushShape.Arch) { st.curveAngle = 180f; NewBrushParameters(out _, out _, out p.wallThickness); }
             p.stairs = st;
             return p;
         }
@@ -420,5 +421,14 @@ namespace CsgBrush.Editor
         public override string Title => "Spiral Stairs Brush";
         protected override string IconArt => "................\n.......##.......\n.......##.......\n....#..##..#....\n...###.##.###...\n....#..##..#....\n.......##.......\n..####.##.####..\n.......##.......\n....#..##..#....\n...###.##.###...\n....#..##..#....\n.......##.......\n.......##.......\n................\n................";
         [MenuItem("Tools/CSG Brush/Create/Spiral Stairs", false, 8)] static void Menu() => ToolManager.SetActiveTool<CreateSpiralStairsBrushTool>();
+    }
+
+    [EditorTool("Arch Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 8)]
+    public sealed class CreateArchBrushTool : BrushCreateTool
+    {
+        public override BrushShape Shape => BrushShape.Arch;
+        public override string Title => "Arch Brush";
+        protected override string IconArt => "................\n................\n.....######.....\n...##......##...\n..#..........#..\n.#....####....#.\n.#...#....#...#.\n#...#......#...#\n#...#......#...#\n#...#......#...#\n#...#......#...#\n#...#......#...#\n#...#......#...#\n#...#......#...#\n................\n................";
+        [MenuItem("Tools/CSG Brush/Create/Arch", false, 9)] static void Menu() => ToolManager.SetActiveTool<CreateArchBrushTool>();
     }
 }

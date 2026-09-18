@@ -95,6 +95,11 @@ namespace CsgBrush.Editor
                 case BrushShape.Sphere:
                     EditorGUILayout.PropertyField(tessProp, new GUIContent("Tessellation"));
                     break;
+                case BrushShape.Arch:
+                    DrawUnitsField(settings, wallProp, "Thickness");
+                    EditorGUILayout.Slider(curveAngleProp, 1f, 180f, new GUIContent("Angle", "180 is a full arch; less keeps the top part of it"));
+                    EditorGUILayout.PropertyField(sidesProp, new GUIContent("Segments"));
+                    break;
                 case BrushShape.CurvedStairs:
                     DrawUnitsField(settings, innerRadiusProp, "Inner radius");
                     DrawUnitsField(settings, stepWidthProp, "Step width");

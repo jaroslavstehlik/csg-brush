@@ -291,6 +291,37 @@ namespace CsgBrush
             return OnFloor(verts, faces);
         }
 
+        /// <summary>
+        /// An arch filling its box (Unreal's Arch): the ring between an outer ellipse (half the width, the full height)
+        /// and an inner one a thickness in, standing on the box's floor, over an angle (180 is a full arch; less
+        /// keeps the top part) in a number of segments. Each segment is its own closed convex block (Face.group), so
+        /// the mesh is closed by construction and the colliders are one hull per segment. Centred on the transform.
+        /// </summary>
+        public static BrushPolyhedron Arch(Vector3 size, float thickness, float angleDegrees, int segments)
+        {
+            int n = Mathf.Max(1, segments);
+            float a = Mathf.Max(0.001f, size.x * 0.5f), b = Mathf.Max(0.001f, size.y), d = Mathf.Max(0.001f, size.z);
+            float t = Mathf.Clamp(thickness, 0.001f, Mathf.Min(a, b) - 0.0005f);
+            float angle = Mathf.Clamp(angleDegrees, 1f, 180f) * Mathf.Deg2Rad;
+            float t0 = Mathf.PI * 0.5f + angle * 0.5f, step = -angle / n; // from the left end over the top to the right
+            float y0 = -size.y * 0.5f;
+            var verts = new List<Vector3>(); var faces = new List<Face>();
+            for (int k = 0; k < n; k++)
+            {
+                float u0 = t0 + k * step, u1 = t0 + (k + 1) * step;
+                int v = verts.Count;
+                Vector2 o0 = new Vector2(a * Mathf.Cos(u0), b * Mathf.Sin(u0)), o1 = new Vector2(a * Mathf.Cos(u1), b * Mathf.Sin(u1));
+                Vector2 i0 = new Vector2((a - t) * Mathf.Cos(u0), (b - t) * Mathf.Sin(u0)), i1 = new Vector2((a - t) * Mathf.Cos(u1), (b - t) * Mathf.Sin(u1));
+                foreach (var z in new[] { -d * 0.5f, d * 0.5f })
+                {
+                    verts.Add(new Vector3(i0.x, y0 + i0.y, z)); verts.Add(new Vector3(o0.x, y0 + o0.y, z));
+                    verts.Add(new Vector3(o1.x, y0 + o1.y, z)); verts.Add(new Vector3(i1.x, y0 + i1.y, z));
+                }
+                AddBlock(verts, faces, k, new[] { v, v + 1, v + 2, v + 3 }, new[] { v + 4, v + 5, v + 6, v + 7 });
+            }
+            return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+        }
+
         /// <summary>The shape with its lowest point at y = 0: the transform is the axis at floor level whatever the first step does.</summary>
         static BrushPolyhedron OnFloor(List<Vector3> verts, List<Face> faces)
         {
