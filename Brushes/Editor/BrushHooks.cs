@@ -151,6 +151,7 @@ namespace CsgBrush.Editor
             if (BrushEditContext.IsActive || Application.isPlaying) return;
             if (e.type == EventType.Repaint)
             {
+                if (BrushSettings.instance.showCuts) BrushShapeDrawing.DrawCuts();
                 foreach (var go in Selection.gameObjects)
                     if (go.TryGetComponent<Brush>(out var brush) && brush.shape == BrushShape.Custom)
                         BrushShapeDrawing.Draw(brush, drawEdges: false);
@@ -173,7 +174,10 @@ namespace CsgBrush.Editor
         /// <summary>Nearest brush under the mouse by its own shape.</summary>
         public static Brush PickBrush(Vector2 mouse) => PickBrushSurface(mouse, out _, out _);
 
-        /// <summary>Nearest brush under the mouse with the hit point and face normal (world space); additive brushes win over subtractive ones.</summary>
+        /// <summary>
+        /// Nearest brush under the mouse with the hit point and face normal (world space). Additive brushes win over
+        /// subtractive ones, except while cuts are shown: then whatever surface is drawn nearest is what a click hits.
+        /// </summary>
         public static Brush PickBrushSurface(Vector2 mouse, out Vector3 point, out Vector3 normal)
         {
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
@@ -200,7 +204,7 @@ namespace CsgBrush.Editor
                     else if (world < tAdd) { tAdd = world; bestAdd = brush; pAdd = worldPoint; nAdd = worldNormal; }
                 }
             }
-            if (bestAdd != null) { point = pAdd; normal = nAdd; return bestAdd; }
+            if (bestAdd != null && (bestSub == null || !BrushSettings.instance.showCuts || tAdd <= tSub)) { point = pAdd; normal = nAdd; return bestAdd; }
             point = pSub; normal = nSub; return bestSub;
         }
 

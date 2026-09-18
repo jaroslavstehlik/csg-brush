@@ -23,6 +23,38 @@ namespace CsgBrush.Editor
             return pieces.Count;
         }
 
+        static readonly Color CutFill = new Color(1f, 0.3f, 0.25f, 0.16f), CutEdge = new Color(1f, 0.35f, 0.3f, 0.9f), CutSelectedFill = new Color(1f, 0.45f, 0.3f, 0.3f);
+
+        /// <summary>
+        /// Every active subtract brush as a translucent red volume with its edges (the Cuts toggle in the Brushes
+        /// overlay): a cut that has carved everything away has no surface of its own to see or click otherwise.
+        /// </summary>
+        public static void DrawCuts()
+        {
+            var selected = new HashSet<GameObject>(Selection.gameObjects);
+            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (brush.operation != BrushOperation.Subtract || !brush.enabled) continue;
+                var poly = BrushGeometry.Polyhedron(brush);
+                if (poly == null || !poly.IsValid) continue;
+                bool isSelected = selected.Contains(brush.gameObject);
+                using (new Handles.DrawingScope(BrushGeometry.LocalToWorld(brush)))
+                {
+                    Handles.zTest = UnityEngine.Rendering.CompareFunction.LessEqual;
+                    foreach (var face in poly.faces)
+                    {
+                        var pts = new Vector3[face.indices.Length];
+                        for (int i = 0; i < pts.Length; i++) pts[i] = poly.vertices[face.indices[i]];
+                        Handles.color = isSelected ? CutSelectedFill : CutFill;
+                        Handles.DrawAAConvexPolygon(pts);
+                        Handles.color = CutEdge;
+                        for (int i = 0; i < pts.Length; i++) Handles.DrawLine(pts[i], pts[(i + 1) % pts.Length], isSelected ? 2.5f : 1f);
+                    }
+                    Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+                }
+            }
+        }
+
         public static void Draw(Brush brush, bool drawEdges)
         {
             if (brush == null || brush.shape != BrushShape.Custom) return;

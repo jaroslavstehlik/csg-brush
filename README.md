@@ -13,6 +13,8 @@ URL", the URL of this repository.
 
 ## Brushes (the student-facing layer)
 
+- **Cuts**: the Cuts toggle in the Brushes overlay draws subtract brushes as translucent red volumes so you can see and select them
+  where they have carved everything away; with it off, clicks always prefer the solid brushes.
 - **Layers**: a brush's Unity layer picks its CSG group. Brushes on one layer are combined with each other only: a subtract brush
   carves its own layer, each layer renders as its own mesh child on that layer, and the colliders sit on that layer. Use it for a
   collision layer per kind of thing, or to keep parts of a level from carving each other.

@@ -33,6 +33,8 @@ namespace CsgBrush.Editor
             var snapContent = snapIcon != null && snapIcon.image != null ? new GUIContent(snapIcon.image, "Snap to grid: position, size, rotation, and vertices when editing") : new GUIContent("Snap");
             bool snap = GUILayout.Toggle(s.snapToGrid, snapContent, EditorStyles.miniButton, GUILayout.Width(26), GUILayout.Height(18));
             if (snap != s.snapToGrid) { s.snapToGrid = snap; s.NotifyChanged(); }
+            bool cuts = GUILayout.Toggle(s.showCuts, new GUIContent("Cuts", "Show subtract brushes as translucent red volumes, so they can be seen and selected where they have carved everything away"), EditorStyles.miniButton, GUILayout.Width(40), GUILayout.Height(18));
+            if (cuts != s.showCuts) { s.showCuts = cuts; s.NotifyChanged(); SceneView.RepaintAll(); }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 

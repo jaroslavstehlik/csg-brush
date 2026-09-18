@@ -2,6 +2,9 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Cuts toggle in the Brushes overlay: subtract brushes are drawn as translucent red volumes with their edges, so a
+  cut that has carved everything away can be seen and clicked; while it is on, a click picks whatever surface is
+  drawn nearest, cut volumes included.
 - Layers are CSG groups: brushes are combined per Unity layer inside a model. A subtract brush carves only
   brushes on its own layer, each layer renders as its own mesh child on that layer (camera culling masks apply)
   and its colliders sit on that layer. Set the layer in the Inspector's Layer dropdown like any object; the

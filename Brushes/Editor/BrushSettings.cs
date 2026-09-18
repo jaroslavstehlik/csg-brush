@@ -50,6 +50,8 @@ namespace CsgBrush.Editor
         public bool extrudeIndividual = false;
         [Header("Editor")]
         public bool showGenerated = false;
+        [Tooltip("Draw subtract brushes as translucent red volumes in the Scene view, so they can be seen and selected where they have carved everything away.")]
+        public bool showCuts = false;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]
         public bool snapToGrid = true;
 
