@@ -29,6 +29,8 @@ namespace CsgBrush.Colliders.Editor
             public bool subtract;
             public ControllerSurface.Kind kind;
             public bool noFallDamage;
+            /// <summary>Layer of the generated colliders; a subtract input only cuts inputs on its own layer.</summary>
+            public int layer;
             /// <summary>Convex solids that make up the brush (several for a concave shape).</summary>
             public List<ConvexPolytope> add;
             /// <summary>Convex solids removed from the brush's own parts first (the inside of a hollow shape).</summary>
@@ -39,6 +41,7 @@ namespace CsgBrush.Colliders.Editor
         {
             public ControllerSurface.Kind kind;
             public bool noFallDamage;
+            public int layer;
             public string name;
         }
 
@@ -112,7 +115,7 @@ namespace CsgBrush.Colliders.Editor
                 if (piece.IsEmpty || piece.Volume() < settings.minPieceVolume) continue;
                 var tag = piece.tag as BrushTag;
                 if (Verbose) Log.AppendLine("piece " + pieces + " from " + (tag != null ? tag.name : "?") + " bounds " + piece.GetBounds() + " verts " + piece.vertices.Count + " faces " + piece.faces.Count + " vol " + piece.Volume().ToString("0.000"));
-                ClaimOrMake(pool, container, piece, settings.layer, "solid " + (tag != null ? tag.name : "?"), false, tag, ref boxes, ref meshes);
+                ClaimOrMake(pool, container, piece, tag != null ? tag.layer : 0, "solid " + (tag != null ? tag.name : "?"), false, tag, ref boxes, ref meshes);
                 pieces++;
             }
             for (int i = 0; i < volumes.Count; i++)
@@ -120,7 +123,7 @@ namespace CsgBrush.Colliders.Editor
                 var piece = volumes[i];
                 if (piece.IsEmpty) continue;
                 var tag = piece.tag as BrushTag;
-                ClaimOrMake(pool, container, piece, settings.layer, (tag != null ? tag.kind.ToString().ToLower() : "trigger") + " " + (tag != null ? tag.name : "?"), true, tag, ref boxes, ref meshes);
+                ClaimOrMake(pool, container, piece, tag != null ? tag.layer : 0, (tag != null ? tag.kind.ToString().ToLower() : "trigger") + " " + (tag != null ? tag.name : "?"), true, tag, ref boxes, ref meshes);
                 triggers++;
             }
 
@@ -189,7 +192,6 @@ namespace CsgBrush.Colliders.Editor
             unchecked
             {
                 int h = 17;
-                h = h * 31 + settings.layer;
                 h = h * 31 + settings.minPieceVolume.GetHashCode();
                 h = h * 31 + (settings.showInHierarchy ? 1 : 0);
                 foreach (var list in new[] { solids, volumes })
@@ -200,7 +202,7 @@ namespace CsgBrush.Colliders.Editor
                         var p = list[i];
                         for (int k = 0; k < p.planes.Count; k++) h = h * 31 + p.planes[k].GetHashCode();
                         var tag = p.tag as BrushTag;
-                        if (tag != null) h = h * 31 + (int)tag.kind * 7 + (tag.noFallDamage ? 1 : 0);
+                        if (tag != null) h = h * 31 + (int)tag.kind * 7 + (tag.noFallDamage ? 1 : 0) + tag.layer * 131;
                     }
                 }
                 return h;
@@ -240,7 +242,7 @@ namespace CsgBrush.Colliders.Editor
             foreach (var input in inputs)
             {
                 if (input.kind == ControllerSurface.Kind.NoCollision || input.add == null || input.add.Count == 0) continue;
-                var tag = new BrushTag { kind = input.kind, noFallDamage = input.noFallDamage, name = input.name };
+                var tag = new BrushTag { kind = input.kind, noFallDamage = input.noFallDamage, layer = input.layer, name = input.name };
                 // the brush's own parts, with the hollow inside removed
                 var own = new List<ConvexPolytope>();
                 foreach (var p in input.add) { p.tag = tag; own.Add(p); }
@@ -263,7 +265,11 @@ namespace CsgBrush.Colliders.Editor
                     foreach (var cutter in own)
                     {
                         var next = new List<ConvexPolytope>();
-                        for (int a = 0; a < solids.Count; a++) ConvexPolytope.Subtract(solids[a], cutter, next);
+                        for (int a = 0; a < solids.Count; a++)
+                        {
+                            if ((solids[a].tag as BrushTag)?.layer != input.layer) { next.Add(solids[a]); continue; } // another layer: another CSG group
+                            ConvexPolytope.Subtract(solids[a], cutter, next);
+                        }
                         solids.Clear(); solids.AddRange(next);
                     }
                 }

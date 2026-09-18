@@ -17,8 +17,6 @@ namespace CsgBrush.Colliders
 
         [Tooltip("Rebuild after every model update in the editor.")]
         public bool autoRebuild = true;
-        [Tooltip("Layer for the generated colliders.")]
-        public int layer = 0;
         [Tooltip("Pieces with a smaller volume (cubic meters) are dropped as slivers.")]
         public float minPieceVolume = 1e-6f;
         [Tooltip("Show the generated pieces in the hierarchy.")]

@@ -96,7 +96,7 @@ namespace CsgBrush.Editor
                 }
                 foreach (Transform child in model.transform)
                 {
-                    bool generated = child.name == BrushModel.MeshChildName || child.name == ConvexColliderSettings.ContainerName;
+                    bool generated = BrushModel.IsMeshChildName(child.name) || child.name == ConvexColliderSettings.ContainerName;
                     if (!generated) continue;
                     if (child.gameObject.hideFlags != flags) child.gameObject.hideFlags = flags;
                 }

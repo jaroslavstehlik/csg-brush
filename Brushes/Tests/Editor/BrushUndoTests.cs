@@ -368,6 +368,42 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void BrushesOnDifferentLayersAreSeparateCsgGroups()
+        {
+            const int other = 8;
+            var wall = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1.5f, 0f), new Vector3(8f, 3f, 0.5f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            var model = UnityEngine.Object.FindFirstObjectByType<BrushModel>();
+            int wallAlone = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
+            // a door on another layer does not carve the wall
+            var door = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(1.2f, 2f, 1f), Quaternion.identity);
+            BrushApi.SetOperation(door, BrushOperation.Subtract);
+            door.gameObject.layer = other;
+            BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.AreEqual(wallAlone, BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "the wall is untouched by a cut on another layer");
+            Assert.Greater(Physics.OverlapBox(new Vector3(0f, 1f, 0f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, 1 << 0, QueryTriggerInteraction.Ignore).Length, 0, "the wall's collider is still solid where the door is");
+            Assert.AreEqual(1, BrushCsg.MeshObjects(model).Count, "a lone cut renders nothing on its layer");
+            // a block on the door's layer is carved by it, renders on that layer and collides on that layer
+            var block = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 3f), new Vector3(4f, 2f, 7f), Quaternion.identity);
+            block.gameObject.layer = other;
+            block.transform.SetAsFirstSibling(); // above the door in CSG order, so the door cuts it
+            BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            var meshes = BrushCsg.MeshObjects(model);
+            Assert.AreEqual(2, meshes.Count, "one render mesh per layer in use");
+            var otherMesh = BrushCsg.MeshObject(model, other, false);
+            Assert.IsNotNull(otherMesh); Assert.AreEqual(other, otherMesh.gameObject.layer, "the mesh child sits on the brushes' layer");
+            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(0f, 1f, 0f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, 1 << other, QueryTriggerInteraction.Ignore).Length, "the door carves the block on its own layer");
+            Assert.Greater(Physics.OverlapBox(new Vector3(0f, 1f, 3f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, 1 << other, QueryTriggerInteraction.Ignore).Length, 0, "the block's colliders are on its layer");
+            Assert.AreEqual(wallAlone, BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "the wall is still untouched");
+            // the door moved to the wall's layer carves the wall instead
+            door.gameObject.layer = 0;
+            BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.AreNotEqual(wallAlone, BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "the wall has a doorway now");
+            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(0f, 1f, 0f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, 1 << 0, QueryTriggerInteraction.Ignore).Length, "and the doorway is open");
+            Assert.Greater(Physics.OverlapBox(new Vector3(0f, 1f, 0f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, 1 << other, QueryTriggerInteraction.Ignore).Length, 0, "the block is whole again");
+        }
+
+        [Test]
         public void HollowBoxIsARoom()
         {
             var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(8f, 4f, 8f), Quaternion.identity);

@@ -13,6 +13,9 @@ namespace CsgBrush
     {
         public const string DefaultName = "<[default model]>";
         public const string MeshChildName = "<[mesh]>";
+        /// <summary>Brushes on the Default layer render as <see cref="MeshChildName"/>; every other layer gets its own child, named after the layer.</summary>
+        public static string MeshChildNameFor(int layer) => layer == 0 ? MeshChildName : "<[mesh " + (string.IsNullOrEmpty(LayerMask.LayerToName(layer)) ? layer.ToString() : LayerMask.LayerToName(layer)) + "]>";
+        public static bool IsMeshChildName(string name) => name == MeshChildName || (name.StartsWith("<[mesh ") && name.EndsWith("]>"));
 
         /// <summary>The implicit model for brushes that are not under a user-made model.</summary>
         [HideInInspector] public bool isDefault;

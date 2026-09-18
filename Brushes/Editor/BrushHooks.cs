@@ -80,7 +80,12 @@ namespace CsgBrush.Editor
         /// </summary>
         static UndoPropertyModification[] OnPostprocessModifications(UndoPropertyModification[] modifications)
         {
-            if (Application.isPlaying || !BrushSettings.instance.snapToGrid) return modifications;
+            if (Application.isPlaying) return modifications;
+            // a brush moved to another layer belongs to another CSG group from now on
+            for (int i = 0; i < modifications.Length; i++)
+                if (modifications[i].currentValue.target is GameObject lgo && modifications[i].currentValue.propertyPath == "m_Layer" && lgo.TryGetComponent<Brush>(out var layered))
+                    BrushCsg.MarkDirty(layered);
+            if (!BrushSettings.instance.snapToGrid) return modifications;
             if (BrushSnap.DragInProgress)
             {
                 // Rotate/Scale handles accumulate per frame; snap on release instead (see BrushSnap.DragInProgress).
@@ -284,7 +289,7 @@ namespace CsgBrush.Editor
                     changed = true;
                     continue;
                 }
-                if (go != null && (go.name == BrushModel.MeshChildName || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == BrushModel.DefaultName) && !BrushSettings.instance.showGenerated)
+                if (go != null && (BrushModel.IsMeshChildName(go.name) || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == BrushModel.DefaultName) && !BrushSettings.instance.showGenerated)
                 {
                     changed = true; // generated mesh or collider objects: never what the student meant
                     continue;

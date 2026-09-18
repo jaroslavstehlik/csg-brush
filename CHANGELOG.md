@@ -2,6 +2,11 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Layers are CSG groups: brushes are combined per Unity layer inside a model. A subtract brush carves only
+  brushes on its own layer, each layer renders as its own mesh child on that layer (camera culling masks apply)
+  and its colliders sit on that layer. Set the layer in the Inspector's Layer dropdown like any object; the
+  Convex Colliders component no longer has a layer of its own. Smaller unions per layer, and a change on one
+  layer leaves the other layers' meshes as they are.
 - The Brushes overlay shows the next brush's parameters (operation, surface, sides, steps, arch thickness and
   angle, hollow) while a Create tool is active; they are the Project Settings > Brushes values.
 - Arch brush (Unreal's Arch): fills its box like a Box, drawn the same way, standing on the floor; Thickness,

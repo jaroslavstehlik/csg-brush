@@ -13,6 +13,9 @@ URL", the URL of this repository.
 
 ## Brushes (the student-facing layer)
 
+- **Layers**: a brush's Unity layer picks its CSG group. Brushes on one layer are combined with each other only: a subtract brush
+  carves its own layer, each layer renders as its own mesh child on that layer, and the colliders sit on that layer. Use it for a
+  collision layer per kind of thing, or to keep parts of a level from carving each other.
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
   Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
   base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool. While a Create tool is active the
