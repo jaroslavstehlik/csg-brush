@@ -38,6 +38,8 @@ namespace CsgBrush.Editor
             slopedCeilingProp = serializedObject.FindProperty(nameof(Brush.slopedCeiling));
         }
 
+        static bool s_CollisionOpen = true, s_RenderingOpen = true;
+
         public override void OnInspectorGUI()
         {
             var settings = BrushSettings.instance;
@@ -46,14 +48,6 @@ namespace CsgBrush.Editor
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(shapeProp, new GUIContent("Shape"));
             EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
-            EditorGUILayout.PropertyField(collisionProp, new GUIContent("Collision", "Solid geometry, a trigger volume, or no collider at all. The game's data (ice, water, damage) is a module component below."));
-            if (target is Brush cb && cb.EffectiveCollision() != cb.collision)
-                EditorGUILayout.LabelField(" ", "made a " + cb.EffectiveCollision().ToString().ToLower() + " by a module", EditorStyles.miniLabel);
-            if (target is Brush pb2 && pb2.EffectiveCollision() != ColliderKind.None)
-            {
-                EditorGUILayout.PropertyField(physicsMaterialProp, new GUIContent("Physics material", "On every collider piece of the brush, triggers included: friction and bounce, and a handle for sounds or other lookups. The pieces also take the brush's tag, layer and static flags."));
-                EditorGUILayout.PropertyField(provideContactsProp, new GUIContent("Provide contacts", "The pieces provide contact data to OnCollision callbacks."));
-            }
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
             EditorGUILayout.Space(4);
@@ -137,7 +131,41 @@ namespace CsgBrush.Editor
             }
 
             EditorGUILayout.Space(4);
-            EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face. Drop a material onto a single face in the Scene view for per-face materials."));
+            s_CollisionOpen = EditorGUILayout.BeginFoldoutHeaderGroup(s_CollisionOpen, "Collision");
+            if (s_CollisionOpen)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(collisionProp, new GUIContent("Collision", "Solid geometry, a trigger volume, or no collider at all. The game's data (ice, water, damage) is a module component on this object or a parent."));
+                if (target is Brush cb && cb.EffectiveCollision() != cb.collision)
+                    EditorGUILayout.LabelField(" ", "made a " + cb.EffectiveCollision().ToString().ToLower() + " by a module", EditorStyles.miniLabel);
+                if (target is Brush pb2 && pb2.EffectiveCollision() != ColliderKind.None)
+                {
+                    EditorGUILayout.PropertyField(physicsMaterialProp, new GUIContent("Physics material", "On every collider piece of the brush, triggers included: friction and bounce, and a handle for sounds or other lookups."));
+                    EditorGUILayout.PropertyField(provideContactsProp, new GUIContent("Provide contacts", "The pieces provide contact data to OnCollision callbacks."));
+                    EditorGUILayout.LabelField(" ", "the pieces also take this object's tag, layer and static flags", EditorStyles.miniLabel);
+                }
+                if (target is Brush mb)
+                {
+                    var modules = mb.Modules();
+                    if (modules.Length > 0)
+                    {
+                        var names = new System.Text.StringBuilder();
+                        foreach (var m in modules) { if (names.Length > 0) names.Append(", "); names.Append(ObjectNames.NicifyVariableName(m.GetType().Name)); if (m.gameObject != mb.gameObject) names.Append(" (from " + m.gameObject.name + ")"); }
+                        EditorGUILayout.LabelField("Modules", names.ToString(), EditorStyles.miniLabel);
+                    }
+                }
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
+            s_RenderingOpen = EditorGUILayout.BeginFoldoutHeaderGroup(s_RenderingOpen, "Rendering");
+            if (s_RenderingOpen)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face. Drop a material onto a single face in the Scene view for per-face materials."));
+                EditorGUILayout.LabelField(" ", "the render mesh takes its model's tag and static flags; its layer is this object's", EditorStyles.miniLabel);
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFoldoutHeaderGroup();
             bool changed = EditorGUI.EndChangeCheck();
             serializedObject.ApplyModifiedProperties();
             if (changed)
