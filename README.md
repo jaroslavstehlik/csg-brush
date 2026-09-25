@@ -33,6 +33,9 @@ URL", the URL of this repository.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
   the brush: on release the scale is baked into the size and the transform scale returns to one.
+- **Default material**: faces without a material of their own show a generated ruler texture (lines at every grid size, strong at the
+  metre, on a metre checker) that lines up with the world grid across brushes and cuts; created under `Assets/CSG Brush` on first
+  use, swappable in Project Settings > Brushes.
 - **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider), with a physics material and
   Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. A render mesh is its
   model: it takes the model object's tag and static flags (the hidden default model's come from Project Settings). Everything a specific

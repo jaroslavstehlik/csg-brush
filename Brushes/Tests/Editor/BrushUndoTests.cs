@@ -331,7 +331,7 @@ namespace CsgBrush.Tests
             var mat = mr.sharedMaterials[0];
             Assert.IsNotNull(mat, "a default material is assigned");
             var pipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline ?? UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline ?? QualitySettings.renderPipeline;
-            if (pipeline != null) Assert.AreEqual(pipeline.defaultMaterial, mat, "the render pipeline's default material (built-in Standard would render pink)");
+            if (pipeline != null) Assert.AreEqual(pipeline.defaultMaterial.shader, mat.shader, "the render pipeline's lit shader (built-in Standard would render pink)");
         }
 
         [Test]

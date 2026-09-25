@@ -2,6 +2,10 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Default grid material: brushes without a material of their own render with a generated dev texture that is a
+  ruler in metres (lines at every grid size of the project, faint for the fine ones, strong at the metre, over a
+  checker with a metre period), created once under Assets/CSG Brush with the active render pipeline's lit shader.
+  Project Settings > Brushes > Default material swaps it for your own or regenerates it from the grid sizes.
 - A piece is its brush, a mesh is its model: every collider piece takes its brush's physics material (new field,
   triggers included, also a handle for sounds), Provide Contacts (new field), tag and static flags, all part of the
   piece identity so a change rebuilds only that brush's pieces; every render mesh child takes its model's tag and

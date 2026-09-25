@@ -466,9 +466,11 @@ namespace CsgBrush.Editor
 
         static Material s_DefaultMaterial;
 
-        /// <summary>The material for brushes without one: the active render pipeline's default (URP or HDRP lit), else Unity's built-in default.</summary>
+        /// <summary>The material for brushes without one: the project's default brush material (the generated grid texture unless set), else the render pipeline's default.</summary>
         public static Material DefaultMaterial()
         {
+            var project = BrushGridMaterial.GetOrCreate();
+            if (project != null) return project;
             if (s_DefaultMaterial != null) return s_DefaultMaterial;
             var pipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline;
             if (pipeline == null) pipeline = UnityEngine.Rendering.GraphicsSettings.defaultRenderPipeline;

@@ -176,5 +176,42 @@ namespace CsgBrush.Tests
             var def = BrushCsg.DefaultModel(false);
             Assert.AreEqual(BrushSettings.instance.defaultModelStaticFlags, GameObjectUtility.GetStaticEditorFlags(BrushCsg.MeshObject(def, false).gameObject));
         }
+
+        [Test]
+        public void TheDefaultMaterialIsAGeneratedGridAsset()
+        {
+            var settings = BrushSettings.instance; var saved = settings.defaultMaterial;
+            try
+            {
+                settings.defaultMaterial = null;
+                var material = BrushCsg.DefaultMaterial();
+                Assert.IsNotNull(material);
+                Assert.AreEqual(BrushGridMaterial.MaterialPath, AssetDatabase.GetAssetPath(material), "an asset, because the saved mesh objects reference it");
+                Assert.IsNotNull(material.mainTexture, "with the ruler texture");
+                Assert.AreEqual(material, BrushCsg.DefaultMaterial(), "created once");
+                Assert.AreEqual(material, settings.defaultMaterial, "and remembered in the settings");
+                var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
+                BrushApi.ForceUpdate();
+                var model = Object.FindFirstObjectByType<BrushModel>();
+                Assert.AreEqual(material, BrushCsg.MeshObject(model, false).GetComponent<MeshRenderer>().sharedMaterial, "brushes without a material render with it");
+            }
+            finally { settings.defaultMaterial = saved; }
+        }
+
+        [Test]
+        public void TheGridTextureIsARulerInMetres()
+        {
+            var tex = BrushGridMaterial.Generate(512, 32f, new[] { 4f, 8f, 16f, 32f, 64f }); // 2 m at 256 px per metre; sizes 1/8, 1/4, 1/2, 1 m (2 m does not fit a metre)
+            try
+            {
+                Color32 At(int x, int y) => tex.GetPixel(x, y);
+                float mid = At(40, 40).r, metre = At(256, 40).r, half = At(128, 40).r, eighth = At(32, 40).r;
+                Assert.Less(metre, half, "the metre line is stronger than the half-metre line");
+                Assert.Less(half, eighth, "which is stronger than the eighth");
+                Assert.Less(eighth, mid, "which is still a line");
+                Assert.AreNotEqual(At(40, 40).r, At(300, 40).r, "cells alternate every metre");
+            }
+            finally { Object.DestroyImmediate(tex); }
+        }
     }
 }

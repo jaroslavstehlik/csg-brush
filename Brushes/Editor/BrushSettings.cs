@@ -50,6 +50,8 @@ namespace CsgBrush.Editor
         public bool extrudeIndividual = false;
         [Tooltip("Static flags of the hidden default model; its render meshes inherit them. A model you make has its own.")]
         public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.NavigationStatic | StaticEditorFlags.ReflectionProbeStatic;
+        [Tooltip("Material of every brush face without one of its own. Empty: a generated grid texture (a ruler in metres) is created under Assets/CSG Brush on first use.")]
+        public Material defaultMaterial;
         [Header("Editor")]
         public bool showGenerated = false;
         [Tooltip("Draw subtract brushes as translucent red volumes in the Scene view, so they can be seen and selected where they have carved everything away.")]
@@ -162,6 +164,10 @@ namespace CsgBrush.Editor
                     var names = Array.ConvertAll(s.gridSizes, g => g.ToString("0.###") + " " + s.unitLabel);
                     s.gridIndex = EditorGUILayout.Popup("Default grid", Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names);
                     s.snapToGrid = EditorGUILayout.Toggle(new GUIContent("Snap brushes to grid", "Positions, sizes and rotations are kept on the world grid after every edit, whatever the parent does."), s.snapToGrid);
+                    EditorGUILayout.BeginHorizontal();
+                    s.defaultMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Default material", "Every brush face without a material of its own. Empty: the generated grid texture, a ruler in metres, created under Assets/CSG Brush on first use."), s.defaultMaterial, typeof(Material), false);
+                    if (GUILayout.Button(new GUIContent("Grid", "Use the generated grid material (drawn again from the grid sizes)"), GUILayout.Width(44))) { s.defaultMaterial = null; BrushGridMaterial.Regenerate(); BrushGridMaterial.GetOrCreate(); BrushApi.ForceUpdate(); }
+                    EditorGUILayout.EndHorizontal();
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
                     s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("Default model static flags", "Inherited by the render meshes of brushes that are not under a model of your own"), s.defaultModelStaticFlags);
                     EditorGUILayout.HelpBox("1 metre = " + s.unitsPerMeter + " " + s.unitLabel + ". Geometry is stored in metres; changing the preset only changes how sizes are shown and snapped.", MessageType.None);
