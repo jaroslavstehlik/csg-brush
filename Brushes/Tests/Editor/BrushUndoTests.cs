@@ -138,7 +138,7 @@ namespace CsgBrush.Tests
                 foreach (var v in b.polyhedron.vertices) ph.Append(Q(v));
                 poly = ph.ToString();
             }
-            return "brush " + HierarchyPath(b.transform) + " #" + b.transform.GetSiblingIndex() + " " + b.shape + poly + " " + b.operation + " " + b.surface + " nfd=" + b.noFallDamage + " size=" + Q(b.size) + " hollow=" + b.hollow + " wall=" + Q(b.wallThickness) + " sides=" + b.sides + " tess=" + b.tessellation + " step=" + Q(b.stepHeight) + "/" + Q(b.stepDepth) + " mat=" + (b.material ? b.material.name : "-") + " pos=" + Q(b.transform.position) + " rot=" + Q(b.transform.rotation.eulerAngles) + " scl=" + Q(b.transform.localScale) + " children=" + children;
+            return "brush " + HierarchyPath(b.transform) + " #" + b.transform.GetSiblingIndex() + " " + b.shape + poly + " " + b.operation + " " + b.collision + " size=" + Q(b.size) + " hollow=" + b.hollow + " wall=" + Q(b.wallThickness) + " sides=" + b.sides + " tess=" + b.tessellation + " step=" + Q(b.stepHeight) + "/" + Q(b.stepDepth) + " mat=" + (b.material ? b.material.name : "-") + " pos=" + Q(b.transform.position) + " rot=" + Q(b.transform.rotation.eulerAngles) + " scl=" + Q(b.transform.localScale) + " children=" + children;
         }
 
         /// <summary>A generated render mesh that is actually shown.</summary>
@@ -455,7 +455,7 @@ namespace CsgBrush.Tests
             Record("create door", () => c = BrushApi.Create(BrushShape.Box, new Vector3(1f, 0.5f, 3f), new Vector3(1.2f, 2f, 1f), Quaternion.identity));
             Record("subtract door", () => BrushApi.SetOperation(c, BrushOperation.Subtract));
             Record("hollow box", () => BrushApi.SetHollow(a, true, 0.5f));
-            Record("surface ice", () => BrushApi.SetSurface(a, ControllerSurface.Kind.Slick));
+            Record("collision trigger", () => BrushApi.SetCollision(a, ColliderKind.Trigger));
             Record("box to cylinder", () => BrushApi.SetShape(a, BrushShape.Cylinder));
             Record("cylinder to stairs", () => BrushApi.SetShape(a, BrushShape.Stairs));
             Record("stairs steps", () => BrushApi.SetStairs(a, 0.25f, 0.5f));
@@ -463,9 +463,9 @@ namespace CsgBrush.Tests
             Record("door to first", () => BrushApi.ToFirst(c));
             Record("door to last", () => BrushApi.ToLast(c));
             Record("scale then apply", () => { Undo.RecordObject(a.transform, "scale"); a.transform.localScale = new Vector3(2f, 1f, 1f); BrushApi.ApplyScale(a); });
-            Record("water volume", () => { var w = BrushApi.Create(BrushShape.Box, new Vector3(-4f, -0.5f, 0f), new Vector3(3f, 1f, 3f), Quaternion.identity); BrushApi.SetSurface(w, ControllerSurface.Kind.Water); });
+            Record("water volume", () => { var w = BrushApi.Create(BrushShape.Box, new Vector3(-4f, -0.5f, 0f), new Vector3(3f, 1f, 3f), Quaternion.identity); BrushApi.SetCollision(w, ColliderKind.Trigger); });
             Record("delete wedge", () => BrushApi.Delete(b));
-            Record("solid again", () => BrushApi.SetSurface(a, ControllerSurface.Kind.Solid));
+            Record("solid again", () => BrushApi.SetCollision(a, ColliderKind.Solid));
             Record("unhollow", () => BrushApi.SetHollow(a, false, 0.5f));
 
             Walk(history, initial, initialDesc);
@@ -740,7 +740,7 @@ namespace CsgBrush.Tests
                     case 2: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "move", () => BrushApi.Move(t, RandomPos())); break; }
                     case 3: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "resize", () => BrushApi.SetSize(t, RandomSize())); break; }
                     case 4: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "operation", () => BrushApi.SetOperation(t, (BrushOperation)rng.Next(0, 2))); break; }
-                    case 5: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "surface", () => BrushApi.SetSurface(t, (ControllerSurface.Kind)rng.Next(0, 5))); break; }
+                    case 5: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "collision", () => BrushApi.SetCollision(t, (ColliderKind)rng.Next(0, 3))); break; }
                     case 6: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "hollow", () => BrushApi.SetHollow(t, rng.Next(0, 2) == 1, 0.25f)); break; }
                     case 7: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "shape", () => BrushApi.SetShape(t, (BrushShape)rng.Next(0, 6))); break; }
                     case 8: { var t = brushes[rng.Next(brushes.Count)]; Step(name = "rotate", () => BrushApi.Rotate(t, Quaternion.Euler(0f, rng.Next(0, 4) * 90f, 0f))); break; }

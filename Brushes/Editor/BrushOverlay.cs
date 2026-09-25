@@ -93,7 +93,19 @@ namespace CsgBrush.Editor
             EditorGUILayout.LabelField(tool.Title, EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
             s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
-            s.newSurface = (CsgBrush.Colliders.ControllerSurface.Kind)EditorGUILayout.EnumPopup(new GUIContent("Surface", "What the volume means to the character controller"), s.newSurface);
+            var moduleTypes = BrushApi.ModuleTypes();
+            if (moduleTypes.Count > 0)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.PrefixLabel(new GUIContent("Modules", "The game's data every new brush gets, as components on it"));
+                foreach (var t in moduleTypes)
+                {
+                    bool on = s.newModules.Contains(t.FullName);
+                    bool want = GUILayout.Toggle(on, new GUIContent(ObjectNames.NicifyVariableName(t.Name)), EditorStyles.miniButton);
+                    if (want != on) { if (want) s.newModules.Add(t.FullName); else s.newModules.Remove(t.FullName); }
+                }
+                EditorGUILayout.EndHorizontal();
+            }
             BrushCreateTool.NewBrushParameters(out float stepHeight, out float stepDepth, out float wall);
             switch (shape)
             {

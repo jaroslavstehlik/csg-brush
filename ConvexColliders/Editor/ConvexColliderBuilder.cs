@@ -27,10 +27,14 @@ namespace CsgBrush.Colliders.Editor
         {
             public string name;
             public bool subtract;
-            public ControllerSurface.Kind kind;
-            public bool noFallDamage;
+            /// <summary>Solid geometry, a trigger volume, or nothing.</summary>
+            public ColliderKind kind;
+            /// <summary>Hash of whatever <see cref="onPiece"/> puts on the pieces; a change rebuilds them.</summary>
+            public int fingerprint;
             /// <summary>Layer of the generated colliders; a subtract input only cuts inputs on its own layer.</summary>
             public int layer;
+            /// <summary>Called for every piece of this input on every build, new or reused (so it must be idempotent): game data goes on here.</summary>
+            public System.Action<GameObject, bool> onPiece;
             /// <summary>Convex solids that make up the brush (several for a concave shape).</summary>
             public List<ConvexPolytope> add;
             /// <summary>Convex solids removed from the brush's own parts first (the inside of a hollow shape).</summary>
@@ -39,10 +43,10 @@ namespace CsgBrush.Colliders.Editor
 
         sealed class BrushTag
         {
-            public ControllerSurface.Kind kind;
-            public bool noFallDamage;
+            public int fingerprint;
             public int layer;
             public string name;
+            public System.Action<GameObject, bool> onPiece;
         }
 
         /// <summary>Set by the editing layer while a handle is dragged: colliders are not needed until release.</summary>
@@ -123,7 +127,7 @@ namespace CsgBrush.Colliders.Editor
                 var piece = volumes[i];
                 if (piece.IsEmpty) continue;
                 var tag = piece.tag as BrushTag;
-                ClaimOrMake(pool, container, piece, tag != null ? tag.layer : 0, (tag != null ? tag.kind.ToString().ToLower() : "trigger") + " " + (tag != null ? tag.name : "?"), true, tag, ref boxes, ref meshes);
+                ClaimOrMake(pool, container, piece, tag != null ? tag.layer : 0, "trigger " + (tag != null ? tag.name : "?"), true, tag, ref boxes, ref meshes);
                 triggers++;
             }
 
@@ -142,22 +146,22 @@ namespace CsgBrush.Colliders.Editor
             EditorUtility.SetDirty(settings);
         }
 
-        /// <summary>Reuse an existing piece with exactly these planes and surface data, or create one (and raise the hook for it).</summary>
+        /// <summary>Reuse an existing piece with exactly these planes and module data, or create one; either way the input's hook runs on it.</summary>
         static GameObject ClaimOrMake(Dictionary<int, List<ConvexPiece>> pool, Transform container, ConvexPolytope piece, int layer, string name, bool trigger, BrushTag tag, ref int boxes, ref int meshes)
         {
-            var kind = tag != null ? tag.kind : (trigger ? ControllerSurface.Kind.Trigger : ControllerSurface.Kind.Solid);
-            bool noFallDamage = tag != null && tag.noFallDamage && !trigger;
+            int fingerprint = tag != null ? tag.fingerprint : 0;
             string brushName = tag != null ? tag.name : "";
-            int hash = ConvexPiece.HashOf(piece.planes, kind, noFallDamage, trigger, layer, brushName);
+            int hash = ConvexPiece.HashOf(piece.planes, fingerprint, trigger, layer, brushName);
             if (pool.TryGetValue(hash, out var candidates))
             {
                 for (int i = 0; i < candidates.Count; i++)
                 {
                     var c = candidates[i];
-                    if (!c.Matches(piece.planes, kind, noFallDamage, trigger, layer, brushName)) continue;
+                    if (!c.Matches(piece.planes, fingerprint, trigger, layer, brushName)) continue;
                     candidates.RemoveAt(i);
                     LastReusedPieces++;
                     if (c.TryGetComponent<BoxCollider>(out _)) boxes++; else meshes++;
+                    tag?.onPiece?.Invoke(c.gameObject, trigger);
                     return c.gameObject;
                 }
             }
@@ -166,16 +170,9 @@ namespace CsgBrush.Colliders.Editor
             var id = go.AddComponent<ConvexPiece>();
             id.planes = piece.planes.ToArray();
             id.hash = hash;
-            id.kind = kind; id.noFallDamage = noFallDamage; id.trigger = trigger; id.layer = layer; id.brushName = brushName;
+            id.fingerprint = fingerprint; id.trigger = trigger; id.layer = layer; id.brushName = brushName;
             LastCreatedPieces++;
-            ConvexColliderHooks.RaisePieceCreated(new ConvexColliderHooks.Piece
-            {
-                gameObject = go,
-                kind = kind,
-                noFallDamage = noFallDamage,
-                isTrigger = trigger,
-                brushName = brushName,
-            });
+            tag?.onPiece?.Invoke(go, trigger);
             return go;
         }
 
@@ -202,7 +199,7 @@ namespace CsgBrush.Colliders.Editor
                         var p = list[i];
                         for (int k = 0; k < p.planes.Count; k++) h = h * 31 + p.planes[k].GetHashCode();
                         var tag = p.tag as BrushTag;
-                        if (tag != null) h = h * 31 + (int)tag.kind * 7 + (tag.noFallDamage ? 1 : 0) + tag.layer * 131;
+                        if (tag != null) h = h * 31 + tag.fingerprint * 7 + tag.layer * 131;
                     }
                 }
                 return h;
@@ -241,8 +238,8 @@ namespace CsgBrush.Colliders.Editor
         {
             foreach (var input in inputs)
             {
-                if (input.kind == ControllerSurface.Kind.NoCollision || input.add == null || input.add.Count == 0) continue;
-                var tag = new BrushTag { kind = input.kind, noFallDamage = input.noFallDamage, layer = input.layer, name = input.name };
+                if (input.kind == ColliderKind.None || input.add == null || input.add.Count == 0) continue;
+                var tag = new BrushTag { fingerprint = input.fingerprint, layer = input.layer, name = input.name, onPiece = input.onPiece };
                 // the brush's own parts, with the hollow inside removed
                 var own = new List<ConvexPolytope>();
                 foreach (var p in input.add) { p.tag = tag; own.Add(p); }
@@ -255,7 +252,7 @@ namespace CsgBrush.Colliders.Editor
                         foreach (var s in own) s.tag = tag;
                     }
                 brushCount++;
-                if (input.kind == ControllerSurface.Kind.Water || input.kind == ControllerSurface.Kind.Trigger)
+                if (input.kind == ColliderKind.Trigger)
                 {
                     if (!input.subtract) volumes.AddRange(own);
                     continue;

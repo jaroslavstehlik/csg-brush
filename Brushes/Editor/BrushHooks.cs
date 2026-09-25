@@ -27,6 +27,7 @@ namespace CsgBrush.Editor
             SceneView.duringSceneGui += OnSceneGUI;
             Selection.selectionChanged += OnSelectionChanged;
             EditorApplication.hierarchyChanged += OnHierarchyChanged;
+            ObjectChangeEvents.changesPublished += OnObjectChanges;
             BrushSettings.Changed += OnSettingsChanged;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => EnsureAll();
             UnityEditor.SceneManagement.EditorSceneManager.newSceneCreated += (scene, setup, mode) => BrushCsg.ClearCaches();
@@ -81,10 +82,13 @@ namespace CsgBrush.Editor
         static UndoPropertyModification[] OnPostprocessModifications(UndoPropertyModification[] modifications)
         {
             if (Application.isPlaying) return modifications;
-            // a brush moved to another layer belongs to another CSG group from now on
+            // a brush moved to another layer belongs to another CSG group from now on; a module's values ride on the pieces
             for (int i = 0; i < modifications.Length; i++)
-                if (modifications[i].currentValue.target is GameObject lgo && modifications[i].currentValue.propertyPath == "m_Layer" && lgo.TryGetComponent<Brush>(out var layered))
-                    BrushCsg.MarkDirty(layered);
+            {
+                var mtarget = modifications[i].currentValue.target;
+                if (mtarget is GameObject lgo && modifications[i].currentValue.propertyPath == "m_Layer" && lgo.TryGetComponent<Brush>(out var layered)) BrushCsg.MarkDirty(layered);
+                else if (mtarget is BrushModule) BrushCsg.MarkAllDirty(); // a parent's module tags every brush below it
+            }
             if (!BrushSettings.instance.snapToGrid) return modifications;
             if (BrushSnap.DragInProgress)
             {
@@ -249,6 +253,14 @@ namespace CsgBrush.Editor
                 BrushSnap.Snap(brush); // a redo re-applies the recorded pose; keep the grid rule
                 BrushSync.Ensure(brush);
             }
+        }
+
+        /// <summary>A module added to or removed from an object: the pieces of the brushes it tags change.</summary>
+        static void OnObjectChanges(ref ObjectChangeEventStream stream)
+        {
+            if (Application.isPlaying) return;
+            for (int i = 0; i < stream.length; i++)
+                if (stream.GetEventType(i) == ObjectChangeKind.ChangeGameObjectStructure || stream.GetEventType(i) == ObjectChangeKind.ChangeGameObjectStructureHierarchy) { BrushCsg.MarkAllDirty(); return; }
         }
 
         static void OnHierarchyChanged()

@@ -29,7 +29,7 @@ namespace CsgBrush.Editor
         public Vector2 doorwayMinimum = new Vector2(32f, 56f);
         [Header("New brushes (the Create tools)")]
         public BrushOperation newOperation = BrushOperation.Add;
-        public CsgBrush.Colliders.ControllerSurface.Kind newSurface = CsgBrush.Colliders.ControllerSurface.Kind.Solid;
+        [Tooltip("Full type names of the modules (a game's data) every new brush gets.")] public List<string> newModules = new List<string>();
         [Min(3)] public int newSides = 16;
         [Range(1, 5)] public int newTessellation = 2;
         [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepHeight = 0f;

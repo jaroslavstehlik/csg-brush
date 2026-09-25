@@ -2,6 +2,17 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Brush modules: the game's data leaves the package. A brush now only says what its volume is to physics
+  (Collision: Solid, Trigger, None); everything a specific character controller cares about is a `BrushModule`
+  component on the brush object or a parent (a parent tags all its children). A module's values ride onto every
+  collider piece of the brush (`ApplyToPiece`, idempotent, run on every build) and are part of the piece's identity
+  (`Fingerprint`), so a change rebuilds exactly the pieces it affects; a module may make the brush a trigger
+  (`OverrideCollision`). Trigger pieces carry a relay, and the brush raises one Enter and one Exit per collider
+  however many pieces it is made of: `Brush.TriggerEntered` / `TriggerExited`, `IBrushTriggerListener` on the same
+  object, or the `BrushTrigger` module with UnityEvents. Project Settings > Brushes and the Brushes overlay list
+  the modules every new brush gets. Brushes saved with the old Surface field migrate on the next sync (Trigger and
+  No collision into Collision; the game's kinds through `Brush.LegacySurfaceMigration`). `ControllerSurface` and
+  `ConvexColliderHooks` are gone; the Quake data lives in `QuakeBrushSurface` in the project.
 - Cuts toggle in the Brushes overlay: subtract brushes are drawn as translucent red volumes with their edges, so a
   cut that has carved everything away can be seen and clicked; while it is on, a click picks whatever surface is
   drawn nearest, cut volumes included.

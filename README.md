@@ -21,21 +21,26 @@ URL", the URL of this repository.
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
   Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
   base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool. While a Create tool is active the
-  Brushes overlay shows what the next brush gets (operation, surface, sides, steps, arch thickness and angle, hollow).
+  Brushes overlay shows what the next brush gets (operation, modules, sides, steps, arch thickness and angle, hollow).
   Everything snaps to the grid, and a wall makes the brush grow out of the wall. Cylinder, Cone and Sphere are drawn from the centre of
   their base: press on the centre, drag the radius, then the height (a sphere with no height is round; lift for an
   ellipsoid). Curved and Spiral Stairs are drawn by their axis: press where the column axis goes, drag the outer radius (the drag direction is
   where the first step starts), then the height; the transform of those brushes is the axis at floor level. The values a new brush is made with
-  (operation, surface, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
+  (operation, modules, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
   edited on the brush afterwards. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
   generated under a hidden model object.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
   the brush: on release the scale is baked into the size and the transform scale returns to one.
-- **Operation and surface**: Add or Subtract; Solid, Slick, Water, Trigger, No collision (the convex collider
-  builder tags each piece for the character controller). Hollow turns a box or cylinder into a room with a wall
-  thickness.
+- **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider). Everything a specific
+  character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
+  parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
+  those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however
+  many pieces they are made of: subscribe to `Brush.TriggerEntered` / `TriggerExited`, implement `IBrushTriggerListener` on the
+  same object, or add the `BrushTrigger` module and wire its UnityEvents. Project Settings > Brushes lists the modules every new
+  brush gets. The Quake controller's module is `QuakeBrushSurface` in the project, not in this package. Hollow turns a box or cylinder into a room
+  with a wall thickness.
 - **Edit shape**: the Edit Brush context (Inspector or overlay button, or the tool context dropdown in the Scene
   view Tools overlay) puts Vertex, Edge and Face selection in the Tool Settings toolbar, laid out like ProBuilder:
   the three mode toggles (keys 1, 2, 3), Select Hidden (also pick elements facing away from the camera), Drag
@@ -85,5 +90,5 @@ bumping the tag. Nothing native is needed at runtime.
 
 - `Brushes/` the Brush and Brush Model components, the editor layer (sync, snapping, edit tools, overlay,
   settings, menus), the Manifold model builder (`BrushCsg`), and the tests.
-- `ConvexColliders/` the convex collider builder and the surface tags used by character controllers.
+- `ConvexColliders/` the convex collider builder; game data reaches the pieces through brush modules.
 - `Manifold/` the native plugin, its P/Invoke layer and the `ManifoldSolid` wrapper.

@@ -8,15 +8,14 @@ namespace CsgBrush.Editor
     [CanEditMultipleObjects]
     public sealed class BrushEditor : UnityEditor.Editor
     {
-        SerializedProperty shapeProp, operationProp, surfaceProp, noFallDamageProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, stepDepthProp, materialProp;
+        SerializedProperty shapeProp, operationProp, collisionProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, stepDepthProp, materialProp;
         SerializedProperty innerRadiusProp, stepWidthProp, stepThicknessProp, curveAngleProp, numStepsProp, stepsPer360Prop, addToFirstStepProp, ccwProp, slopedFloorProp, slopedCeilingProp;
 
         void OnEnable()
         {
             shapeProp = serializedObject.FindProperty(nameof(Brush.shape));
             operationProp = serializedObject.FindProperty(nameof(Brush.operation));
-            surfaceProp = serializedObject.FindProperty(nameof(Brush.surface));
-            noFallDamageProp = serializedObject.FindProperty(nameof(Brush.noFallDamage));
+            collisionProp = serializedObject.FindProperty(nameof(Brush.collision));
             sizeProp = serializedObject.FindProperty(nameof(Brush.size));
             hollowProp = serializedObject.FindProperty(nameof(Brush.hollow));
             wallProp = serializedObject.FindProperty(nameof(Brush.wallThickness));
@@ -45,9 +44,9 @@ namespace CsgBrush.Editor
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(shapeProp, new GUIContent("Shape"));
             EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
-            EditorGUILayout.PropertyField(surfaceProp, new GUIContent("Surface", "What the volume means to the character controller."));
-            if (surfaceProp.enumValueIndex == (int)ControllerSurface.Kind.Solid || surfaceProp.enumValueIndex == (int)ControllerSurface.Kind.Slick)
-                EditorGUILayout.PropertyField(noFallDamageProp, new GUIContent("No fall damage"));
+            EditorGUILayout.PropertyField(collisionProp, new GUIContent("Collision", "Solid geometry, a trigger volume, or no collider at all. The game's data (ice, water, damage) is a module component below."));
+            if (target is Brush cb && cb.EffectiveCollision() != cb.collision)
+                EditorGUILayout.LabelField(" ", "made a " + cb.EffectiveCollision().ToString().ToLower() + " by a module", EditorStyles.miniLabel);
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
             EditorGUILayout.Space(4);

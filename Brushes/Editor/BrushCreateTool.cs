@@ -316,7 +316,6 @@ namespace CsgBrush.Editor
             brush.counterClockwise = p.stairs.counterClockwise; brush.slopedFloor = p.stairs.slopedFloor; brush.slopedCeiling = p.stairs.slopedCeiling;
             if (brush.SupportsHollow && s.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
             if (Operation != BrushOperation.Add) BrushApi.SetOperation(brush, Operation);
-            if (s.newSurface != CsgBrush.Colliders.ControllerSurface.Kind.Solid) BrushApi.SetSurface(brush, s.newSurface);
             BrushSync.Ensure(brush);
             Undo.CollapseUndoOperations(group);
             BrushApi.ForceUpdate();

@@ -426,7 +426,13 @@ namespace CsgBrush.Editor
                     r.solid.partsProblem = problem;
                 }
                 if (r.solid.partsProblem != null && r.brush.problem == null) r.brush.problem = r.solid.partsProblem;
-                inputs.Add(new ConvexColliderBuilder.Input { name = r.brush.name, subtract = r.subtract, kind = r.brush.surface, noFallDamage = r.brush.noFallDamage, layer = r.layer, add = r.solid.partsAdd, remove = r.solid.partsRemove });
+                var brush = r.brush; var modules = brush.Modules();
+                void OnPiece(GameObject piece, bool trigger)
+                {
+                    if (trigger) { if (!piece.TryGetComponent<BrushTriggerRelay>(out var relay)) relay = piece.AddComponent<BrushTriggerRelay>(); relay.brush = brush; }
+                    foreach (var m in modules) if (m != null && m.enabled) m.ApplyToPiece(piece, trigger);
+                }
+                inputs.Add(new ConvexColliderBuilder.Input { name = brush.name, subtract = r.subtract, kind = brush.EffectiveCollision(), fingerprint = brush.ModuleFingerprint(), layer = r.layer, add = r.solid.partsAdd, remove = r.solid.partsRemove, onPiece = OnPiece });
             }
             var settings = model.GetComponent<ConvexColliderSettings>();
             if (settings == null) settings = model.gameObject.AddComponent<ConvexColliderSettings>();

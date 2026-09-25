@@ -22,6 +22,7 @@ namespace CsgBrush.Editor
             if (brush == null) return;
             if (PrefabUtility.IsPartOfPrefabAsset(brush)) return;
             RemoveLegacyChildren(brush);
+            if (brush.HasLegacySurface) MigrateLegacySurface(brush);
             brush.problem = null;
             if (brush.shape == BrushShape.Custom)
             {
@@ -35,6 +36,22 @@ namespace CsgBrush.Editor
             BrushCsg.MarkDirty(brush);
         }
 
+        /// <summary>
+        /// The surface kind of earlier versions (solid, slick, water, trigger, no collision) and its fall-damage flag
+        /// become the Collision field and, through <see cref="Brush.LegacySurfaceMigration"/>, the game's module.
+        /// </summary>
+        static void MigrateLegacySurface(Brush brush)
+        {
+            var (surface, noFallDamage) = brush.LegacySurface;
+            bool handled = Brush.LegacySurfaceMigration != null && Brush.LegacySurfaceMigration(brush, surface, noFallDamage);
+            if (surface == 3) { brush.collision = ColliderKind.Trigger; handled = true; }
+            else if (surface == 4) { brush.collision = ColliderKind.None; handled = true; }
+            else if (surface == 2 && handled) brush.collision = ColliderKind.Trigger;
+            if (!handled) return; // no module package registered yet: keep the old values for when one is
+            brush.ClearLegacySurface();
+            EditorUtility.SetDirty(brush);
+        }
+
         /// <summary>Hidden children of the Chisel era ("<[shape]>", "<[hollow]>", pieces) are no longer used; drop them.</summary>
         static void RemoveLegacyChildren(Brush brush)
         {
@@ -45,8 +62,6 @@ namespace CsgBrush.Editor
             }
             if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(brush.gameObject) > 0)
                 GameObjectUtility.RemoveMonoBehavioursWithMissingScript(brush.gameObject);
-            var tag = brush.GetComponent<ControllerSurface>();
-            if (tag != null) Object.DestroyImmediate(tag); // the surface now lives on the Brush itself
         }
 
         /// <summary>Objects Chisel generated in a scene saved before the switch: its default model and generated containers.</summary>

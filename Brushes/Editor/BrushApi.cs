@@ -28,6 +28,7 @@ namespace CsgBrush.Editor
                 brush.curveAngle = d.stairs.curveAngle; brush.numSteps = d.stairs.numSteps; brush.stepsPer360 = d.stairs.stepsPer360;
             }
             if (shape == BrushShape.Arch) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.curveAngle = p.stairs.curveAngle; brush.wallThickness = p.wallThickness; brush.sides = p.sides; }
+            foreach (var t in ModuleTypes()) if (BrushSettings.instance.newModules.Contains(t.FullName)) Undo.AddComponent(go, t); // the project's modules for new brushes
             BrushSync.Ensure(brush);
             BrushSync.RequestFullUpdate(brush);
             return brush;
@@ -65,13 +66,33 @@ namespace CsgBrush.Editor
             BrushSync.Ensure(brush);
         }
 
-        public static void SetSurface(Brush brush, Colliders.ControllerSurface.Kind kind, bool noFallDamage = false)
+        public static void SetCollision(Brush brush, Colliders.ColliderKind kind)
         {
-            if (brush.surface == kind && brush.noFallDamage == noFallDamage) return;
-            Undo.RecordObject(brush, "Change brush surface");
-            brush.surface = kind;
-            brush.noFallDamage = noFallDamage;
+            if (brush.collision == kind) return;
+            Undo.RecordObject(brush, "Change brush collision");
+            brush.collision = kind;
             BrushSync.Ensure(brush);
+        }
+
+        /// <summary>Add a module (a game's data) to a brush, or return the one it has; undoable.</summary>
+        public static BrushModule AddModule(Brush brush, System.Type type)
+        {
+            if (brush == null || type == null || !typeof(BrushModule).IsAssignableFrom(type) || type.IsAbstract) return null;
+            if (brush.GetComponent(type) is BrushModule existing) return existing;
+            var module = Undo.AddComponent(brush.gameObject, type) as BrushModule;
+            BrushSync.Ensure(brush);
+            return module;
+        }
+
+        public static T AddModule<T>(Brush brush) where T : BrushModule => (T)AddModule(brush, typeof(T));
+
+        /// <summary>The module types the project offers (every concrete BrushModule in the loaded assemblies).</summary>
+        public static List<System.Type> ModuleTypes()
+        {
+            var list = new List<System.Type>();
+            foreach (var t in TypeCache.GetTypesDerivedFrom<BrushModule>()) if (!t.IsAbstract) list.Add(t);
+            list.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+            return list;
         }
 
         public static void SetHollow(Brush brush, bool hollow, float wallThicknessMeters)

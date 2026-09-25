@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 using CsgBrush.Colliders;
 
 namespace CsgBrush
@@ -58,8 +60,11 @@ namespace CsgBrush
 
         public BrushShape shape = BrushShape.Box;
         public BrushOperation operation = BrushOperation.Add;
-        public ControllerSurface.Kind surface = ControllerSurface.Kind.Solid;
-        public bool noFallDamage;
+        [Tooltip("Solid geometry, a trigger volume, or no collider at all. A module on the brush (water, say) may override it.")]
+        public ColliderKind collision = ColliderKind.Solid;
+        // the surface kind and fall-damage flag of earlier versions, migrated into modules on the next sync (see LegacySurfaceMigration)
+        [SerializeField, HideInInspector, FormerlySerializedAs("surface")] int legacySurface;
+        [SerializeField, HideInInspector, FormerlySerializedAs("noFallDamage")] bool legacyNoFallDamage;
 
         [Tooltip("Metres, centred on the transform.")]
         public Vector3 size = new Vector3(2f, 2f, 2f);
@@ -126,6 +131,74 @@ namespace CsgBrush
 
         /// <summary>True when a hollow (subtractive) child should exist for this brush.</summary>
         public bool IsHollow => hollow && SupportsHollow;
+
+        // ---- modules
+
+        /// <summary>The modules on this brush's object and its parents (own first): the game's data on the brush.</summary>
+        public BrushModule[] Modules() => GetComponentsInParent<BrushModule>(false);
+
+        /// <summary>What the volume is to physics once the modules have had their say.</summary>
+        public ColliderKind EffectiveCollision()
+        {
+            foreach (var m in Modules()) if (m != null && m.enabled && m.OverrideCollision(out var o)) return o;
+            return collision;
+        }
+
+        /// <summary>Everything the modules put on the pieces, hashed: part of each piece's identity.</summary>
+        public int ModuleFingerprint()
+        {
+            unchecked
+            {
+                int h = (int)EffectiveCollision();
+                foreach (var m in Modules())
+                {
+                    if (m == null || !m.enabled) continue;
+                    h = h * 31 + m.GetType().FullName.GetHashCode();
+                    h = h * 31 + m.Fingerprint();
+                }
+                return h;
+            }
+        }
+
+        // ---- legacy surface data (versions before modules)
+
+        /// <summary>
+        /// Registered by a game's module package: given the old surface kind (0 solid, 1 slick, 2 water, 3 trigger,
+        /// 4 no collision) and fall-damage flag, add the matching module and return true. Trigger and no-collision
+        /// are handled by the brush itself.
+        /// </summary>
+        public static Func<Brush, int, bool, bool> LegacySurfaceMigration;
+        public bool HasLegacySurface => legacySurface != 0 || legacyNoFallDamage;
+        public (int surface, bool noFallDamage) LegacySurface => (legacySurface, legacyNoFallDamage);
+        public void ClearLegacySurface() { legacySurface = 0; legacyNoFallDamage = false; }
+
+        // ---- trigger events, one per brush however many pieces it is made of
+
+        /// <summary>A collider entered the brush's volume (raised once, when it enters the first piece).</summary>
+        public event Action<Collider> TriggerEntered;
+        /// <summary>A collider left the brush's volume (raised once, when it leaves the last piece).</summary>
+        public event Action<Collider> TriggerExited;
+        readonly Dictionary<Collider, int> insidePieces = new Dictionary<Collider, int>();
+
+        /// <summary>Called by the relay on a trigger piece.</summary>
+        public void PieceTriggerEnter(Collider other)
+        {
+            insidePieces.TryGetValue(other, out int n);
+            insidePieces[other] = n + 1;
+            if (n > 0) return;
+            TriggerEntered?.Invoke(other);
+            foreach (var l in GetComponents<IBrushTriggerListener>()) l.OnBrushTriggerEnter(this, other);
+        }
+
+        /// <summary>Called by the relay on a trigger piece.</summary>
+        public void PieceTriggerExit(Collider other)
+        {
+            if (!insidePieces.TryGetValue(other, out int n)) return;
+            if (n > 1) { insidePieces[other] = n - 1; return; }
+            insidePieces.Remove(other);
+            TriggerExited?.Invoke(other);
+            foreach (var l in GetComponents<IBrushTriggerListener>()) l.OnBrushTriggerExit(this, other);
+        }
 
         void OnValidate()
         {

@@ -52,7 +52,7 @@ namespace CsgBrush.Tests
                 }
                 var id = child.GetComponent<ConvexPiece>();
                 Assert.IsNotNull(id, "piece without identity: " + child.name);
-                line += " " + id.kind + (id.noFallDamage ? " nodamage" : "") + " " + id.brushName;
+                line += " fp=" + id.fingerprint + (id.trigger ? " trigger" : "") + " " + id.brushName;
                 list.Add(line);
             }
             list.Sort(string.CompareOrdinal);
@@ -223,15 +223,15 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ChangingTheSurfaceKindRecreatesThePiece()
+        public void ChangingAModuleValueRecreatesOnlyItsPiece()
         {
             var boxes = Row(3);
-            BrushApi.SetSurface(boxes[1], ControllerSurface.Kind.Slick, false);
+            var module = BrushApi.AddModule<TestSurfaceModule>(boxes[1]); module.value = 5;
             BrushApi.ForceUpdate();
-            Assert.AreEqual(1, ConvexColliderBuilder.LastCreatedPieces, "the slick piece is a new object so game adapters get the hook");
+            Assert.AreEqual(1, ConvexColliderBuilder.LastCreatedPieces, "the module's piece is a new object");
             Assert.AreEqual(2, ConvexColliderBuilder.LastReusedPieces);
-            Assert.IsTrue(string.Join("\n", Pieces()).Contains("Slick"), "kind carried by the piece identity");
-            AssertSameAsFromScratch("after changing a surface kind");
+            Assert.IsTrue(string.Join("\n", Pieces()).Contains("fp=" + boxes[1].ModuleFingerprint()), "the module's fingerprint is part of the piece identity");
+            AssertSameAsFromScratch("after adding a module");
         }
     }
 }
