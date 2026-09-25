@@ -75,6 +75,7 @@ namespace CsgBrush.Editor
             var go = new GameObject(BrushModel.DefaultName);
             var model = go.AddComponent<BrushModel>();
             model.isDefault = true;
+            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // what its render meshes inherit; a user-made model has its own
             return model;
         }
 
@@ -427,18 +428,26 @@ namespace CsgBrush.Editor
                 }
                 if (r.solid.partsProblem != null && r.brush.problem == null) r.brush.problem = r.solid.partsProblem;
                 var brush = r.brush; var modules = brush.Modules();
+                var staticFlags = GameObjectUtility.GetStaticEditorFlags(brush.gameObject);
                 void OnPiece(GameObject piece, bool trigger)
                 {
+                    // a piece is its brush: tag, static flags, physics material and contacts come from it
+                    if (piece.tag != brush.gameObject.tag) piece.tag = brush.gameObject.tag;
+                    if (GameObjectUtility.GetStaticEditorFlags(piece) != staticFlags) GameObjectUtility.SetStaticEditorFlags(piece, staticFlags);
+                    if (piece.TryGetComponent<Collider>(out var collider)) { collider.sharedMaterial = brush.physicsMaterial; collider.providesContacts = brush.provideContacts; }
                     if (trigger) { if (!piece.TryGetComponent<BrushTriggerRelay>(out var relay)) relay = piece.AddComponent<BrushTriggerRelay>(); relay.brush = brush; }
                     foreach (var m in modules) if (m != null && m.enabled) m.ApplyToPiece(piece, trigger);
                 }
-                inputs.Add(new ConvexColliderBuilder.Input { name = brush.name, subtract = r.subtract, kind = brush.EffectiveCollision(), fingerprint = brush.ModuleFingerprint(), layer = r.layer, add = r.solid.partsAdd, remove = r.solid.partsRemove, onPiece = OnPiece });
+                inputs.Add(new ConvexColliderBuilder.Input { name = brush.name, subtract = r.subtract, kind = brush.EffectiveCollision(), fingerprint = PieceFingerprint(brush), layer = r.layer, add = r.solid.partsAdd, remove = r.solid.partsRemove, onPiece = OnPiece });
             }
             var settings = model.GetComponent<ConvexColliderSettings>();
             if (settings == null) settings = model.gameObject.AddComponent<ConvexColliderSettings>();
             ConvexColliderBuilder.Rebuild(model.transform, settings, inputs);
             LastCollidersMs = sw.Elapsed.TotalMilliseconds;
         }
+
+        /// <summary>Everything a brush puts on its pieces beyond their planes (collision, material, contacts, tag, static flags, modules), hashed: the piece identity.</summary>
+        public static int PieceFingerprint(Brush brush) { unchecked { return brush.ModuleFingerprint() * 31 + (int)GameObjectUtility.GetStaticEditorFlags(brush.gameObject); } }
 
         static void PruneCaches(Dictionary<BrushModel, List<Brush>> byModel)
         {
@@ -490,7 +499,14 @@ namespace CsgBrush.Editor
                 go.AddComponent<MeshRenderer>();
                 t = go.transform;
             }
-            if (t != null && t.gameObject.layer != layer) t.gameObject.layer = layer;
+            if (t != null)
+            {
+                // the mesh is its model: tag and static flags (lightmaps, occlusion, batching) come from the model object
+                if (t.gameObject.layer != layer) t.gameObject.layer = layer;
+                if (t.gameObject.tag != model.gameObject.tag) t.gameObject.tag = model.gameObject.tag;
+                var flags = GameObjectUtility.GetStaticEditorFlags(model.gameObject);
+                if (GameObjectUtility.GetStaticEditorFlags(t.gameObject) != flags) GameObjectUtility.SetStaticEditorFlags(t.gameObject, flags);
+            }
             return t;
         }
 

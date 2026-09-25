@@ -8,7 +8,7 @@ namespace CsgBrush.Editor
     [CanEditMultipleObjects]
     public sealed class BrushEditor : UnityEditor.Editor
     {
-        SerializedProperty shapeProp, operationProp, collisionProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, stepDepthProp, materialProp;
+        SerializedProperty shapeProp, operationProp, collisionProp, physicsMaterialProp, provideContactsProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, stepDepthProp, materialProp;
         SerializedProperty innerRadiusProp, stepWidthProp, stepThicknessProp, curveAngleProp, numStepsProp, stepsPer360Prop, addToFirstStepProp, ccwProp, slopedFloorProp, slopedCeilingProp;
 
         void OnEnable()
@@ -16,6 +16,8 @@ namespace CsgBrush.Editor
             shapeProp = serializedObject.FindProperty(nameof(Brush.shape));
             operationProp = serializedObject.FindProperty(nameof(Brush.operation));
             collisionProp = serializedObject.FindProperty(nameof(Brush.collision));
+            physicsMaterialProp = serializedObject.FindProperty(nameof(Brush.physicsMaterial));
+            provideContactsProp = serializedObject.FindProperty(nameof(Brush.provideContacts));
             sizeProp = serializedObject.FindProperty(nameof(Brush.size));
             hollowProp = serializedObject.FindProperty(nameof(Brush.hollow));
             wallProp = serializedObject.FindProperty(nameof(Brush.wallThickness));
@@ -47,6 +49,11 @@ namespace CsgBrush.Editor
             EditorGUILayout.PropertyField(collisionProp, new GUIContent("Collision", "Solid geometry, a trigger volume, or no collider at all. The game's data (ice, water, damage) is a module component below."));
             if (target is Brush cb && cb.EffectiveCollision() != cb.collision)
                 EditorGUILayout.LabelField(" ", "made a " + cb.EffectiveCollision().ToString().ToLower() + " by a module", EditorStyles.miniLabel);
+            if (target is Brush pb2 && pb2.EffectiveCollision() != ColliderKind.None)
+            {
+                EditorGUILayout.PropertyField(physicsMaterialProp, new GUIContent("Physics material", "On every collider piece of the brush, triggers included: friction and bounce, and a handle for sounds or other lookups. The pieces also take the brush's tag, layer and static flags."));
+                EditorGUILayout.PropertyField(provideContactsProp, new GUIContent("Provide contacts", "The pieces provide contact data to OnCollision callbacks."));
+            }
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
             EditorGUILayout.Space(4);

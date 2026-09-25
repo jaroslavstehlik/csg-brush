@@ -230,7 +230,7 @@ namespace CsgBrush.Tests
             BrushApi.ForceUpdate();
             Assert.AreEqual(1, ConvexColliderBuilder.LastCreatedPieces, "the module's piece is a new object");
             Assert.AreEqual(2, ConvexColliderBuilder.LastReusedPieces);
-            Assert.IsTrue(string.Join("\n", Pieces()).Contains("fp=" + boxes[1].ModuleFingerprint()), "the module's fingerprint is part of the piece identity");
+            Assert.IsTrue(string.Join("\n", Pieces()).Contains("fp=" + BrushCsg.PieceFingerprint(boxes[1])), "the module's fingerprint is part of the piece identity");
             AssertSameAsFromScratch("after adding a module");
         }
     }

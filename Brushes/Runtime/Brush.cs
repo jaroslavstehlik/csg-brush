@@ -62,6 +62,10 @@ namespace CsgBrush
         public BrushOperation operation = BrushOperation.Add;
         [Tooltip("Solid geometry, a trigger volume, or no collider at all. A module on the brush (water, say) may override it.")]
         public ColliderKind collision = ColliderKind.Solid;
+        [Tooltip("On every collider piece of the brush, triggers included: friction and bounce, and a handle for sounds or other lookups.")]
+        public PhysicsMaterial physicsMaterial;
+        [Tooltip("The pieces provide contact data to OnCollision callbacks (Unity's Provide Contacts).")]
+        public bool provideContacts;
         // the surface kind and fall-damage flag of earlier versions, migrated into modules on the next sync (see LegacySurfaceMigration)
         [SerializeField, HideInInspector, FormerlySerializedAs("surface")] int legacySurface;
         [SerializeField, HideInInspector, FormerlySerializedAs("noFallDamage")] bool legacyNoFallDamage;
@@ -150,6 +154,8 @@ namespace CsgBrush
             unchecked
             {
                 int h = (int)EffectiveCollision();
+                h = h * 31 + (physicsMaterial != null ? physicsMaterial.name.GetHashCode() : 0) + (provideContacts ? 7 : 0);
+                h = h * 31 + gameObject.tag.GetHashCode();
                 foreach (var m in Modules())
                 {
                     if (m == null || !m.enabled) continue;

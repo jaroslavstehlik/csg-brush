@@ -48,6 +48,8 @@ namespace CsgBrush.Editor
         [Header("Extrude (edit mode)")]
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
+        [Tooltip("Static flags of the hidden default model; its render meshes inherit them. A model you make has its own.")]
+        public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.NavigationStatic | StaticEditorFlags.ReflectionProbeStatic;
         [Header("Editor")]
         public bool showGenerated = false;
         [Tooltip("Draw subtract brushes as translucent red volumes in the Scene view, so they can be seen and selected where they have carved everything away.")]
@@ -161,6 +163,7 @@ namespace CsgBrush.Editor
                     s.gridIndex = EditorGUILayout.Popup("Default grid", Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names);
                     s.snapToGrid = EditorGUILayout.Toggle(new GUIContent("Snap brushes to grid", "Positions, sizes and rotations are kept on the world grid after every edit, whatever the parent does."), s.snapToGrid);
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
+                    s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("Default model static flags", "Inherited by the render meshes of brushes that are not under a model of your own"), s.defaultModelStaticFlags);
                     EditorGUILayout.HelpBox("1 metre = " + s.unitsPerMeter + " " + s.unitLabel + ". Geometry is stored in metres; changing the preset only changes how sizes are shown and snapped.", MessageType.None);
                     if (EditorGUI.EndChangeCheck())
                         s.NotifyChanged();

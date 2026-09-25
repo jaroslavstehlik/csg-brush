@@ -2,6 +2,10 @@
 
 ## 0.2.0 (2026-09-14)
 
+- A piece is its brush, a mesh is its model: every collider piece takes its brush's physics material (new field,
+  triggers included, also a handle for sounds), Provide Contacts (new field), tag and static flags, all part of the
+  piece identity so a change rebuilds only that brush's pieces; every render mesh child takes its model's tag and
+  static flags, the hidden default model's from Project Settings > Brushes (Default model static flags).
 - Brush modules: the game's data leaves the package. A brush now only says what its volume is to physics
   (Collision: Solid, Trigger, None); everything a specific character controller cares about is a `BrushModule`
   component on the brush object or a parent (a parent tags all its children). A module's values ride onto every

@@ -45,7 +45,7 @@ namespace CsgBrush.Tests
             var pieces = PiecesOf(brush);
             Assert.AreEqual(1, pieces.Count);
             Assert.AreEqual(7, pieces[0].GetComponent<TestPieceMarker>().value, "the module's data is on the piece");
-            Assert.AreEqual(brush.ModuleFingerprint(), pieces[0].fingerprint);
+            Assert.AreEqual(BrushCsg.PieceFingerprint(brush), pieces[0].fingerprint);
             module.value = 8;
             BrushApi.ForceUpdate();
             pieces = PiecesOf(brush);
@@ -133,6 +133,48 @@ namespace CsgBrush.Tests
                 Assert.IsNotNull(brush.GetComponent<TestSurfaceModule>());
             }
             finally { s.newModules.Clear(); s.newModules.AddRange(saved); }
+        }
+
+        [Test]
+        public void PiecesTakeTheirBrushesColliderProperties()
+        {
+            var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
+            var mat = new PhysicsMaterial("bouncy") { bounciness = 0.9f };
+            brush.physicsMaterial = mat; brush.provideContacts = true;
+            brush.gameObject.tag = "Finish";
+            GameObjectUtility.SetStaticEditorFlags(brush.gameObject, StaticEditorFlags.OccluderStatic | StaticEditorFlags.NavigationStatic);
+            BrushApi.ForceUpdate();
+            var piece = PiecesOf(brush)[0];
+            var collider = piece.GetComponent<Collider>();
+            Assert.AreEqual(mat, collider.sharedMaterial); Assert.IsTrue(collider.providesContacts);
+            Assert.AreEqual("Finish", piece.tag);
+            Assert.AreEqual(StaticEditorFlags.OccluderStatic | StaticEditorFlags.NavigationStatic, GameObjectUtility.GetStaticEditorFlags(piece.gameObject));
+            brush.physicsMaterial = null;
+            BrushApi.ForceUpdate();
+            Assert.AreEqual(1, Colliders.Editor.ConvexColliderBuilder.LastCreatedPieces, "a changed material is a new piece identity");
+            Assert.IsNull(PiecesOf(brush)[0].GetComponent<Collider>().sharedMaterial);
+            // trigger brushes carry the material too
+            brush.physicsMaterial = mat; BrushApi.SetCollision(brush, ColliderKind.Trigger);
+            BrushApi.ForceUpdate();
+            Assert.AreEqual(mat, PiecesOf(brush)[0].GetComponent<Collider>().sharedMaterial);
+        }
+
+        [Test]
+        public void RenderMeshesTakeTheirModelsTagAndStaticFlags()
+        {
+            var modelGo = new GameObject("Level"); var model = modelGo.AddComponent<BrushModel>();
+            modelGo.tag = "Respawn"; GameObjectUtility.SetStaticEditorFlags(modelGo, StaticEditorFlags.ContributeGI);
+            BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, modelGo.transform);
+            BrushApi.ForceUpdate();
+            var mesh = BrushCsg.MeshObject(model, false);
+            Assert.IsNotNull(mesh);
+            Assert.AreEqual("Respawn", mesh.tag);
+            Assert.AreEqual(StaticEditorFlags.ContributeGI, GameObjectUtility.GetStaticEditorFlags(mesh.gameObject));
+            // the hidden default model gets the project's default flags
+            BrushApi.Create(BrushShape.Box, new Vector3(6f, 0f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            var def = BrushCsg.DefaultModel(false);
+            Assert.AreEqual(BrushSettings.instance.defaultModelStaticFlags, GameObjectUtility.GetStaticEditorFlags(BrushCsg.MeshObject(def, false).gameObject));
         }
     }
 }

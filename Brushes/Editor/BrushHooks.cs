@@ -86,7 +86,12 @@ namespace CsgBrush.Editor
             for (int i = 0; i < modifications.Length; i++)
             {
                 var mtarget = modifications[i].currentValue.target;
-                if (mtarget is GameObject lgo && modifications[i].currentValue.propertyPath == "m_Layer" && lgo.TryGetComponent<Brush>(out var layered)) BrushCsg.MarkDirty(layered);
+                if (mtarget is GameObject lgo && lgo.TryGetComponent<Brush>(out var layered))
+                {
+                    var path = modifications[i].currentValue.propertyPath;
+                    if (path == "m_Layer" || path == "m_TagString" || path == "m_StaticEditorFlags") BrushCsg.MarkDirty(layered); // the pieces take these from the brush
+                }
+                else if (mtarget is GameObject mgo && mgo.TryGetComponent<BrushModel>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
                 else if (mtarget is BrushModule) BrushCsg.MarkAllDirty(); // a parent's module tags every brush below it
             }
             if (!BrushSettings.instance.snapToGrid) return modifications;

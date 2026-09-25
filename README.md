@@ -33,7 +33,9 @@ URL", the URL of this repository.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
   the brush: on release the scale is baked into the size and the transform scale returns to one.
-- **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider). Everything a specific
+- **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider), with a physics material and
+  Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. A render mesh is its
+  model: it takes the model object's tag and static flags (the hidden default model's come from Project Settings). Everything a specific
   character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
   parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
   those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however
