@@ -6,7 +6,7 @@ brush piece so character controllers get clean contacts. Rendering goes through 
 [Manifold](https://github.com/elalish/manifold) library (Apache 2.0), a robust mesh boolean engine loaded as an
 editor-only native plugin; the game only ships the generated meshes and colliders.
 
-The package grew out of a fork of [Chisel](https://github.com/RadicalCSG/com.scholastika.csgbrush) (MIT, see LICENSE). Chisel's
+The package grew out of a fork of [Chisel](https://github.com/RadicalCSG/digital.dream.csgbrush) (MIT, see LICENSE). Chisel's
 CSG core, generators and tools have all been replaced; the brush layer, the snapping rules, the edit tools and the
 collider builder are original. History: `CHANGELOG-FORK.md`. Install: Package Manager, "Install package from git
 URL", the URL of this repository.

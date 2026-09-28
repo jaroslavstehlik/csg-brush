@@ -99,7 +99,7 @@
 
 ## 0.1.0 (2026-09-12) — CSG Brush
 
-- Renamed from the Chisel fork to CSG Brush (`com.scholastika.csgbrush`, namespace `CsgBrush`); fresh repository.
+- Renamed from the Chisel fork to CSG Brush (`digital.dream.csgbrush`, namespace `CsgBrush`); fresh repository.
   The entries below record the fork phase, in which every part of Chisel was replaced.
 
 # Fork changelog
