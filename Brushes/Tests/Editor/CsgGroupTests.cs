@@ -148,5 +148,22 @@ namespace CsgBrush.Tests
             }
             finally { settings.showGenerated = saved; BrushSync.ApplyVisibility(); }
         }
+
+        [Test]
+        public void ARebakeFindsThePrefabOfAGroupWhereverItIsSeen()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var sceneGroup = BuildGroupWithBrushes("Level");
+            Assert.IsNull(BrushPrefabBaking.PrefabPathOf(sceneGroup.GetComponent<CsgGroup>()), "a scene group has no prefab to rebake");
+            PrefabUtility.SaveAsPrefabAsset(sceneGroup, PrefabPath);
+            Object.DestroyImmediate(sceneGroup);
+            var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(asset.GetComponent<CsgGroup>()));
+            var inst = (GameObject)PrefabUtility.InstantiatePrefab(asset);
+            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(inst.GetComponent<CsgGroup>()));
+            // a forced rebake of a prefab whose meshes were lost brings them back
+            BrushPrefabBaking.Bake(BrushPrefabBaking.PrefabPathOf(inst.GetComponent<CsgGroup>()));
+            Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath));
+        }
     }
 }

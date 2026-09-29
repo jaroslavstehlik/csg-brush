@@ -65,6 +65,36 @@ namespace CsgBrush.Editor
             foreach (var path in paths) if (NeedsBake(path)) Bake(path);
         }
 
+        /// <summary>The prefab file a group bakes into: the asset itself, the prefab of an instance, or the prefab open in Prefab Mode. Null for a scene group.</summary>
+        public static string PrefabPathOf(CsgGroup group)
+        {
+            if (group == null) return null;
+            if (PrefabUtility.IsPartOfPrefabAsset(group)) return AssetDatabase.GetAssetPath(group);
+            var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetPrefabStage(group.gameObject);
+            if (stage != null) return stage.assetPath;
+            if (PrefabUtility.IsPartOfPrefabInstance(group)) return PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(group);
+            return null;
+        }
+
+        static bool HasGroup(string path) => path != null && path.EndsWith(".prefab") && AssetDatabase.LoadAssetAtPath<GameObject>(path)?.GetComponentInChildren<CsgGroup>(true) != null;
+
+        [MenuItem("Assets/CSG Brush/Rebake Prefab", false, 2000)]
+        static void RebakeSelected()
+        {
+            foreach (var o in Selection.objects)
+            {
+                var path = AssetDatabase.GetAssetPath(o);
+                if (HasGroup(path)) Bake(path);
+            }
+        }
+
+        [MenuItem("Assets/CSG Brush/Rebake Prefab", true)]
+        static bool CanRebakeSelected()
+        {
+            foreach (var o in Selection.objects) if (HasGroup(AssetDatabase.GetAssetPath(o))) return true;
+            return false;
+        }
+
         [MenuItem("Tools/CSG Brush/Bake All Prefabs")]
         static void BakeAll()
         {
