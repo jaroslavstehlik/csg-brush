@@ -28,6 +28,8 @@ namespace CsgBrush.Editor
             Selection.selectionChanged += OnSelectionChanged;
             EditorApplication.hierarchyChanged += OnHierarchyChanged;
             ObjectChangeEvents.changesPublished += OnObjectChanges;
+            EditorApplication.hierarchyWindowItemByEntityIdOnGUI -= DrawGroupIcon;
+            EditorApplication.hierarchyWindowItemByEntityIdOnGUI += DrawGroupIcon;
             BrushSettings.Changed += OnSettingsChanged;
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => EnsureAll();
             UnityEditor.SceneManagement.EditorSceneManager.newSceneCreated += (scene, setup, mode) => BrushCsg.ClearCaches();
@@ -91,7 +93,7 @@ namespace CsgBrush.Editor
                     var path = modifications[i].currentValue.propertyPath;
                     if (path == "m_Layer" || path == "m_TagString" || path == "m_StaticEditorFlags") BrushCsg.MarkDirty(layered); // the pieces take these from the brush
                 }
-                else if (mtarget is GameObject mgo && mgo.TryGetComponent<BrushModel>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
+                else if (mtarget is GameObject mgo && mgo.TryGetComponent<CsgGroup>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
                 else if (mtarget is BrushModule) BrushCsg.MarkAllDirty(); // a parent's module tags every brush below it
             }
             if (!BrushSettings.instance.snapToGrid) return modifications;
@@ -260,6 +262,17 @@ namespace CsgBrush.Editor
             }
         }
 
+        static Texture2D s_GroupIcon;
+
+        /// <summary>CSG groups carry their icon at the right end of their Hierarchy row, so the baking levels stand out.</summary>
+        static void DrawGroupIcon(EntityId entityId, Rect row)
+        {
+            var go = EditorUtility.EntityIdToObject(entityId) as GameObject;
+            if (go == null || !go.TryGetComponent<CsgGroup>(out _)) return;
+            if (s_GroupIcon == null) s_GroupIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/CsgGroup.png");
+            if (s_GroupIcon != null) GUI.DrawTexture(new Rect(row.xMax - 16f, row.y, 16f, 16f), s_GroupIcon, ScaleMode.ScaleToFit);
+        }
+
         /// <summary>A module added to or removed from an object: the pieces of the brushes it tags change.</summary>
         static void OnObjectChanges(ref ObjectChangeEventStream stream)
         {
@@ -310,7 +323,7 @@ namespace CsgBrush.Editor
                     changed = true;
                     continue;
                 }
-                if (go != null && (BrushModel.IsMeshChildName(go.name) || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == BrushModel.DefaultName) && !BrushSettings.instance.showGenerated)
+                if (go != null && (CsgGroup.IsMeshChildName(go.name) || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == CsgGroup.DefaultName) && !BrushSettings.instance.showGenerated)
                 {
                     changed = true; // generated mesh or collider objects: never what the student meant
                     continue;

@@ -162,7 +162,7 @@ namespace CsgBrush.Tests
         [Test]
         public void RenderMeshesTakeTheirModelsTagAndStaticFlags()
         {
-            var modelGo = new GameObject("Level"); var model = modelGo.AddComponent<BrushModel>();
+            var modelGo = new GameObject("Level"); var model = modelGo.AddComponent<CsgGroup>();
             modelGo.tag = "Respawn"; GameObjectUtility.SetStaticEditorFlags(modelGo, StaticEditorFlags.ContributeGI);
             BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, modelGo.transform);
             BrushApi.ForceUpdate();
@@ -173,7 +173,7 @@ namespace CsgBrush.Tests
             // the hidden default model gets the project's default flags
             BrushApi.Create(BrushShape.Box, new Vector3(6f, 0f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
             BrushApi.ForceUpdate();
-            var def = BrushCsg.DefaultModel(false);
+            var def = BrushCsg.DefaultModel(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), false);
             Assert.AreEqual(BrushSettings.instance.defaultModelStaticFlags, GameObjectUtility.GetStaticEditorFlags(BrushCsg.MeshObject(def, false).gameObject));
         }
 
@@ -192,7 +192,7 @@ namespace CsgBrush.Tests
                 Assert.AreEqual(material, settings.defaultMaterial, "and remembered in the settings");
                 var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
                 BrushApi.ForceUpdate();
-                var model = Object.FindFirstObjectByType<BrushModel>();
+                var model = Object.FindFirstObjectByType<CsgGroup>();
                 Assert.AreEqual(material, BrushCsg.MeshObject(model, false).GetComponent<MeshRenderer>().sharedMaterial, "brushes without a material render with it");
             }
             finally { settings.defaultMaterial = saved; }

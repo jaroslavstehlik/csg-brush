@@ -83,7 +83,7 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>Local-to-model matrix of a brush.</summary>
-        public static Matrix4x4 ToModel(Brush b, BrushModel model)
+        public static Matrix4x4 ToModel(Brush b, CsgGroup model)
         {
             return (model != null ? model.transform.worldToLocalMatrix : Matrix4x4.identity) * LocalToWorld(b);
         }

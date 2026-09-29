@@ -48,6 +48,13 @@ namespace CsgBrush.Editor
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(shapeProp, new GUIContent("Shape"));
             EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
+            if (targets.Length == 1 && target is Brush owner)
+            {
+                string bakedBy = BrushCsg.BakedBy(owner, out var reference);
+                var label = new GUIContent("CSG group", "What bakes this brush's mesh and colliders: the nearest CSG Group above it, else its scene. Click to find it.");
+                if (reference != null) using (new EditorGUI.DisabledScope(true)) EditorGUILayout.ObjectField(label, reference, reference.GetType(), true);
+                else EditorGUILayout.LabelField(label, new GUIContent(bakedBy), EditorStyles.wordWrappedMiniLabel);
+            }
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
             EditorGUILayout.Space(4);

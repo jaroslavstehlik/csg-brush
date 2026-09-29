@@ -31,7 +31,7 @@ namespace CsgBrush.Tests
             ordered.RemoveAll(b => !b.enabled || !b.gameObject.activeInHierarchy); // the engine leaves inactive brushes out
             // every mesh vertex with the brush whose face it belongs to (a vertex is shared only within one face)
             var render = new List<Vector3>(); var renderBrush = new List<Brush>();
-            foreach (var model in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var t = BrushCsg.MeshObject(model, false); if (t == null) continue;
                 var mesh = t.GetComponent<MeshFilter>().sharedMesh; if (mesh == null) continue;
@@ -91,7 +91,7 @@ namespace CsgBrush.Tests
             sb.Append("not cut: " + notCut + "\n");
             // the generated mesh alone: signed volume, and the cost of a drag frame on this level
             double volume = 0; int triangles = 0;
-            foreach (var model in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var t = BrushCsg.MeshObject(model, false); if (t == null) continue;
                 var mesh = t.GetComponent<MeshFilter>().sharedMesh; if (mesh == null) continue;

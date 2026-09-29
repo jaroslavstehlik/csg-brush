@@ -44,7 +44,7 @@ namespace CsgBrush.Tests
                 if (inner != null) { var ib = inner.Transformed(world).Bounds(); sb.AppendLine("  hollow b=" + Q(ib.center) + "/" + Q(ib.size)); }
                 sb.AppendLine(BrushLine(b));
             }
-            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var meshes = new List<string>();
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
@@ -286,7 +286,7 @@ namespace CsgBrush.Tests
         {
             bool any = false;
             var b = new Bounds();
-            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var container = model.transform.Find(ConvexColliderSettings.ContainerName);
                 if (container == null) continue;
@@ -325,7 +325,7 @@ namespace CsgBrush.Tests
         {
             BrushApi.Create(BrushShape.Box, Vector3.zero, Vector3.one, Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = UnityEngine.Object.FindFirstObjectByType<BrushModel>();
+            var model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
             var mr = BrushCsg.MeshObject(model, false).GetComponent<MeshRenderer>();
             Assert.AreEqual(1, mr.sharedMaterials.Length);
             var mat = mr.sharedMaterials[0];
@@ -373,7 +373,7 @@ namespace CsgBrush.Tests
             const int other = 8;
             var wall = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1.5f, 0f), new Vector3(8f, 3f, 0.5f), Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = UnityEngine.Object.FindFirstObjectByType<BrushModel>();
+            var model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
             int wallAlone = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
             // a door on another layer does not carve the wall
             var door = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(1.2f, 2f, 1f), Quaternion.identity);
@@ -474,8 +474,8 @@ namespace CsgBrush.Tests
         static float PieceWidthX(Brush brush)
         {
             // width along x of the largest collider piece produced for this brush's model
-            var model = brush.GetComponentInParent<BrushModel>();
-            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<BrushModel>();
+            var model = brush.GetComponentInParent<CsgGroup>();
+            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
             var container = model.transform.Find(ConvexColliderSettings.ContainerName);
             float best = 0f;
             foreach (var bc in container.GetComponentsInChildren<BoxCollider>(true)) best = Mathf.Max(best, bc.size.x * bc.transform.lossyScale.x);
@@ -484,8 +484,8 @@ namespace CsgBrush.Tests
 
         static float RenderWidthX(Brush brush)
         {
-            var model = brush.GetComponentInParent<BrushModel>();
-            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<BrushModel>();
+            var model = brush.GetComponentInParent<CsgGroup>();
+            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
             float best = 0f;
             foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
             {
@@ -517,7 +517,7 @@ namespace CsgBrush.Tests
         static int RenderVertexCount()
         {
             int n = 0;
-            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
                 {
                     if (!IsLiveRenderMesh(mf)) continue;
@@ -572,7 +572,7 @@ namespace CsgBrush.Tests
         static Bounds RenderBounds()
         {
             var b = new Bounds(); bool first = true;
-            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
                 {
                     if (!IsLiveRenderMesh(mf)) continue;
@@ -617,7 +617,7 @@ namespace CsgBrush.Tests
             Assert.AreEqual(new Vector3(3f, 0f, 1f), a.transform.position, "position after redo");
         }
 
-        static string TreeOrder(BrushModel model)
+        static string TreeOrder(CsgGroup model)
         {
             var sb = new StringBuilder();
             var byModel = BrushCsg.BrushesByModel();
@@ -635,7 +635,7 @@ namespace CsgBrush.Tests
             var b = BrushApi.Create(BrushShape.Box, new Vector3(2f, 0f, 0f), new Vector3(2f, 1f, 2f), Quaternion.identity);
             BrushApi.SetOperation(b, BrushOperation.Subtract);
             BrushApi.ForceUpdate();
-            var model = UnityEngine.Object.FindFirstObjectByType<BrushModel>();
+            var model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
             Assert.AreEqual("A1 S1", TreeOrder(model), "additive a then subtractive b");
             Assert.Greater(RenderVertexCount(), 24, "b carves a");
             string before = SiblingProbe(a) + " | " + SiblingProbe(b);

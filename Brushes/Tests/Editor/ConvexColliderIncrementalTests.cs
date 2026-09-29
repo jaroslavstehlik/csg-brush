@@ -25,7 +25,7 @@ namespace CsgBrush.Tests
             BrushCsg.ClearCaches();
         }
 
-        static BrushModel Model() => Object.FindFirstObjectByType<BrushModel>();
+        static CsgGroup Model() => Object.FindFirstObjectByType<CsgGroup>();
 
         static Transform Container()
         {
@@ -170,7 +170,7 @@ namespace CsgBrush.Tests
         static int RenderVertexCount()
         {
             int n = 0;
-            foreach (var model in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var t = BrushCsg.MeshObject(model, false); if (t == null) continue;
                 var mf = t.GetComponent<MeshFilter>(); if (mf.sharedMesh != null) n += mf.sharedMesh.vertexCount;

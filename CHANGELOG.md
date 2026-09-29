@@ -2,6 +2,14 @@
 
 ## 0.2.0 (2026-09-14)
 
+- CSG groups: `BrushModel` is now `CsgGroup` ("CSG Group", with an icon in the Hierarchy and the Scene view). Every
+  scene has its own automatic group for brushes with no group (before, one default model served all loaded scenes, so
+  opening scenes together merged their free brushes into one of them and emptied the others). A group inside a prefab
+  bakes into the prefab: its meshes are saved as sub-assets whenever the prefab is imported without them, so prefabs
+  carry their geometry and can be instantiated at runtime; scene instances keep the prefab's meshes until their
+  brushes change, and a baked prefab's mesh is never rewritten from a scene. A prefab without a group is a stamp that
+  joins the level it is placed in. The brush Inspector shows the group that bakes it (or the scene) as a clickable
+  reference; the group Inspector says how many brushes it bakes. Groups in the open Prefab Mode are built live.
 - Default grid material: brushes without a material of their own render with a generated dev texture that is a
   ruler in metres (lines at every grid size of the project, faint for the fine ones, strong at the metre, over a
   checker with a metre period), created once under Assets/CSG Brush with the active render pipeline's lit shader.

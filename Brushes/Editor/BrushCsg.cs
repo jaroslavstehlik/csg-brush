@@ -4,12 +4,14 @@ using CsgBrush.Colliders;
 using CsgBrush.Colliders.Editor;
 using CsgBrush.Manifold;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace CsgBrush.Editor
 {
     /// <summary>
-    /// Builds the render mesh of every <see cref="BrushModel"/> with the Manifold library, then hands the brushes'
+    /// Builds the render mesh of every <see cref="CsgGroup"/> with the Manifold library, then hands the brushes'
     /// convex parts to the collider builder.
     ///
     /// Ordered CSG, as in Quake and Unreal editors: a subtract brush cuts every brush above it in the hierarchy.
@@ -27,13 +29,13 @@ namespace CsgBrush.Editor
 
         static readonly Dictionary<Brush, SolidEntry> s_Solids = new Dictionary<Brush, SolidEntry>();
         static readonly Dictionary<Brush, PieceEntry> s_Pieces = new Dictionary<Brush, PieceEntry>();
-        static readonly HashSet<BrushModel> s_Dirty = new HashSet<BrushModel>();
+        static readonly HashSet<CsgGroup> s_Dirty = new HashSet<CsgGroup>();
         static bool s_AllDirty;
-        static readonly Dictionary<BrushModel, int> s_LastMeshKey = new Dictionary<BrushModel, int>();
+        static readonly Dictionary<CsgGroup, int> s_LastMeshKey = new Dictionary<CsgGroup, int>();
         static readonly Dictionary<Transform, Brush[]> s_TriangleBrush = new Dictionary<Transform, Brush[]>();
 
         /// <summary>For every triangle of the model's mesh (in submesh order), the brush whose face it lies on.</summary>
-        public static Brush[] TriangleBrushes(BrushModel model) { var t = MeshObject(model, false); return t != null ? TriangleBrushes(t) : null; }
+        public static Brush[] TriangleBrushes(CsgGroup model) { var t = MeshObject(model, false); return t != null ? TriangleBrushes(t) : null; }
         /// <summary>Per triangle of one mesh child (in submesh order): the brush whose face it belongs to.</summary>
         public static Brush[] TriangleBrushes(Transform meshObject) => s_TriangleBrush.TryGetValue(meshObject, out var a) ? a : null;
 
@@ -41,7 +43,7 @@ namespace CsgBrush.Editor
         public static int LastCachedSolids, LastBuiltSolids, LastCachedPieces, LastBuiltPieces, LastBrushes, LastTriangles;
         public static double LastSolidsMs, LastPiecesMs, LastUnionMs, LastMeshMs, LastCollidersMs;
 
-        public static void MarkDirty(BrushModel model) { if (model != null) s_Dirty.Add(model); }
+        public static void MarkDirty(CsgGroup model) { if (model != null) s_Dirty.Add(model); }
         public static void MarkDirty(Brush brush) { if (brush != null) MarkDirty(ModelOf(brush)); }
         public static void MarkAllDirty() { s_AllDirty = true; }
         public static bool HasDirty => s_AllDirty || s_Dirty.Count > 0;
@@ -59,48 +61,114 @@ namespace CsgBrush.Editor
 
         // ------------------------------------------------------------------ models
 
-        /// <summary>The model a brush belongs to: the nearest BrushModel above it, else the default model.</summary>
-        public static BrushModel ModelOf(Brush brush)
+        /// <summary>
+        /// The group that bakes a brush: the nearest CSG group above it, else its scene's automatic group. Null for a
+        /// brush in a prefab (asset or Prefab Mode) with no group: a stamp, baked by whatever level it is placed in.
+        /// </summary>
+        public static CsgGroup ModelOf(Brush brush)
         {
-            var model = brush.GetComponentInParent<BrushModel>(true);
-            return model != null ? model : DefaultModel(true);
+            var model = brush.GetComponentInParent<CsgGroup>(true);
+            if (model != null) return model;
+            if (IsInPrefabContext(brush.gameObject)) return null;
+            return DefaultModel(brush.gameObject.scene, true);
         }
 
-        /// <summary>The hidden default model, created when needed. Never registered with Undo: it is derived state.</summary>
-        public static BrushModel DefaultModel(bool create)
+        /// <summary>A prefab asset, or the contents open in Prefab Mode or loaded for baking: brushes there with no group are a stamp.</summary>
+        public static bool IsInPrefabContext(GameObject go)
         {
-            foreach (var m in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                if (m.isDefault) return m;
+            if (PrefabUtility.IsPartOfPrefabAsset(go)) return true;
+            if (PrefabStageUtility.GetPrefabStage(go) != null) return true;
+            var scene = go.scene;
+            return scene.IsValid() && EditorSceneManager.IsPreviewScene(scene);
+        }
+
+        /// <summary>A scene's automatic group, created when needed (one per scene, at its root, hidden). Never registered with Undo: it is derived state.</summary>
+        public static CsgGroup DefaultModel(Scene scene, bool create)
+        {
+            if (!scene.IsValid() || !scene.isLoaded || EditorSceneManager.IsPreviewScene(scene)) return null;
+            foreach (var root in scene.GetRootGameObjects())
+                if (root.TryGetComponent<CsgGroup>(out var m) && m.isDefault) return m;
             if (!create) return null;
-            var go = new GameObject(BrushModel.DefaultName);
-            var model = go.AddComponent<BrushModel>();
+            var go = new GameObject(CsgGroup.DefaultName);
+            SceneManager.MoveGameObjectToScene(go, scene);
+            var model = go.AddComponent<CsgGroup>();
             model.isDefault = true;
-            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // what its render meshes inherit; a user-made model has its own
+            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // what its render meshes inherit; a group you make has its own
             return model;
         }
 
-        /// <summary>Brushes of every model in CSG order (hierarchy order, depth first). Inactive brushes are left out.</summary>
-        public static Dictionary<BrushModel, List<Brush>> BrushesByModel()
+        /// <summary>
+        /// What bakes a brush, for the Inspector: its group, or its scene (the scene's automatic group), or nothing
+        /// (a stamp in a prefab). <paramref name="reference"/> is what to show and ping: the group or the scene asset.
+        /// </summary>
+        public static string BakedBy(Brush brush, out Object reference)
         {
-            var result = new Dictionary<BrushModel, List<Brush>>();
-            foreach (var m in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None)) result[m] = new List<Brush>();
-            BrushModel defaultModel = null;
-            void Walk(Transform t, BrushModel current)
+            reference = null;
+            var group = brush.GetComponentInParent<CsgGroup>(true);
+            if (group != null && !group.isDefault) { reference = group; return group.name; }
+            if (IsInPrefabContext(brush.gameObject)) return "none: a stamp, it carves the level it is placed in (in the editor) and bakes nothing of its own";
+            var scene = brush.gameObject.scene;
+            if (!string.IsNullOrEmpty(scene.path)) reference = AssetDatabase.LoadAssetAtPath<SceneAsset>(scene.path);
+            return "scene " + (string.IsNullOrEmpty(scene.name) ? "(unsaved)" : scene.name);
+        }
+
+        /// <summary>
+        /// A group inside a prefab instance whose prefab already carries its baked mesh and colliders, with no changes of
+        /// its own in the scene: it is not rebuilt, so the instance keeps using the prefab's meshes and stays free of overrides.
+        /// </summary>
+        public static bool IsBakedPrefabInstance(CsgGroup model, List<Brush> brushes)
+        {
+            if (model == null || model.isDefault || !PrefabUtility.IsPartOfPrefabInstance(model)) return false;
+            bool any = false;
+            foreach (var t in MeshObjects(model))
             {
-                if (t.TryGetComponent<BrushModel>(out var m)) current = m;
+                if (!t.TryGetComponent<MeshFilter>(out var mf) || mf.sharedMesh == null || !EditorUtility.IsPersistent(mf.sharedMesh)) return false;
+                any = true;
+            }
+            // the brushes still make exactly what the prefab baked
+            return any && Prepare(model, brushes).meshKey == model.bakedKey;
+        }
+
+        /// <summary>A material's identity that survives editor sessions (its asset GUID), for the content keys.</summary>
+        static int MaterialKey(Material material)
+        {
+            if (material == null) return 0;
+            unchecked
+            {
+                if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(material, out string guid, out long localId)) return guid.GetHashCode() * 31 + localId.GetHashCode();
+                return material.name.GetHashCode();
+            }
+        }
+
+        /// <summary>Brushes of every group in CSG order (hierarchy order, depth first), in the loaded scenes and the open Prefab Mode. Inactive brushes are left out; a brush with no group in a prefab is a stamp and is not built there.</summary>
+        public static Dictionary<CsgGroup, List<Brush>> BrushesByModel()
+        {
+            var result = new Dictionary<CsgGroup, List<Brush>>();
+            void Walk(Transform t, CsgGroup current, Scene scene, bool prefab)
+            {
+                if (t.TryGetComponent<CsgGroup>(out var m)) { current = m; if (!result.ContainsKey(m)) result[m] = new List<Brush>(); }
                 if (t.TryGetComponent<Brush>(out var b) && b.enabled && t.gameObject.activeInHierarchy)
                 {
-                    if (current == null) { defaultModel ??= DefaultModel(true); if (!result.ContainsKey(defaultModel)) result[defaultModel] = new List<Brush>(); current = defaultModel; }
-                    result[current].Add(b);
+                    var target = current;
+                    if (target == null && !prefab) target = DefaultModel(scene, true); // each scene's own automatic group
+                    if (target != null)
+                    {
+                        if (!result.TryGetValue(target, out var list)) result[target] = list = new List<Brush>();
+                        list.Add(b);
+                    }
                 }
-                for (int i = 0; i < t.childCount; i++) Walk(t.GetChild(i), current);
+                for (int i = 0; i < t.childCount; i++) Walk(t.GetChild(i), current, scene, prefab);
             }
-            for (int s = 0; s < UnityEngine.SceneManagement.SceneManager.sceneCount; s++)
+            for (int s = 0; s < SceneManager.sceneCount; s++)
             {
-                var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(s);
+                var scene = SceneManager.GetSceneAt(s);
                 if (!scene.isLoaded) continue;
-                foreach (var root in scene.GetRootGameObjects()) Walk(root.transform, null);
+                var existingDefault = DefaultModel(scene, false);
+                if (existingDefault != null && !result.ContainsKey(existingDefault)) result[existingDefault] = new List<Brush>();
+                foreach (var root in scene.GetRootGameObjects()) Walk(root.transform, null, scene, false);
             }
+            var stage = PrefabStageUtility.GetCurrentPrefabStage();
+            if (stage != null && stage.prefabContentsRoot != null) Walk(stage.prefabContentsRoot.transform, null, stage.scene, true);
             return result;
         }
 
@@ -113,7 +181,8 @@ namespace CsgBrush.Editor
             var result = new List<Brush>();
             if (cutter == null || cutter.operation != BrushOperation.Subtract) return result;
             var byModel = BrushesByModel();
-            if (!byModel.TryGetValue(ModelOf(cutter), out var list)) return result;
+            var cutterModel = ModelOf(cutter);
+            if (cutterModel == null || !byModel.TryGetValue(cutterModel, out var list)) return result;
             int layer = cutter.gameObject.layer;
             int index = list.IndexOf(cutter);
             if (index < 0) return result;
@@ -140,7 +209,7 @@ namespace CsgBrush.Editor
         /// </summary>
         sealed class Job
         {
-            public BrushModel model;
+            public CsgGroup model;
             public List<Brush> brushes;
             public List<Record> records = new List<Record>();
             public List<int> newSolidIndices = new List<int>();     // records whose solid must be built
@@ -179,12 +248,14 @@ namespace CsgBrush.Editor
             WaitForJob();
             if (!HasDirty) return;
             var byModel = BrushesByModel();
-            var targets = s_AllDirty ? new List<BrushModel>(byModel.Keys) : new List<BrushModel>(s_Dirty);
+            var targets = s_AllDirty ? new List<CsgGroup>(byModel.Keys) : new List<CsgGroup>(s_Dirty);
             s_Dirty.Clear(); s_AllDirty = false;
             foreach (var model in targets)
             {
                 if (model == null) continue;
-                Rebuild(model, byModel.TryGetValue(model, out var list) ? list : new List<Brush>());
+                var list = byModel.TryGetValue(model, out var l) ? l : new List<Brush>();
+                if (IsBakedPrefabInstance(model, list)) continue;
+                Rebuild(model, list);
             }
             PruneCaches(byModel);
         }
@@ -192,7 +263,7 @@ namespace CsgBrush.Editor
         public static void RebuildAllNow() { MarkAllDirty(); RebuildDirtyNow(); }
 
         /// <summary>Build one model now (all three steps on the calling thread).</summary>
-        public static void Rebuild(BrushModel model, List<Brush> brushes)
+        public static void Rebuild(CsgGroup model, List<Brush> brushes)
         {
             WaitForJob();
             var sw = Stopwatch.StartNew();
@@ -219,10 +290,10 @@ namespace CsgBrush.Editor
             if (!HasDirty) return;
             if (s_LastBuildMs < AsyncThresholdMs) { RebuildDirtyNow(); return; }
             var byModel = BrushesByModel();
-            var targets = s_AllDirty ? new List<BrushModel>(byModel.Keys) : new List<BrushModel>(s_Dirty);
+            var targets = s_AllDirty ? new List<CsgGroup>(byModel.Keys) : new List<CsgGroup>(s_Dirty);
             s_Dirty.Clear(); s_AllDirty = false;
             // one model per pump; the others stay dirty for the next frames
-            BrushModel first = null; foreach (var m in targets) { if (m == null) continue; if (first == null) first = m; else s_Dirty.Add(m); }
+            CsgGroup first = null; foreach (var m in targets) { if (m == null || IsBakedPrefabInstance(m, byModel.TryGetValue(m, out var ml) ? ml : new List<Brush>())) continue; if (first == null) first = m; else s_Dirty.Add(m); }
             if (first == null) return;
             var running = Prepare(first, byModel.TryGetValue(first, out var list) ? list : new List<Brush>());
             s_Running = running;
@@ -244,7 +315,7 @@ namespace CsgBrush.Editor
         }
 
         // ---- step 1: main thread
-        static Job Prepare(BrushModel model, List<Brush> brushes)
+        static Job Prepare(CsgGroup model, List<Brush> brushes)
         {
             var job = new Job { model = model, brushes = brushes };
             foreach (var b in brushes)
@@ -298,7 +369,7 @@ namespace CsgBrush.Editor
             unchecked
             {
                 int meshKey = 17;
-                for (int i = 0; i < job.pieceKeys.Count; i++) { var pr = job.records[job.pieceRecord[i]]; meshKey = meshKey * 31 + job.pieceKeys[i].GetHashCode(); var mat = pr.brush.material; if (mat == null) mat = DefaultMaterial(); meshKey = meshKey * 31 + (mat != null ? mat.GetHashCode() : 0); meshKey = meshKey * 31 + pr.layer; }
+                for (int i = 0; i < job.pieceKeys.Count; i++) { var pr = job.records[job.pieceRecord[i]]; meshKey = meshKey * 31 + job.pieceKeys[i].GetHashCode(); var mat = pr.brush.material; if (mat == null) mat = DefaultMaterial(); meshKey = meshKey * 31 + MaterialKey(mat); meshKey = meshKey * 31 + pr.layer; }
                 job.meshKey = meshKey;
             }
             bool anyMesh = false; foreach (var t in MeshObjects(model)) if (t.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null) { anyMesh = true; break; }
@@ -411,6 +482,7 @@ namespace CsgBrush.Editor
                 foreach (var (layer, data) in job.meshes) { LastTriangles += data.triangles != null ? data.triangles.Length / 3 : 0; kept.Add(ApplyMesh(model, layer, data, job.bySource)); }
                 foreach (var t in MeshObjects(model)) if (!kept.Contains(t)) { s_TriangleBrush.Remove(t); Object.DestroyImmediate(t.gameObject); } // a layer nothing is on any more
                 s_LastMeshKey[model] = job.meshKey;
+                if (model.bakedKey != job.meshKey) model.bakedKey = job.meshKey;
             }
             LastMeshMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
 
@@ -449,7 +521,7 @@ namespace CsgBrush.Editor
         /// <summary>Everything a brush puts on its pieces beyond their planes (collision, material, contacts, tag, static flags, modules), hashed: the piece identity.</summary>
         public static int PieceFingerprint(Brush brush) { unchecked { return brush.ModuleFingerprint() * 31 + (int)GameObjectUtility.GetStaticEditorFlags(brush.gameObject); } }
 
-        static void PruneCaches(Dictionary<BrushModel, List<Brush>> byModel)
+        static void PruneCaches(Dictionary<CsgGroup, List<Brush>> byModel)
         {
             if (Busy) return;
             var live = new HashSet<Brush>();
@@ -482,16 +554,16 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>The generated mesh object of a model (created when missing).</summary>
-        /// <summary>The render mesh of the brushes on the Default layer (see <see cref="MeshObject(BrushModel, int, bool)"/>).</summary>
-        public static Transform MeshObject(BrushModel model, bool create) => MeshObject(model, 0, create);
+        /// <summary>The render mesh of the brushes on the Default layer (see <see cref="MeshObject(CsgGroup, int, bool)"/>).</summary>
+        public static Transform MeshObject(CsgGroup model, bool create) => MeshObject(model, 0, create);
 
         /// <summary>
         /// The render mesh child for one layer. Brushes are combined per layer (each layer is its own CSG group), and
         /// each layer renders as its own child on that layer, so camera culling masks apply to it.
         /// </summary>
-        public static Transform MeshObject(BrushModel model, int layer, bool create)
+        public static Transform MeshObject(CsgGroup model, int layer, bool create)
         {
-            string name = BrushModel.MeshChildNameFor(layer);
+            string name = CsgGroup.MeshChildNameFor(layer);
             var t = model.transform.Find(name);
             if (t == null && create)
             {
@@ -513,10 +585,10 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>Every render mesh child of a model, one per layer in use.</summary>
-        public static List<Transform> MeshObjects(BrushModel model)
+        public static List<Transform> MeshObjects(CsgGroup model)
         {
             var list = new List<Transform>();
-            foreach (Transform child in model.transform) if (BrushModel.IsMeshChildName(child.name)) list.Add(child);
+            foreach (Transform child in model.transform) if (CsgGroup.IsMeshChildName(child.name)) list.Add(child);
             return list;
         }
 
@@ -526,12 +598,13 @@ namespace CsgBrush.Editor
         /// Manifold shares vertices between faces; Unity wants a vertex per face corner for flat normals and planar
         /// UVs. Triangles are grouped by material (one submesh each), vertices by (position, source brush, face).
         /// </summary>
-        static Transform ApplyMesh(BrushModel model, int layer, ManifoldSolid.MeshData data, Dictionary<int, Record> bySource)
+        static Transform ApplyMesh(CsgGroup model, int layer, ManifoldSolid.MeshData data, Dictionary<int, Record> bySource)
         {
             var t = MeshObject(model, layer, true);
             var mf = t.GetComponent<MeshFilter>(); var mr = t.GetComponent<MeshRenderer>();
             var mesh = mf.sharedMesh;
-            if (mesh == null) { mesh = new Mesh { name = "brush mesh" }; mf.sharedMesh = mesh; }
+            // a mesh saved in an asset (a baked prefab's) is never rewritten from here: the scene gets its own
+            if (mesh == null || EditorUtility.IsPersistent(mesh)) { mesh = new Mesh { name = "brush mesh" }; mf.sharedMesh = mesh; }
             mesh.Clear();
             int triCount = data.triangles != null ? data.triangles.Length / 3 : 0;
             if (triCount == 0) { mr.sharedMaterials = new Material[0]; s_TriangleBrush[t] = new Brush[0]; return t; }

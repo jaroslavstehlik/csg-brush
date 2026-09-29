@@ -98,7 +98,7 @@ namespace CsgBrush.Editor
         {
             bool show = BrushSettings.instance.showGenerated;
             var flags = show ? HideFlags.NotEditable : kHidden;
-            foreach (var model in Object.FindObjectsByType<BrushModel>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 // The implicit default model is hidden entirely; a user-created model stays visible as a folder,
                 // but its generated children are not part of the student's picture.
@@ -111,7 +111,7 @@ namespace CsgBrush.Editor
                 }
                 foreach (Transform child in model.transform)
                 {
-                    bool generated = BrushModel.IsMeshChildName(child.name) || child.name == ConvexColliderSettings.ContainerName;
+                    bool generated = CsgGroup.IsMeshChildName(child.name) || child.name == ConvexColliderSettings.ContainerName;
                     if (!generated) continue;
                     if (child.gameObject.hideFlags != flags) child.gameObject.hideFlags = flags;
                 }

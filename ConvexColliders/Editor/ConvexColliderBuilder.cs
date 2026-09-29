@@ -82,7 +82,7 @@ namespace CsgBrush.Colliders.Editor
             // Skip when nothing changed: updates fire often.
             int geometryHash = GeometryHash(solids, volumes, settings);
             var existing = FindContainers(model);
-            if (existing.Count == 1 && settings.lastGeometryHash == geometryHash && settings.pieceCount + settings.triggerVolumes == existing[0].childCount)
+            if (existing.Count == 1 && settings.lastGeometryHash == geometryHash && settings.pieceCount + settings.triggerVolumes == existing[0].childCount && PiecesIntact(existing[0]))
             {
                 LastReusedPieces = prevReused; LastCreatedPieces = prevCreated; LastDestroyedPieces = prevDestroyed;
                 return;
@@ -158,6 +158,7 @@ namespace CsgBrush.Colliders.Editor
                 {
                     var c = candidates[i];
                     if (!c.Matches(piece.planes, fingerprint, trigger, layer, brushName)) continue;
+                    if (c.TryGetComponent<MeshCollider>(out var existing) && existing.sharedMesh == null) continue; // its mesh was lost (a prefab saved from a scene): make it again
                     candidates.RemoveAt(i);
                     LastReusedPieces++;
                     if (c.TryGetComponent<BoxCollider>(out _)) boxes++; else meshes++;
@@ -174,6 +175,13 @@ namespace CsgBrush.Colliders.Editor
             LastCreatedPieces++;
             tag?.onPiece?.Invoke(go, trigger);
             return go;
+        }
+
+        /// <summary>Every mesh collider piece still has its mesh (a prefab saved from a scene loses them).</summary>
+        static bool PiecesIntact(Transform container)
+        {
+            foreach (var mc in container.GetComponentsInChildren<MeshCollider>(true)) if (mc.sharedMesh == null) return false;
+            return true;
         }
 
         static List<Transform> FindContainers(Transform model)

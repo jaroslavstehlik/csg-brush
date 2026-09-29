@@ -29,16 +29,25 @@ URL", the URL of this repository.
   (operation, modules, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
   edited on the brush afterwards. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
-  generated under a hidden model object.
+  generated under the CSG group that bakes it (see below).
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
   the brush: on release the scale is baked into the size and the transform scale returns to one.
 - **Default material**: faces without a material of their own show a generated ruler texture (lines at every grid size, strong at the
   metre, on a metre checker) that lines up with the world grid across brushes and cuts; created under `Assets/CSG Brush` on first
   use, swappable in Project Settings > Brushes.
+- **CSG groups and baking**: a `CSG Group` component (Add Component > CSG Brush > CSG Group, amber block icon in the
+  Hierarchy and Scene view) bakes the brushes below it, up to the next group, into one mesh per layer and one set of
+  colliders, held as its generated children. A brush is baked by the nearest group above it; brushes with none are
+  baked by their scene's automatic group (hidden, one per scene), so every scene holds its own geometry and scenes can
+  be loaded together at runtime. The brush Inspector's *CSG group* field shows what bakes it (click to find it; the
+  scene asset for a scene's automatic group). A group inside a prefab bakes into the prefab (meshes saved as sub-assets
+  whenever the prefab is saved), so it can be instantiated at runtime and never carves anything outside itself; scene
+  instances use the prefab's meshes until their brushes are changed. A prefab without a group is a stamp: placed in a
+  level in the editor, its brushes (a doorway cut, say) join that level's CSG; it bakes nothing of its own.
 - **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider), with a physics material and
   Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. A render mesh is its
-  model: it takes the model object's tag and static flags (the hidden default model's come from Project Settings). Everything a specific
+  group: it takes the CSG group object's tag and static flags (a scene's automatic group takes them from Project Settings). Everything a specific
   character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
   parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
   those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however
@@ -77,9 +86,6 @@ URL", the URL of this repository.
 - **Grid**: with "Snap to grid" on (default), every brush is kept on the world grid after each edit: the minimum
   corner on the grid, sizes as grid multiples, rotation in steps, no scale. Parents may only organise brushes; a
   rotated or scaled parent is listed in the overlay with a Reset button, off-grid brushes with Snap all.
-- **Models**: brushes belong to the nearest `Brush Model` component above them (a folder whose transform moves its
-  part of the level) or to a hidden default model. Each model gets one mesh, split per material, and one set of
-  convex colliders.
 - **Rebuild**: Brushes > Rebuild Now forces a full regeneration (meshes and convex colliders).
 - **Tests**: Window > General > Test Runner, EditMode, `CsgBrush.Tests` (also runs headlessly with
   `-runTests -testPlatform EditMode -testFilter CsgBrush.Tests`).
