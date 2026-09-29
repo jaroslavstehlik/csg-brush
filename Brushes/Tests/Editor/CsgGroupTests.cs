@@ -165,5 +165,18 @@ namespace CsgBrush.Tests
             BrushPrefabBaking.Bake(BrushPrefabBaking.PrefabPathOf(inst.GetComponent<CsgGroup>()));
             Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath));
         }
+
+        [Test]
+        public void RebakeBuildsASceneGroupAgainFromScratch()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var root = BuildGroupWithBrushes("Level");
+            var group = root.GetComponent<CsgGroup>();
+            var before = BrushCsg.MeshObject(group, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
+            BrushCsg.Rebake(group);
+            Assert.AreEqual(2, BrushCsg.LastBuiltSolids, "every brush solid built again, none from the cache");
+            Assert.Greater(Colliders.Editor.ConvexColliderBuilder.LastReusedPieces + Colliders.Editor.ConvexColliderBuilder.LastCreatedPieces, 0, "the colliders were processed, not skipped");
+            Assert.AreEqual(before, BrushCsg.MeshObject(group, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "same result");
+        }
     }
 }

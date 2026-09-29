@@ -129,6 +129,30 @@ namespace CsgBrush.Editor
             return any && Prepare(model, brushes).meshKey == model.bakedKey;
         }
 
+        /// <summary>
+        /// Build a group again from scratch, ignoring every cache: into its prefab file when it belongs to a prefab
+        /// (the asset, an instance, or Prefab Mode), in its scene otherwise; a prefab instance whose brushes differ from
+        /// its prefab is rebuilt in the scene as well.
+        /// </summary>
+        public static void Rebake(CsgGroup model)
+        {
+            if (model == null) return;
+            var prefabPath = BrushPrefabBaking.PrefabPathOf(model);
+            if (prefabPath != null) BrushPrefabBaking.Bake(prefabPath);
+            if (PrefabUtility.IsPartOfPrefabAsset(model)) return;
+            var brushes = BrushPrefabBaking.BrushesOf(model);
+            if (prefabPath != null && IsBakedPrefabInstance(model, brushes)) return; // it shows the prefab's fresh meshes
+            WaitForJob();
+            foreach (var b in brushes)
+            {
+                if (s_Solids.TryGetValue(b, out var solid)) { solid.solid?.Dispose(); s_Solids.Remove(b); }
+                if (s_Pieces.TryGetValue(b, out var piece)) { if (piece.ownsPiece) piece.piece?.Dispose(); s_Pieces.Remove(b); }
+            }
+            s_LastMeshKey.Remove(model);
+            if (model.TryGetComponent<ConvexColliderSettings>(out var settings)) settings.lastGeometryHash = 0;
+            Rebuild(model, brushes);
+        }
+
         /// <summary>A material's identity that survives editor sessions (its asset GUID), for the content keys.</summary>
         static int MaterialKey(Material material)
         {

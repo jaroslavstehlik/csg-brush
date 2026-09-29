@@ -2,8 +2,9 @@
 
 ## 0.2.0 (2026-09-14)
 
-- Rebake a single prefab: Assets > CSG Brush > Rebake Prefab (right-click a prefab asset), or the Rebake prefab button
-  on a CSG Group that belongs to a prefab (its asset, an instance, or Prefab Mode once saved). Baking stays synchronous.
+- Rebake: the CSG Group Inspector shows its brush count and a Rebake button that builds the group again from scratch,
+  ignoring every cache: into its prefab file for a group in a prefab (asset, instance, or Prefab Mode once saved), in
+  its scene otherwise. Assets > CSG Brush > Rebake Prefab does the same for selected prefab assets. Synchronous.
 - Generated objects (a group's mesh children, its collider container and pieces, its Convex Colliders component, a
   scene's automatic group) are hidden and not editable from the moment they are built, in scenes, in prefab
   instances and in Prefab Mode, and only Show generated objects reveals them for debugging. Unity keeps no hide flags
