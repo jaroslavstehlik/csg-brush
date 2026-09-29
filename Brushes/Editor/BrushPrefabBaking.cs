@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace CsgBrush.Editor
@@ -9,7 +10,8 @@ namespace CsgBrush.Editor
     /// saved as sub-assets of the prefab file, so the prefab carries its own geometry and can be instantiated at
     /// runtime. Whenever a prefab is imported (created from a scene object, saved in Prefab Mode, overrides applied)
     /// and one of its groups lacks saved meshes, the prefab is rebuilt and baked. A prefab without a group is a
-    /// stamp and has nothing to bake.
+    /// stamp and has nothing to bake. A prefab open in Prefab Mode bakes when Prefab Mode closes: writing its file
+    /// while it is open makes Unity reload the stage, replacing every object being edited.
     /// </summary>
     public sealed class BrushPrefabBaking : AssetPostprocessor
     {
@@ -17,12 +19,35 @@ namespace CsgBrush.Editor
         static bool s_Baking;
         static readonly HashSet<string> s_Pending = new HashSet<string>();
 
+        [InitializeOnLoadMethod]
+        static void Init()
+        {
+            PrefabStage.prefabStageClosing += stage =>
+            {
+                var path = stage.assetPath;
+                EditorApplication.delayCall += () => BakeIfNeeded(path);
+            };
+        }
+
         static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
             if (s_Baking) return;
             foreach (var path in imported)
                 if (path.EndsWith(".prefab") && NeedsBake(path) && s_Pending.Add(path))
-                    EditorApplication.delayCall += () => { s_Pending.Remove(path); if (NeedsBake(path)) Bake(path); };
+                    EditorApplication.delayCall += () => { s_Pending.Remove(path); BakeIfNeeded(path); };
+        }
+
+        /// <summary>Bake a prefab that lacks saved meshes, unless it is open in Prefab Mode (it bakes when that closes).</summary>
+        public static void BakeIfNeeded(string path)
+        {
+            if (IsOpenInPrefabMode(path) || !NeedsBake(path)) return;
+            Bake(path);
+        }
+
+        static bool IsOpenInPrefabMode(string path)
+        {
+            var stage = PrefabStageUtility.GetCurrentPrefabStage();
+            return stage != null && stage.assetPath == path;
         }
 
         /// <summary>A group in the prefab bakes brushes but has no saved mesh or collider mesh.</summary>
@@ -70,7 +95,7 @@ namespace CsgBrush.Editor
         {
             if (group == null) return null;
             if (PrefabUtility.IsPartOfPrefabAsset(group)) return AssetDatabase.GetAssetPath(group);
-            var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetPrefabStage(group.gameObject);
+            var stage = PrefabStageUtility.GetPrefabStage(group.gameObject);
             if (stage != null) return stage.assetPath;
             if (PrefabUtility.IsPartOfPrefabInstance(group)) return PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(group);
             return null;

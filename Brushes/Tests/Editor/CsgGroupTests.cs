@@ -1,8 +1,11 @@
+using System.Collections;
+using System.Reflection;
 using CsgBrush.Editor;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace CsgBrush.Tests
 {
@@ -177,6 +180,31 @@ namespace CsgBrush.Tests
             Assert.AreEqual(2, BrushCsg.LastBuiltSolids, "every brush solid built again, none from the cache");
             Assert.Greater(Colliders.Editor.ConvexColliderBuilder.LastReusedPieces + Colliders.Editor.ConvexColliderBuilder.LastCreatedPieces, 0, "the colliders were processed, not skipped");
             Assert.AreEqual(before, BrushCsg.MeshObject(group, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "same result");
+        }
+
+        [UnityTest]
+        public IEnumerator APrefabOpenInPrefabModeBakesWhenPrefabModeCloses()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var root = BuildGroupWithBrushes("Prop");
+            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+            Object.DestroyImmediate(root);
+            BrushPrefabBaking.Bake(PrefabPath);
+            var stage = PrefabStageUtility.OpenPrefab(PrefabPath);
+            var brush = stage.prefabContentsRoot.GetComponentInChildren<Brush>();
+            brush.transform.position += Vector3.up;
+            BrushApi.ForceUpdate();
+            // what Auto Save does after an edit; the stage's own meshes are not in the file
+            var save = typeof(PrefabStage).GetMethod("SavePrefab", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, System.Type.EmptyTypes, null);
+            if (save == null) Assert.Ignore("PrefabStage.SavePrefab not found in this Unity version");
+            save.Invoke(stage, null);
+            Assert.IsTrue(BrushPrefabBaking.NeedsBake(PrefabPath));
+            BrushPrefabBaking.BakeIfNeeded(PrefabPath);
+            Assert.IsTrue(BrushPrefabBaking.NeedsBake(PrefabPath), "not baked while open: writing the file would make Unity reload the stage");
+            Assert.AreEqual(brush, PrefabStageUtility.GetCurrentPrefabStage().prefabContentsRoot.GetComponentInChildren<Brush>(), "the stage keeps the objects being edited");
+            StageUtility.GoToMainStage();
+            for (int i = 0; i < 5 && BrushPrefabBaking.NeedsBake(PrefabPath); i++) yield return null;
+            Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath), "baked once Prefab Mode closed");
         }
     }
 }
