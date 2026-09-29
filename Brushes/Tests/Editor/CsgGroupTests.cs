@@ -224,5 +224,32 @@ namespace CsgBrush.Tests
             finally { StageUtility.GoToMainStage(); }
             Assert.AreEqual(root.scene, BrushHooks.BrushesInView()[0].gameObject.scene, "back in the scene");
         }
+
+        [UnityTest]
+        public IEnumerator APrefabAssetsBrushesAreNeitherSnappedNorBuilt()
+        {
+            bool snap = BrushSettings.instance.snapToGrid; int gridIndex = BrushSettings.instance.gridIndex; // the settings object is reloaded by asset refreshes: never held
+            try
+            {
+                for (int i = 0; i < 5; i++) yield return null; // bakes queued by earlier tests for the same path land first
+                BrushSettings.instance.snapToGrid = true; BrushSettings.instance.gridIndex = BrushSettings.instance.gridSizes.Length - 1; // the coarsest step: the brush below is surely off it
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var root = new GameObject("Prop"); root.AddComponent<CsgGroup>();
+                root.transform.position = new Vector3(116.75f, 29.75f, 34f);
+                var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(4.5f, 2.5f, 4f), Quaternion.identity, root.transform, "Box");
+                var offGrid = new Vector3(0.63f, 0.25f, -0.86f); // as prefabs made before snapping, or on another grid, can be
+                brush.transform.localPosition = offGrid;
+                // Unity validates the prefab's brushes on every import (each Auto Save in Prefab Mode)
+                PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+                Object.DestroyImmediate(root);
+                BrushPrefabBaking.Bake(PrefabPath);
+                for (int i = 0; i < 5; i++) yield return null;
+                BrushApi.ForceUpdate();
+                var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+                Assert.Less(Vector3.Distance(offGrid, asset.GetComponentInChildren<Brush>(true).transform.localPosition), 1e-4f, "the asset is not edited behind the user's back");
+                Assert.IsTrue(EditorUtility.IsPersistent(asset.GetComponentInChildren<MeshFilter>(true).sharedMesh), "the asset keeps its baked mesh: its group is not built in place");
+            }
+            finally { BrushSettings.instance.snapToGrid = snap; BrushSettings.instance.gridIndex = gridIndex; }
+        }
     }
 }

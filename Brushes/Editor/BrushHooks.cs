@@ -59,7 +59,8 @@ namespace CsgBrush.Editor
 
         static void RequestSync(Brush brush)
         {
-            if (brush == null || Application.isPlaying) return;
+            // a prefab asset's brushes (validated on every import, e.g. each Auto Save) are edited in Prefab Mode and built by baking, never here
+            if (brush == null || Application.isPlaying || EditorUtility.IsPersistent(brush)) return;
             pending.Add(brush);
             EditorApplication.delayCall -= FlushPending;
             EditorApplication.delayCall += FlushPending;
