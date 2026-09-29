@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.EditorTools;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 
 namespace CsgBrush.Editor
@@ -182,6 +183,13 @@ namespace CsgBrush.Editor
             e.Use();
         }
 
+        /// <summary>
+        /// The active brushes of the stage the Scene view shows: in Prefab Mode only the prefab's, since the scenes
+        /// behind it are hidden and cannot be clicked or edited there. (FindObjectsByType does not see a prefab
+        /// stage's objects at all, only the hidden scenes'.)
+        /// </summary>
+        public static List<Brush> BrushesInView() => new List<Brush>(StageUtility.GetCurrentStageHandle().FindComponentsOfType<Brush>());
+
         /// <summary>Nearest brush under the mouse by its own shape.</summary>
         public static Brush PickBrush(Vector2 mouse) => PickBrushSurface(mouse, out _, out _);
 
@@ -194,7 +202,7 @@ namespace CsgBrush.Editor
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
             Brush bestAdd = null, bestSub = null; float tAdd = float.MaxValue, tSub = float.MaxValue;
             Vector3 pAdd = Vector3.zero, nAdd = Vector3.up, pSub = Vector3.zero, nSub = Vector3.up;
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var brush in BrushesInView())
             {
                 var poly = BrushGeometry.Polyhedron(brush);
                 if (poly == null || !poly.IsValid) continue;

@@ -32,7 +32,7 @@ namespace CsgBrush.Editor
         public static void DrawCuts()
         {
             var selected = new HashSet<GameObject>(Selection.gameObjects);
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            foreach (var brush in BrushHooks.BrushesInView())
             {
                 if (brush.operation != BrushOperation.Subtract || !brush.enabled) continue;
                 var poly = BrushGeometry.Polyhedron(brush);

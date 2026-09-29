@@ -206,5 +206,23 @@ namespace CsgBrush.Tests
             for (int i = 0; i < 5 && BrushPrefabBaking.NeedsBake(PrefabPath); i++) yield return null;
             Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath), "baked once Prefab Mode closed");
         }
+
+        [Test]
+        public void InPrefabModeOnlyThePrefabsBrushesCanBeClicked()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var root = BuildGroupWithBrushes("Prop");
+            PrefabUtility.SaveAsPrefabAssetAndConnect(root, PrefabPath, InteractionMode.AutomatedAction); // the scene keeps an instance in the same place
+            Assert.AreEqual(2, BrushHooks.BrushesInView().Count, "the scene's brushes");
+            var stage = PrefabStageUtility.OpenPrefab(PrefabPath);
+            try
+            {
+                var inView = BrushHooks.BrushesInView();
+                Assert.AreEqual(2, inView.Count, "the prefab's brushes, not also the hidden scene's");
+                foreach (var b in inView) Assert.AreEqual(stage.scene, b.gameObject.scene);
+            }
+            finally { StageUtility.GoToMainStage(); }
+            Assert.AreEqual(root.scene, BrushHooks.BrushesInView()[0].gameObject.scene, "back in the scene");
+        }
     }
 }
