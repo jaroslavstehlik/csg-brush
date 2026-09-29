@@ -515,6 +515,7 @@ namespace CsgBrush.Editor
             var settings = model.GetComponent<ConvexColliderSettings>();
             if (settings == null) settings = model.gameObject.AddComponent<ConvexColliderSettings>();
             ConvexColliderBuilder.Rebuild(model.transform, settings, inputs);
+            BrushSync.HideGenerated(model); // hidden from the moment they exist, in scenes, Prefab Mode and prefabs being baked
             LastCollidersMs = sw.Elapsed.TotalMilliseconds;
         }
 

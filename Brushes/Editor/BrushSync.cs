@@ -96,27 +96,41 @@ namespace CsgBrush.Editor
         /// <summary>Set the visibility of the default model and the generated objects according to the settings.</summary>
         public static void ApplyVisibility()
         {
-            bool show = BrushSettings.instance.showGenerated;
-            var flags = show ? HideFlags.NotEditable : kHidden;
-            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-            {
-                // The implicit default model is hidden entirely; a user-created model stays visible as a folder,
-                // but its generated children are not part of the student's picture.
-                if (model.isDefault && model.gameObject.hideFlags != flags) model.gameObject.hideFlags = flags;
-                var componentFlags = show ? HideFlags.None : HideFlags.HideInInspector;
-                if (model.TryGetComponent<ConvexColliderSettings>(out var cc))
-                {
-                    if (cc.showInHierarchy != show) cc.showInHierarchy = show;
-                    if (cc.hideFlags != componentFlags) cc.hideFlags = componentFlags;
-                }
-                foreach (Transform child in model.transform)
-                {
-                    bool generated = CsgGroup.IsMeshChildName(child.name) || child.name == ConvexColliderSettings.ContainerName;
-                    if (!generated) continue;
-                    if (child.gameObject.hideFlags != flags) child.gameObject.hideFlags = flags;
-                }
-            }
+            // prefab instances included: Unity never stores hide flags in a prefab file, and hiding an instance's
+            // objects is not an override, so they are hidden in memory like everything else
+            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None)) HideGenerated(model);
+            var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+            if (stage != null && stage.prefabContentsRoot != null)
+                foreach (var model in stage.prefabContentsRoot.GetComponentsInChildren<CsgGroup>(true)) HideGenerated(model);
             EditorApplication.RepaintHierarchyWindow();
         }
+
+        /// <summary>
+        /// Generated objects (a group's mesh children, its collider container and pieces, its Convex Colliders component
+        /// and a scene's automatic group) are authored for the user, never by them: hidden and not editable, unless
+        /// Show generated objects is on for debugging. Applied in memory wherever they appear (Unity keeps no hide flags
+        /// in prefab files), right after every build and by the sweep over scenes and Prefab Mode.
+        /// </summary>
+        public static void HideGenerated(CsgGroup model) => HideGenerated(model, BrushSettings.instance.showGenerated);
+
+        public static void HideGenerated(CsgGroup model, bool show)
+        {
+            var flags = show ? HideFlags.NotEditable : kHidden;
+            if (model.isDefault && model.gameObject.hideFlags != flags) model.gameObject.hideFlags = flags;
+            var componentFlags = show ? HideFlags.None : HideFlags.HideInInspector;
+            if (model.TryGetComponent<ConvexColliderSettings>(out var cc))
+            {
+                if (cc.showInHierarchy != show) cc.showInHierarchy = show;
+                if (cc.hideFlags != componentFlags) cc.hideFlags = componentFlags;
+            }
+            foreach (Transform child in model.transform)
+            {
+                if (!IsGenerated(child)) continue;
+                if (child.gameObject.hideFlags != flags) child.gameObject.hideFlags = flags;
+                foreach (Transform piece in child) if (piece.gameObject.hideFlags != flags) piece.gameObject.hideFlags = flags;
+            }
+        }
+
+        public static bool IsGenerated(Transform t) => CsgGroup.IsMeshChildName(t.name) || t.name == ConvexColliderSettings.ContainerName;
     }
 }

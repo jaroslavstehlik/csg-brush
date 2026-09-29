@@ -52,6 +52,29 @@ namespace CsgBrush.Editor
             return null;
         }
 
+        /// <summary>Prefabs used by the open scenes that need baking (saved before baking existed).</summary>
+        public static void BakeUsedPrefabs()
+        {
+            var paths = new HashSet<string>();
+            foreach (var group in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (!PrefabUtility.IsPartOfPrefabInstance(group)) continue;
+                var path = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(group);
+                if (!string.IsNullOrEmpty(path)) paths.Add(path);
+            }
+            foreach (var path in paths) if (NeedsBake(path)) Bake(path);
+        }
+
+        [MenuItem("Tools/CSG Brush/Bake All Prefabs")]
+        static void BakeAll()
+        {
+            foreach (var guid in AssetDatabase.FindAssets("t:Prefab"))
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (NeedsBake(path)) Bake(path);
+            }
+        }
+
         /// <summary>Rebuild every group of a prefab and save the generated meshes into the prefab file.</summary>
         public static void Bake(string path)
         {

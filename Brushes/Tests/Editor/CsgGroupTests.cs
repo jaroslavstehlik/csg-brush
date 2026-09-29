@@ -121,5 +121,32 @@ namespace CsgBrush.Tests
             Assert.IsNull(none);
             Assert.IsFalse(BrushPrefabBaking.NeedsBake(StampPath), "a stamp has nothing to bake");
         }
+
+        [Test]
+        public void GeneratedObjectsAreHiddenInScenesAndInPrefabInstancesUnlessDebugging()
+        {
+            var settings = BrushSettings.instance; bool saved = settings.showGenerated;
+            try
+            {
+                settings.showGenerated = false;
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var root = BuildGroupWithBrushes("Level");
+                foreach (Transform child in root.transform)
+                    if (BrushSync.IsGenerated(child)) Assert.AreEqual(HideFlags.HideInHierarchy | HideFlags.NotEditable, child.gameObject.hideFlags, child.name + " hidden right after the build");
+                Assert.AreNotEqual(HideFlags.None, root.GetComponent<Colliders.ConvexColliderSettings>().hideFlags & HideFlags.HideInInspector);
+                // an instance of a baked prefab: hidden too, without becoming an override
+                PrefabUtility.SaveAsPrefabAsset(root, PrefabPath); BrushPrefabBaking.Bake(PrefabPath);
+                var inst = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath));
+                BrushSync.ApplyVisibility();
+                foreach (Transform child in inst.transform)
+                    if (BrushSync.IsGenerated(child)) Assert.AreEqual(HideFlags.HideInHierarchy | HideFlags.NotEditable, child.gameObject.hideFlags, "instance " + child.name);
+                Assert.IsFalse(PrefabUtility.HasPrefabInstanceAnyOverrides(inst, false), "hiding is not an override");
+                // debugging shows them, not editable
+                settings.showGenerated = true;
+                BrushSync.ApplyVisibility();
+                Assert.AreEqual(HideFlags.NotEditable, BrushCsg.MeshObject(root.GetComponent<CsgGroup>(), false).gameObject.hideFlags);
+            }
+            finally { settings.showGenerated = saved; BrushSync.ApplyVisibility(); }
+        }
     }
 }

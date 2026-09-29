@@ -2,6 +2,12 @@
 
 ## 0.2.0 (2026-09-14)
 
+- Generated objects (a group's mesh children, its collider container and pieces, its Convex Colliders component, a
+  scene's automatic group) are hidden and not editable from the moment they are built, in scenes, in prefab
+  instances and in Prefab Mode, and only Show generated objects reveals them for debugging. Unity keeps no hide flags
+  in prefab files, so they are applied in memory wherever the objects appear (hiding an instance's objects is not an
+  override). Prefabs used by an opened scene that were saved before baking existed are baked on open; Tools > CSG
+  Brush > Bake All Prefabs does it for the whole project.
 - CSG groups: `BrushModel` is now `CsgGroup` ("CSG Group", with an icon in the Hierarchy and the Scene view). Every
   scene has its own automatic group for brushes with no group (before, one default model served all loaded scenes, so
   opening scenes together merged their free brushes into one of them and emptied the others). A group inside a prefab

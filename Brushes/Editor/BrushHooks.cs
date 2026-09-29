@@ -31,7 +31,7 @@ namespace CsgBrush.Editor
             EditorApplication.hierarchyWindowItemByEntityIdOnGUI -= DrawGroupIcon;
             EditorApplication.hierarchyWindowItemByEntityIdOnGUI += DrawGroupIcon;
             BrushSettings.Changed += OnSettingsChanged;
-            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => EnsureAll();
+            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => { EnsureAll(); EditorApplication.delayCall += BrushPrefabBaking.BakeUsedPrefabs; };
             UnityEditor.SceneManagement.EditorSceneManager.newSceneCreated += (scene, setup, mode) => BrushCsg.ClearCaches();
             EditorApplication.playModeStateChanged += state => { if (state == PlayModeStateChange.EnteredEditMode) EditorApplication.delayCall += () => { EnsureAll(); BrushApi.ForceUpdate(); }; };
             EditorApplication.delayCall += () =>
