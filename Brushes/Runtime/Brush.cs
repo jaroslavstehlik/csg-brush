@@ -24,8 +24,10 @@ namespace CsgBrush
         [InspectorName("Spiral Stairs")] SpiralStairs = 8,
         /// <summary>An arch filling its box: a ring of segments between an outer and an inner ellipse, standing on the floor.</summary>
         Arch = 9,
-        /// <summary>A door frame filling its box: two sides and a top around an opening down to the floor.</summary>
+        /// <summary>A doorway to cut into a wall: a box of the opening's size, subtract by new. On a floor plan it rides on a wall (see <see cref="WallAnchor"/>).</summary>
         Door = 10,
+        /// <summary>A window to cut into a wall: as <see cref="Door"/>, standing on a sill.</summary>
+        Window = 11,
     }
 
     public enum BrushOperation
@@ -81,11 +83,6 @@ namespace CsgBrush
         [Tooltip("Hollow walls, and the thickness of an arch: metres.")]
         public float wallThickness = 0.5f;
 
-        [Tooltip("Door: width of each side of the frame, metres.")]
-        public float doorSide = 0.5f;
-        [Tooltip("Door: height of the top of the frame, metres.")]
-        public float doorTop = 0.5f;
-
         [Tooltip("Cylinder and cone; segments of an arch.")]
         [Min(3)] public int sides = 16;
         [Tooltip("Sphere: 1 is coarse, 5 is smooth.")]
@@ -117,6 +114,21 @@ namespace CsgBrush
 
         /// <summary>Set by the editor layer; called when the component needs to push its values into the generated structure.</summary>
         public static Action<Brush> SyncRequested;
+
+        /// <summary>The generator that made this brush (a floor plan's wall, say), or null for a brush you authored.</summary>
+        [HideInInspector] public BrushGenerator generatedBy;
+
+        /// <summary>Made by a <see cref="BrushGenerator"/>: never snapped, picked or edited on its own.</summary>
+        public bool IsGenerated => generatedBy != null;
+
+        /// <summary>A door or window: a cut of a fixed size, not snapped to the grid, always clickable.</summary>
+        public bool IsOpening => shape == BrushShape.Door || shape == BrushShape.Window;
+
+        /// <summary>Set by a <see cref="WallAnchor"/> on the brush or above it: the brush rides on a wall.</summary>
+        [NonSerialized] public bool anchored;
+
+        /// <summary>Placed by something else (its generator, its wall): never snapped to the grid.</summary>
+        public bool IsPlaced => generatedBy != null || IsOpening || anchored;
 
         // ------------------------------------------------------------------ registry
 

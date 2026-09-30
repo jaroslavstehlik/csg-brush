@@ -587,21 +587,6 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void DoorIsAClosedFrameOfThreeBlocks()
-        {
-            var size = new Vector3(3f, 3f, 0.5f);
-            var door = BrushPolyhedron.Door(size, 0.5f, 0.75f);
-            Assert.IsTrue(door.IsClosed(), "closed"); Assert.IsTrue(door.IsSound(out var why), why);
-            Assert.AreEqual(3 * 6, door.faces.Length, "two sides and a top, six faces each");
-            var b = door.Bounds();
-            Assert.AreEqual(size.x, b.size.x, 1e-4f); Assert.AreEqual(size.y, b.size.y, 1e-4f); Assert.AreEqual(size.z, b.size.z, 1e-4f);
-            Assert.AreEqual(-1.5f, b.min.y, 1e-4f, "centred on the transform");
-            float opening = (3f - 2f * 0.5f) * (3f - 0.75f);
-            Assert.AreEqual((3f * 3f - opening) * 0.5f, door.Volume(), 1e-4f, "the box minus the opening");
-            Assert.IsTrue(BrushPolyhedron.Door(size, 10f, 10f).IsSound(out why), "oversized sides and top are clamped: " + why);
-        }
-
-        [Test]
         public void ACurvedStairsFootprintDoesNotDependOnTheNumberOfSteps()
         {
             var p = new StairParams { innerRadius = 0.5f, stepWidth = 1.5f, stepHeight = 0.25f, curveAngle = 90f };

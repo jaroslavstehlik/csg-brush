@@ -40,8 +40,11 @@ namespace CsgBrush.Editor
         public bool newSlopedCeiling = false;
         [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
         [Range(1f, 180f)] public float newArchAngle = 180f;
-        [Tooltip("Units; 0 uses one grid step.")] public float newDoorSide = 0f;
-        [Tooltip("Units; 0 uses one grid step.")] public float newDoorTop = 0f;
+        [Tooltip("Units; 0 uses 1 m.")] public float newDoorWidth = 0f;
+        [Tooltip("Units; 0 uses 2.2 m.")] public float newDoorHeight = 0f;
+        [Tooltip("Units; 0 uses 1.2 m.")] public float newWindowWidth = 0f;
+        [Tooltip("Units; 0 uses 1.2 m.")] public float newWindowHeight = 0f;
+        [Tooltip("Units above the floor; 0 uses 0.9 m.")] public float newWindowSill = 0f;
         [Header("Extrude (edit mode)")]
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
@@ -63,6 +66,24 @@ namespace CsgBrush.Editor
 
         /// <summary>The tread thickness spiral stairs get unless one is set: thin, well under the default step height.</summary>
         public const float DefaultStepThicknessMeters = 0.1f;
+
+        /// <summary>A door's opening unless set: room for a 0.5 m wide, 1.5 to 2 m tall character.</summary>
+        public const float DefaultDoorWidthMeters = 1f, DefaultDoorHeightMeters = 2.2f;
+        /// <summary>A window unless set: 1.2 m square, its bottom at 0.9 m (a common sill height).</summary>
+        public const float DefaultWindowWidthMeters = 1.2f, DefaultWindowHeightMeters = 1.2f, DefaultWindowSillMeters = 0.9f;
+        /// <summary>How far a door or window reaches past each face of a wall, so it cuts cleanly through.</summary>
+        public const float OpeningMarginMeters = 0.05f;
+        /// <summary>The depth of a door or window not placed on a wall.</summary>
+        public const float DefaultOpeningDepthMeters = 0.5f;
+
+        /// <summary>Width and height of the next door or window, in metres.</summary>
+        public Vector2 NewOpeningSize(BrushShape shape) => shape == BrushShape.Window
+            ? new Vector2(newWindowWidth > 0f ? ToMeters(newWindowWidth) : DefaultWindowWidthMeters, newWindowHeight > 0f ? ToMeters(newWindowHeight) : DefaultWindowHeightMeters)
+            : new Vector2(newDoorWidth > 0f ? ToMeters(newDoorWidth) : DefaultDoorWidthMeters, newDoorHeight > 0f ? ToMeters(newDoorHeight) : DefaultDoorHeightMeters);
+
+        /// <summary>Height of the next door's or window's bottom above the floor, in metres.</summary>
+        public float NewOpeningSill(BrushShape shape) => shape == BrushShape.Window ? (newWindowSill > 0f ? ToMeters(newWindowSill) : DefaultWindowSillMeters) : 0f;
+
 
         /// <summary>The step height of the next stairs, in metres.</summary>
         public float NewStepHeightMeters => newStepHeight > 0f ? ToMeters(newStepHeight) : DefaultStepHeightMeters;

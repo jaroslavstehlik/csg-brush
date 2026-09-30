@@ -48,7 +48,16 @@ namespace CsgBrush.Editor
             foreach (var go in Selection.gameObjects)
                 if (go.TryGetComponent<Brush>(out var b) && (b.shape == BrushShape.Custom || BrushApi.CanConvertToCustom(b.shape))) { editable = true; break; }
             if (editing && !editable) BrushEditContext.Exit();
-            using (new EditorGUI.DisabledScope(!editable))
+            bool plan = !editable && Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<FloorPlan>() != null;
+            if (plan)
+            {
+                bool planEditing = FloorPlanEditContext.IsActive;
+                if (GUILayout.Toggle(planEditing, new GUIContent("Edit plan", "Move, Rotate and Scale act on the selected points or walls (1, 2)"), EditorStyles.miniButton) != planEditing)
+                {
+                    if (planEditing) FloorPlanEditContext.Exit(); else FloorPlanEditContext.Enter();
+                }
+            }
+            else using (new EditorGUI.DisabledScope(!editable))
             {
                 bool wantEditing = GUILayout.Toggle(editing, new GUIContent("Edit brush", editable ? "Move, Rotate and Scale then act on the selected vertices, edges or faces; the selection mode is in the Tool Settings toolbar (1, 2, 3)" : "Select a brush"), EditorStyles.miniButton);
                 if (wantEditing != editing) { if (wantEditing) BrushEditContext.Enter(); else BrushEditContext.Exit(); }
@@ -84,7 +93,8 @@ namespace CsgBrush.Editor
             float labelWidth = EditorGUIUtility.labelWidth; EditorGUIUtility.labelWidth = 96;
             EditorGUILayout.LabelField(tool.Title, EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
-            s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
+            if (!BrushCreateTool.IsOpening(shape)) // a door or window is always a cut
+                s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
             var moduleTypes = BrushApi.ModuleTypes();
             if (moduleTypes.Count > 0)
             {
@@ -132,8 +142,13 @@ namespace CsgBrush.Editor
                     s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Segments"), s.newSides));
                     break;
                 case BrushShape.Door:
-                    s.newDoorSide = UnitsField(s, "Side width", "0 uses one grid step", s.newDoorSide, s.GridMeters);
-                    s.newDoorTop = UnitsField(s, "Top height", "0 uses one grid step", s.newDoorTop, s.GridMeters);
+                    s.newDoorWidth = UnitsField(s, "Width", "Width of the doorway; 0 uses 1 m", s.newDoorWidth, BrushSettings.DefaultDoorWidthMeters);
+                    s.newDoorHeight = UnitsField(s, "Height", "Height of the doorway; 0 uses 2.2 m", s.newDoorHeight, BrushSettings.DefaultDoorHeightMeters);
+                    break;
+                case BrushShape.Window:
+                    s.newWindowWidth = UnitsField(s, "Width", "Width of the window; 0 uses 1.2 m", s.newWindowWidth, BrushSettings.DefaultWindowWidthMeters);
+                    s.newWindowHeight = UnitsField(s, "Height", "Height of the window; 0 uses 1.2 m", s.newWindowHeight, BrushSettings.DefaultWindowHeightMeters);
+                    s.newWindowSill = UnitsField(s, "Sill", "Height of its bottom above the floor; 0 uses 0.9 m", s.newWindowSill, BrushSettings.DefaultWindowSillMeters);
                     break;
             }
             if (shape == BrushShape.Box || shape == BrushShape.Cylinder)

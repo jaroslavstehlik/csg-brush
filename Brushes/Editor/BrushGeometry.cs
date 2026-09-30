@@ -16,10 +16,9 @@ namespace CsgBrush.Editor
             public Vector3 size;
             public int sides, tessellation;
             public float stepHeight, wallThickness;
-            public float doorSide, doorTop;
             public StairParams stairs;
 
-            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, wallThickness = b.wallThickness, doorSide = b.doorSide, doorTop = b.doorTop, stairs = b.Stairs };
+            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, wallThickness = b.wallThickness, stairs = b.Stairs };
 
             /// <summary>Defaults for a shape of a given size (menus, conversions).</summary>
             public static ShapeParams Default(Vector3 size, int sides = 16)
@@ -28,7 +27,7 @@ namespace CsgBrush.Editor
                 float stepHeight = BrushSettings.DefaultStepHeightMeters;
                 return new ShapeParams
                 {
-                    size = size, sides = sides, tessellation = 2, stepHeight = stepHeight, wallThickness = s.GridMeters, doorSide = s.GridMeters, doorTop = s.GridMeters,
+                    size = size, sides = sides, tessellation = 2, stepHeight = stepHeight, wallThickness = s.GridMeters,
                     stairs = new StairParams { innerRadius = s.GridMeters, stepWidth = Mathf.Max(s.GridMeters, size.x - s.GridMeters), stepHeight = stepHeight, stepThickness = BrushSettings.DefaultStepThicknessMeters, curveAngle = 90f, numSteps = BrushPolyhedron.StepCount(size.y, stepHeight), stepsPer360 = 16 },
                 };
             }
@@ -47,7 +46,6 @@ namespace CsgBrush.Editor
                 case BrushShape.CurvedStairs: return BrushPolyhedron.CurvedStairs(p.stairs);
                 case BrushShape.SpiralStairs: return BrushPolyhedron.SpiralStairs(p.stairs);
                 case BrushShape.Arch: return BrushPolyhedron.Arch(p.size, p.wallThickness, p.stairs.curveAngle, p.sides);
-                case BrushShape.Door: return BrushPolyhedron.Door(p.size, p.doorSide, p.doorTop);
                 default: return BrushPolyhedron.Box(p.size);
             }
         }

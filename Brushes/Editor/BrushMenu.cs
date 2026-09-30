@@ -34,7 +34,26 @@ namespace CsgBrush.Editor
         [MenuItem(kMenu + "Curved Stairs", false, 16)] static void CurvedStairs() => CreateAtPivot(BrushShape.CurvedStairs);
         [MenuItem(kMenu + "Spiral Stairs", false, 17)] static void SpiralStairs() => CreateAtPivot(BrushShape.SpiralStairs);
         [MenuItem(kMenu + "Arch", false, 18)] static void Arch() => CreateAtPivot(BrushShape.Arch);
-        [MenuItem(kMenu + "Door", false, 19)] static void Door() => CreateAtPivot(BrushShape.Door);
+        [MenuItem(kMenu + "Door", false, 19)] static void Door() => CreateOpening(BrushShape.Door);
+        [MenuItem(kMenu + "Window", false, 20)] static void Window() => CreateOpening(BrushShape.Window);
+
+        /// <summary>A door or window: on the middle of the first wall of a selected floor plan, else standing at the view pivot.</summary>
+        static void CreateOpening(BrushShape shape)
+        {
+            var plan = Selection.activeGameObject != null ? Selection.activeGameObject.GetComponent<FloorPlan>() : null;
+            var walls = new System.Collections.Generic.List<FloorPlan.Wall>();
+            if (plan != null) plan.Walls(walls);
+            Brush brush;
+            if (walls.Count > 0) brush = WallAnchors.Place(plan, shape, 0, walls[0].Length * 0.5f);
+            else
+            {
+                var s = BrushSettings.instance;
+                var opening = s.NewOpeningSize(shape);
+                Vector3 pivot = Snap(SceneView.lastActiveSceneView != null ? SceneView.lastActiveSceneView.pivot : Vector3.zero, s.GridMeters);
+                brush = BrushApi.Create(shape, pivot + Vector3.up * (s.NewOpeningSill(shape) + opening.y * 0.5f), new Vector3(opening.x, opening.y, BrushSettings.DefaultOpeningDepthMeters), Quaternion.identity);
+            }
+            Selection.activeGameObject = brush.gameObject;
+        }
 
         [MenuItem(kMenu + "Hollow room", false, 30)]
         static void Room()

@@ -784,16 +784,19 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void DoorBrushBuildsAFrameWithAnOpening()
+        public void DoorAndWindowAreCutsOfTheirOwnSize()
         {
-            var brush = BrushApi.Create(BrushShape.Door, new Vector3(0f, 1.5f, 0f), new Vector3(3f, 3f, 0.5f), Quaternion.identity);
+            var wall = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1.5f, 0f), new Vector3(4f, 3f, 0.2f), Quaternion.identity);
+            var door = BrushApi.Create(BrushShape.Door, new Vector3(-1f, 1.1f, 0f), new Vector3(1f, 2.2f, 0.3f), Quaternion.identity);
+            var window = BrushApi.Create(BrushShape.Window, new Vector3(1f, 1.5f, 0f), new Vector3(1.2f, 1.2f, 0.3f), Quaternion.identity);
             BrushApi.ForceUpdate();
             Physics.SyncTransforms();
-            Assert.IsNull(brush.problem, brush.problem);
-            Assert.Greater(brush.doorSide, 0f); Assert.Greater(brush.doorTop, 0f);
-            Assert.AreEqual(3, UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "one collider per side and one for the top");
-            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(0f, 1f, 0f), new Vector3(0.3f, 0.3f, 0.1f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, "the opening is empty");
-            Assert.Greater(Physics.OverlapBox(new Vector3(-1.3f, 1f, 0f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, 0, "the side is solid");
+            Assert.AreEqual(BrushOperation.Subtract, door.operation, "a door is a cut"); Assert.AreEqual(BrushOperation.Subtract, window.operation);
+            Assert.IsTrue(door.IsOpening && window.IsOpening && !wall.IsOpening);
+            Assert.IsNull(door.problem, door.problem);
+            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(-1f, 1f, 0f), new Vector3(0.4f, 0.9f, 0.05f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, "the doorway is open to the floor");
+            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(1f, 1.5f, 0f), new Vector3(0.5f, 0.5f, 0.05f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, "the window is open");
+            Assert.Greater(Physics.OverlapBox(new Vector3(1f, 0.5f, 0f), new Vector3(0.05f, 0.05f, 0.05f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, 0, "under the window is wall");
             Assert.Greater(RenderVertexCount(), 0, "renders");
         }
     }

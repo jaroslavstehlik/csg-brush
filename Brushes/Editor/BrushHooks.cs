@@ -96,6 +96,9 @@ namespace CsgBrush.Editor
                     if (path == "m_Layer" || path == "m_TagString" || path == "m_StaticEditorFlags" || path == "m_Name") { BrushCache.Forget(layered); BrushCsg.MarkDirty(layered); } // the pieces take these from the brush
                 }
                 else if (mtarget is GameObject mgo && mgo.TryGetComponent<BrushGroup>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
+                if (mtarget is Transform otr && otr.TryGetComponent<WallAnchor>(out var movedAnchor)) WallAnchors.Moved(movedAnchor); // a door moved by hand takes the nearest wall
+                else if (mtarget is Brush ob && ob.TryGetComponent<WallAnchor>(out var sizedAnchor) && sizedAnchor.Plan != null) BrushGenerators.MarkDirty(sizedAnchor.Plan); // resized: placed again on its wall
+                if (mtarget is GameObject ggo && ggo.TryGetComponent<BrushGenerator>(out var generatorObj)) BrushGenerators.MarkDirty(generatorObj); // its brushes take its layer, tag and flags
                 else if (mtarget is BrushModule) BrushCsg.MarkAllDirty(); // a parent's module tags every brush below it
             }
             if (!BrushSettings.instance.snapToGrid) return modifications;
@@ -170,14 +173,14 @@ namespace CsgBrush.Editor
                         BrushShapeDrawing.Draw(brush, drawEdges: false);
                 return;
             }
-            if (e.alt || Tools.current == Tool.View || Tools.viewToolActive) return;
+            if (e.alt || Tools.current == Tool.View || Tools.viewToolActive || FloorPlanEditContext.IsActive || WallAnchorEditor.Picking) return; // plan edit mode and wall picking pick their own
             if (e.type == EventType.MouseDown && e.button == 0) { s_MouseDown = e.mousePosition; s_MouseDownValid = GUIUtility.hotControl == 0; return; }
             if (e.type != EventType.MouseUp || e.button != 0 || !s_MouseDownValid) return;
             s_MouseDownValid = false;
             if (GUIUtility.hotControl != 0 || (e.mousePosition - s_MouseDown).sqrMagnitude > 16f) return; // a drag or a gizmo
             var hit = PickBrush(e.mousePosition);
             if (hit == null) return; // let Unity handle empty space and other objects
-            var picked = hit.gameObject;
+            var picked = BrushGenerators.SelectionTarget(hit);
             if (e.shift) { var list = new List<Object>(Selection.objects); if (!list.Contains(picked)) list.Add(picked); Selection.objects = list.ToArray(); }
             else if (e.control || e.command) { var list = new List<Object>(Selection.objects); if (!list.Remove(picked)) list.Add(picked); Selection.objects = list.ToArray(); }
             else Selection.activeGameObject = picked;
@@ -230,7 +233,7 @@ namespace CsgBrush.Editor
             for (int i = 0; i < active.Count; i++)
             {
                 var brush = active[i]; // registered brushes are alive: OnDisable always runs before a brush is destroyed
-                if (brush.operation == BrushOperation.Subtract && !cuts) continue; // an invisible cut is not clickable
+                if (brush.operation == BrushOperation.Subtract && !cuts && !brush.IsOpening) continue; // an invisible cut is not clickable; a door or window always is
                 var e = BrushCache.Of(brush);
                 if (!e.pickReady) MeasureForPicking(brush, e);
                 if (e.polyhedron == null || !RayHitsBox(o, inv, e.min, e.max)) continue; // most brushes end here, without a call into Unity
@@ -343,7 +346,7 @@ namespace CsgBrush.Editor
 
         static bool Same(in BrushGeometry.ShapeParams a, in BrushGeometry.ShapeParams b)
         {
-            if (a.size.x != b.size.x || a.size.y != b.size.y || a.size.z != b.size.z || a.sides != b.sides || a.tessellation != b.tessellation || a.stepHeight != b.stepHeight || a.wallThickness != b.wallThickness || a.doorSide != b.doorSide || a.doorTop != b.doorTop) return false;
+            if (a.size.x != b.size.x || a.size.y != b.size.y || a.size.z != b.size.z || a.sides != b.sides || a.tessellation != b.tessellation || a.stepHeight != b.stepHeight || a.wallThickness != b.wallThickness) return false;
             var x = a.stairs; var y = b.stairs;
             return x.innerRadius == y.innerRadius && x.stepWidth == y.stepWidth && x.stepHeight == y.stepHeight && x.stepThickness == y.stepThickness && x.curveAngle == y.curveAngle
                 && x.addToFirstStep == y.addToFirstStep && x.numSteps == y.numSteps && x.stepsPer360 == y.stepsPer360 && x.counterClockwise == y.counterClockwise
@@ -425,6 +428,7 @@ namespace CsgBrush.Editor
             if (Application.isPlaying || processing) return;
             BrushSnap.InvalidateParents();
             BrushCsg.MarkAllDirty(); // order, parents, deletions: the brush lists are re-derived on the next build
+            BrushGenerators.MarkAllDirty(); // a door put under a floor plan (or taken out) is placed on its walls
             EditorApplication.delayCall -= Process;
             EditorApplication.delayCall += Process;
         }
@@ -461,6 +465,13 @@ namespace CsgBrush.Editor
                     var parent = go.transform.parent.gameObject;
                     if (!result.Contains(parent)) result.Add(parent);
                     changed = true;
+                    continue;
+                }
+                if (go != null && go.TryGetComponent<Brush>(out var generatedBrush) && generatedBrush.IsGenerated)
+                {
+                    var owner = generatedBrush.generatedBy.gameObject;
+                    if (!result.Contains(owner)) result.Add(owner);
+                    changed = true; // a generated brush: its generator is what to edit
                     continue;
                 }
                 if (go != null && (BrushGroup.IsMeshChildName(go.name) || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == BrushGroup.DefaultName) && !BrushSettings.instance.showGenerated)

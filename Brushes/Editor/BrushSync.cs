@@ -105,6 +105,8 @@ namespace CsgBrush.Editor
             var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
             if (stage != null && stage.prefabContentsRoot != null)
                 foreach (var model in stage.prefabContentsRoot.GetComponentsInChildren<BrushGroup>(true)) HideGenerated(model);
+            var generators = BrushGenerator.Active;
+            for (int i = 0; i < generators.Count; i++) BrushGenerators.ApplyVisibility(generators[i]);
             EditorApplication.RepaintHierarchyWindow();
         }
 

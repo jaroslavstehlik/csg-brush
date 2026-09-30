@@ -27,7 +27,7 @@ namespace CsgBrush.Editor
                 brush.innerRadius = d.stairs.innerRadius; brush.stepWidth = d.stairs.stepWidth; brush.stepThickness = d.stairs.stepThickness;
                 brush.curveAngle = d.stairs.curveAngle; brush.numSteps = d.stairs.numSteps; brush.stepsPer360 = d.stairs.stepsPer360;
             }
-            if (shape == BrushShape.Door) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.doorSide = p.doorSide; brush.doorTop = p.doorTop; }
+            if (brush.IsOpening) brush.operation = BrushOperation.Subtract; // a door or window is a cut
             if (shape == BrushShape.Arch) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.curveAngle = p.stairs.curveAngle; brush.wallThickness = p.wallThickness; brush.sides = p.sides; }
             foreach (var t in ModuleTypes()) if (BrushSettings.instance.newModules.Contains(t.FullName)) Undo.AddComponent(go, t); // the project's modules for new brushes
             BrushSync.Ensure(brush);
@@ -43,7 +43,7 @@ namespace CsgBrush.Editor
 
         public static void SetSize(Brush brush, Vector3 sizeMeters)
         {
-            if (BrushSettings.instance.snapToGrid) sizeMeters = BrushSnap.SnapSize(sizeMeters, BrushSettings.instance.GridMeters);
+            if (BrushSettings.instance.snapToGrid && !brush.IsOpening) sizeMeters = BrushSnap.SnapSize(sizeMeters, BrushSettings.instance.GridMeters);
             if (brush.size == sizeMeters) return; // no-op edits must not create undo entries
             Undo.RecordObject(brush, "Resize brush");
             brush.size = sizeMeters;

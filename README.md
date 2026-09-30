@@ -19,7 +19,7 @@ URL", the URL of this repository.
   carves its own layer, each layer renders as its own mesh child on that layer, and the colliders sit on that layer. Use it for a
   collision layer per kind of thing, or to keep parts of a level from carving each other.
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
-  Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch, Door; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
+  Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch, Door, Window, Floor Plan; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
   base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool. While a Create tool is active the
   Brushes overlay shows what the next brush gets (operation, modules, sides, steps, arch thickness and angle, door side width and top height, hollow).
   Everything snaps to the grid, and a wall makes the brush grow out of the wall. Cylinder, Cone and Sphere are drawn from the centre of
@@ -30,6 +30,21 @@ URL", the URL of this repository.
   edited on the brush afterwards. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
   generated under the brush group that bakes it (see below).
+- **Floor plan**: pick Floor Plan in the Create tool's dropdown and click a floor to start a plan there (GameObject > Brush >
+  Floor Plan starts one at the view pivot), then click the corners (snapped to the grid and
+  to 45 degree steps, Shift for any grid point) and click the first one to close the room. The plan makes the walls (one
+  hidden brush per wall, rebuilt whenever the plan changes); set their thickness, height and side of the line in its
+  Inspector. Its Edit button (or Edit plan in the Brushes overlay) works like Edit Brush for points and walls: Vertex
+  or Edge selection (1, 2), click, Shift, Ctrl, drag rectangle, then Move, Rotate and Scale on the floor; + adds a point.
+  Delete or Backspace removes the selected points, or the selected walls in Edge mode (a room opens there; a line cut
+  in the middle becomes two plans). Clicking a wall selects its plan.
+- **Doors and windows**: Door and Window in the Create tool place a cut of a set size with one click: on a floor plan's
+  wall it rides on that wall (it follows it, and stays where it was if the wall is deleted); on any other brush it cuts
+  through the side it was put on. Move one along its wall with the Move tool; its size is on the brush.
+- **Anything on a wall**: put an object under a floor plan and use GameObject > Brush > Attach to Wall (or add a Wall
+  Anchor), or draw a brush on a wall's face. Pick Wall on the Wall Anchor, then click a wall, moves it there; its wall
+  is outlined while it is selected. Distance along it, height and face are in the Inspector. It follows its wall; move it along the wall, or away from every wall
+  to free it; Detach from Wall takes it off.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
   the brush: on release the scale is baked into the size and the transform scale returns to one.

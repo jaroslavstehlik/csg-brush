@@ -9,7 +9,6 @@ namespace CsgBrush.Editor
     public sealed class BrushEditor : UnityEditor.Editor
     {
         SerializedProperty shapeProp, operationProp, collisionProp, physicsMaterialProp, provideContactsProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, materialProp;
-        SerializedProperty doorSideProp, doorTopProp;
         SerializedProperty innerRadiusProp, stepWidthProp, stepThicknessProp, curveAngleProp, numStepsProp, stepsPer360Prop, addToFirstStepProp, ccwProp, slopedFloorProp, slopedCeilingProp;
 
         void OnEnable()
@@ -36,8 +35,6 @@ namespace CsgBrush.Editor
             ccwProp = serializedObject.FindProperty(nameof(Brush.counterClockwise));
             slopedFloorProp = serializedObject.FindProperty(nameof(Brush.slopedFloor));
             slopedCeilingProp = serializedObject.FindProperty(nameof(Brush.slopedCeiling));
-            doorSideProp = serializedObject.FindProperty(nameof(Brush.doorSide));
-            doorTopProp = serializedObject.FindProperty(nameof(Brush.doorTop));
         }
 
         static bool s_CollisionOpen = true, s_RenderingOpen = true;
@@ -143,10 +140,6 @@ namespace CsgBrush.Editor
                     DrawUnitsField(settings, wallProp, "Thickness");
                     EditorGUILayout.Slider(curveAngleProp, 1f, 180f, new GUIContent("Angle", "180 is a full arch; less keeps the top part of it"));
                     EditorGUILayout.PropertyField(sidesProp, new GUIContent("Segments"));
-                    break;
-                case BrushShape.Door:
-                    DrawUnitsField(settings, doorSideProp, "Side width");
-                    DrawUnitsField(settings, doorTopProp, "Top height");
                     break;
                 case BrushShape.CurvedStairs:
                     DrawUnitsField(settings, innerRadiusProp, "Inner radius");

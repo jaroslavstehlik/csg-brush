@@ -226,5 +226,23 @@ namespace CsgBrush.Tests
             }
             finally { s.SetGridIndex(grid); }
         }
+
+        [Test]
+        public void DoorsAndWindowsAreNotSnapped()
+        {
+            var s = BrushSettings.instance; bool snap = s.snapToGrid;
+            try
+            {
+                s.snapToGrid = true;
+                var window = BrushApi.Create(BrushShape.Window, new Vector3(0.3f, 1.5f, 0.12f), new Vector3(1.2f, 1.2f, 0.3f), Quaternion.Euler(0f, 30f, 0f));
+                Assert.IsFalse(BrushSnap.Snap(window), "a window keeps its place: on a wall, or where it was put");
+                Assert.AreEqual(new Vector3(1.2f, 1.2f, 0.3f), window.size, "and its own size");
+                Assert.AreEqual(new Vector3(0.3f, 1.5f, 0.12f), window.transform.position);
+                Assert.IsFalse(BrushSnap.IsOffGrid(window));
+                BrushApi.SetSize(window, new Vector3(0.9f, 1.3f, 0.3f));
+                Assert.AreEqual(new Vector3(0.9f, 1.3f, 0.3f), window.size, "a size set by hand is kept");
+            }
+            finally { s.snapToGrid = snap; }
+        }
     }
 }

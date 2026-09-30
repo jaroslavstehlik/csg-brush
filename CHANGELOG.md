@@ -38,9 +38,35 @@
   underside, so every step sat one thickness lower (a 0.25 m step with 0.1 m treads started at 0.1 m).
 - Curved stairs keep their footprint whatever the number of steps: a step wider than 11.25 degrees is made of several
   convex blocks along the curve (one collider each), so a low stair with few steps no longer cuts straight across it.
-- Door brush: a frame of two sides and a top around an opening down to the floor, filling its box (as ProBuilder's
-  Door), with Side width and Top height (one grid step unless set); three convex blocks, one collider each. Create tool,
-  GameObject > Brush > Door and Tools > CSG Brush > Create > Door.
+- Door and Window brushes: cuts of their own size (door 1 x 2.2 m on the floor, window 1.2 x 1.2 m on a 0.9 m sill; set
+  in the Brushes overlay while creating, or on the brush), subtract, never snapped, always clickable. One click places
+  one: on a floor plan's wall, into the side of any brush (through its thickness), or standing on the floor. Create
+  tool, GameObject > Brush > Door / Window (on the selected floor plan's first wall) and Tools > CSG Brush > Create.
+  Under a floor plan a door or window rides on its wall (a Wall Anchor: which wall, how far along, sill): it follows
+  the wall when the plan changes, stays on its piece when a + splits the wall, cuts through whatever the wall's
+  thickness, takes the nearest wall when moved, and is left where it was, a free cut, when its wall is deleted. Plan
+  points keep an id for this. The Door frame shape is gone.
+- Anything on a wall: GameObject > Brush > Attach to Wall (or a Wall Anchor added to a child of a floor plan) puts any
+  object, a prefab or a brush, on the nearest wall where it is; a brush drawn on a wall's face with the Create tool
+  stays on that wall. The Wall Anchor's Pick Wall button, then a click on a wall, puts it on that wall (of any floor
+  plan); the wall it is on is outlined while it is selected. Distance along it, height and face (inside or outside) are
+  set in the Inspector. Anchored objects keep their pose relative
+  to the wall's face: they follow the wall, slide along it when moved, take the nearest wall when moved onto another,
+  and are left free when dragged away from every wall or when their wall is deleted. Detach from Wall takes one off.
+  Brushes they carry are not snapped to the grid.
+- Floor Plan (the Create tool's dropdown, Tools > CSG Brush > Create > Floor Plan, GameObject > Brush > Floor Plan, Add
+  Component > CSG Brush > Floor Plan): from the Create tool, click a floor to start the plan there. Draw an outline on the floor
+  and it becomes walls of one thickness and height, one brush per wall with mitred corners. Points snap to the grid
+  and to 45 degree steps (Shift: any grid point); clicking the first point closes the room; Backspace removes the last
+  point; Enter, Escape or a double click finishes. Edit (Inspector, or Edit plan in the Brushes overlay) is the
+  plan's edit mode, like Edit Brush: Vertex and Edge (wall) selection (1, 2), click, Shift, Ctrl and drag rectangle,
+  Ctrl+A, Ctrl+I, and Unity's Move, Rotate and Scale on the selection, on the floor (World / Local / Element
+  orientation; Element lies along the wall). In Vertex mode a + (light blue) adds a point, and dragging
+  from it moves the new point at once; pressing a point and dragging moves it at once (a point of the selection drags the whole selection), even under the gizmo. Delete or Backspace removes the selected points, or the selected walls in Edge
+  mode: a room opens where a wall is removed, and a line split in the middle becomes two plans. Wall thickness (0.2 m, off the grid), height (3 m) and Side (walls outside the
+  line, centred on it or inside it). The walls are generated: hidden, rebuilt when the plan changes (the same brush
+  objects, reshaped), never snapped, and a click on one selects the plan. `BrushGenerator` is the base for components
+  that make brushes from their own data.
 - Icons: a new set in the style of Unity's editor icons (create tools, Vertex / Edge / Face, Select Hidden, Drag
   Rect, Element orientation, the Edit Brush context, the Brushes and Extrude overlays, the Brush component), light and
   dark theme variants at 2x, drawn by `Tools~/icons/generate_icons.py` (Pillow). The overlays no longer show "Br" and

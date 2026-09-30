@@ -319,6 +319,32 @@ def door(ic):
     ic.line([(x0, top), (x0 + dx, top + dy), (x1 + dx, top + dy), (x1, top)])
     ic.line([(x1 + dx, top + dy), (x1 + dx, bottom + dy), (x1, bottom)])
 
+def window(ic):
+    # what the Window brush cuts: a wall with an opening above the floor, face-on like the door
+    x0, x1, top, bottom = 1.5, 11.8, 4.4, 14.9
+    dx, dy = 3.0, -3.0
+    hx0, hx1, hy0, hy1 = x0 + 3.0, x1 - 3.0, top + 3.0, bottom - 3.6
+    hole = [(hx0, hy1), (hx0, hy0), (hx1, hy0), (hx1, hy1)]
+    ic.fill([(x0, top), (x1, top), (x1 + dx, top + dy), (x0 + dx, top + dy)], FILL_TOP)
+    ic.fill([(x1, top), (x1, bottom), (x1 + dx, bottom + dy), (x1 + dx, top + dy)], FILL_RIGHT)
+    ic.fill(hole, FILL_RIGHT)                                                        # the inside of the hole's left and bottom
+    ic.erase([(hx0 + dx, hy1 + dy), (hx0 + dx, hy0 + dy), (hx1 + dx, hy0 + dy), (hx1 + dx, hy1 + dy)])
+    for strip in ([(x0, top), (x1, top), (x1, hy0), (x0, hy0)], [(x0, hy1), (x1, hy1), (x1, bottom), (x0, bottom)],
+                  [(x0, hy0), (hx0, hy0), (hx0, hy1), (x0, hy1)], [(hx1, hy0), (x1, hy0), (x1, hy1), (hx1, hy1)]):
+        ic.fill(strip, FILL_LEFT)                                                    # the wall's face around the hole
+    ic.line([(x0, bottom), (x0, top), (x1, top), (x1, bottom)], closed=True)
+    ic.line(hole, closed=True)
+    ic.line([(x0, top), (x0 + dx, top + dy), (x1 + dx, top + dy), (x1, top)])
+    ic.line([(x1 + dx, top + dy), (x1 + dx, bottom + dy), (x1, bottom)])
+
+def floor_plan(ic):
+    # an outline drawn on the floor, walls rising along its far edges
+    lo = [P(0, 0, 0), P(1, 0, 0), P(1, 0, 1), P(0, 0, 1)]
+    ic.fill(lo, FILL_TOP * 0.5)
+    t, h = 0.15, 0.7
+    prisms(ic, [([(0, 0, True), (1, 0, True), (1, t, True), (t, t, True), (t, 1, True), (0, 1, True)], 0, h)])
+    ic.line([P(1, 0, t), P(1, 0, 1), P(t, 0, 1)])
+
 def mode_vertex(ic):
     cube_edges(ic, DIM)
     for k in "bcdefgh":
@@ -394,7 +420,7 @@ def extrude(ic):
 ICONS = {
     # create tools (names match BrushShape)
     "Box": box, "Wedge": wedge, "Cylinder": cylinder, "Cone": cone, "Sphere": sphere,
-    "Stairs": linear_stairs, "CurvedStairs": curved_stairs, "SpiralStairs": spiral_stairs, "Arch": arch, "Door": door,
+    "Stairs": linear_stairs, "CurvedStairs": curved_stairs, "SpiralStairs": spiral_stairs, "Arch": arch, "Door": door, "Window": window, "FloorPlan": floor_plan,
     # edit toolbar
     "EditBrush": edit_brush, "Mode_Vertex": mode_vertex, "Mode_Edge": mode_edge, "Mode_Face": mode_face,
     "SelectHidden": select_hidden, "DragRect": drag_rect, "ToolHandleElement": handle_element,

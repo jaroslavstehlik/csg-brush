@@ -52,6 +52,12 @@ namespace CsgBrush.Editor
             return new Vector3(Mathf.Abs(x.x) + Mathf.Abs(y.x) + Mathf.Abs(z.x), Mathf.Abs(x.y) + Mathf.Abs(y.y) + Mathf.Abs(z.y), Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
         }
 
+        /// <summary>A brush's snapped size: grid multiples, except a door's or window's, which is its own.</summary>
+        public static Vector3 SnapBrushSize(Brush brush, Vector3 size, float grid) => brush.IsOpening ? size : SnapSize(size, grid);
+
+        /// <summary>A brush's snapped position (see <see cref="SnapPosition"/>): faces on grid lines, as in Hammer or TrenchBroom.</summary>
+        public static Vector3 SnapBrushPosition(Brush brush, Vector3 worldPosition, Vector3 size, Quaternion worldRotation, float grid) => SnapPosition(worldPosition, size, worldRotation, grid);
+
         /// <summary>Snapped world position: the minimum corner lands on the grid for axis-aligned brushes, the pivot otherwise.</summary>
         public static Vector3 SnapPosition(Vector3 worldPosition, Vector3 size, Quaternion worldRotation, float grid)
         {
@@ -78,7 +84,7 @@ namespace CsgBrush.Editor
         public static bool Snap(Brush brush)
         {
             var s = BrushSettings.instance;
-            if (brush == null || !s.snapToGrid) return false;
+            if (brush == null || !s.snapToGrid || brush.IsPlaced) return false; // a generator places its own brushes; doors and windows are placed on walls
             float grid = s.GridMeters;
             var t = brush.transform;
             bool changed = false;
@@ -97,13 +103,13 @@ namespace CsgBrush.Editor
                 t.localScale = desiredScale;
                 changed = true;
             }
-            size = SnapSize(size, grid);
+            size = SnapBrushSize(brush, size, grid);
             if ((size - brush.size).sqrMagnitude > kEpsilon * kEpsilon) { brush.size = size; changed = true; }
 
             var rotation = SnapRotation(t.rotation, s.rotationSnapDegrees);
             if (Quaternion.Angle(rotation, t.rotation) > 1e-3f) { t.rotation = rotation; changed = true; }
 
-            var position = SnapPosition(t.position, size, rotation, grid);
+            var position = SnapBrushPosition(brush, t.position, size, rotation, grid);
             if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
 
             if (changed) BrushSync.NotifyTransformChanged(brush);
@@ -235,6 +241,7 @@ namespace CsgBrush.Editor
             var s = BrushSettings.instance;
             float grid = s.GridMeters;
             var t = brush.transform;
+            if (brush.IsPlaced) { BrushSync.NotifyTransformChanged(brush); t.hasChanged = false; return; } // no snapped preview: placed by its generator, or a door on its wall
             var R = t.rotation; var T = t.position; var lossy = t.lossyScale;
             var Rs = SnapRotation(R, s.rotationSnapDegrees);
             if (brush.HasParametricSize)
@@ -245,8 +252,8 @@ namespace CsgBrush.Editor
                 return;
             }
             var scaledSize = Vector3.Scale(brush.size, new Vector3(Mathf.Abs(lossy.x), Mathf.Abs(lossy.y), Mathf.Abs(lossy.z)));
-            var sizeS = SnapSize(scaledSize, grid);
-            var Ts = SnapPosition(T, sizeS, Rs, grid);
+            var sizeS = SnapBrushSize(brush, scaledSize, grid);
+            var Ts = SnapBrushPosition(brush, T, sizeS, Rs, grid);
             s_Preview[brush] = (Matrix4x4.TRS(Ts, Rs, Vector3.one), Divide(sizeS, brush.size));
             BrushSync.NotifyTransformChanged(brush);
             t.hasChanged = false;
@@ -318,6 +325,7 @@ namespace CsgBrush.Editor
             var s = BrushSettings.instance;
             float grid = s.GridMeters;
             var t = brush.transform;
+            if (brush.IsPlaced) return false;
             if (brush.shape == BrushShape.Custom || brush.HasParametricSize)
             {
                 if (Quaternion.Angle(SnapRotation(t.rotation, s.rotationSnapDegrees), t.rotation) > 1e-3f) return true;
@@ -329,10 +337,10 @@ namespace CsgBrush.Editor
                 foreach (var v in poly.vertices) { var w = t.TransformPoint(v); if ((Round(w, grid) - w).sqrMagnitude > kEpsilon * kEpsilon) return true; }
                 return false;
             }
-            if ((SnapSize(brush.size, grid) - brush.size).sqrMagnitude > kEpsilon * kEpsilon) return true;
+            if ((SnapBrushSize(brush, brush.size, grid) - brush.size).sqrMagnitude > kEpsilon * kEpsilon) return true;
             if (Quaternion.Angle(SnapRotation(t.rotation, s.rotationSnapDegrees), t.rotation) > 1e-3f) return true;
             if ((t.lossyScale - Vector3.one).sqrMagnitude > 1e-4f) return true;
-            return (SnapPosition(t.position, brush.size, t.rotation, grid) - t.position).sqrMagnitude > kEpsilon * kEpsilon;
+            return (SnapBrushPosition(brush, t.position, brush.size, t.rotation, grid) - t.position).sqrMagnitude > kEpsilon * kEpsilon;
         }
 
         /// <summary>An ancestor that rotates by other than 90 degrees or scales makes the grid meaningless for its brushes.</summary>
@@ -373,7 +381,7 @@ namespace CsgBrush.Editor
             for (int i = 0; i < active.Count; i++)
             {
                 var brush = active[i];
-                if (brush == null) continue;
+                if (brush == null || brush.IsPlaced) continue; // placed by its generator (or its wall), whatever the rotation
                 var p = TransformedParent(brush);
                 if (p != null && set.Add(p)) s_Parents.Add(p);
             }

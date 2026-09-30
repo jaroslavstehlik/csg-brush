@@ -114,6 +114,7 @@ namespace CsgBrush.Editor
         State state;
         Vector3 origin, opposite, normal; Quaternion planeRotation; float height;
         Vector3 hoverPoint; bool hoverValid;
+        FloorPlan wallPlan;
         int controlId;
         // Not cached: Unity keeps tool instances across domain reloads, and a cached GUIContent would keep an old tooltip.
         public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get(Shape.ToString()), Title);
@@ -176,7 +177,6 @@ namespace CsgBrush.Editor
                 st.stepWidth = Mathf.Max(grid > 0f ? grid : 0.01f, BrushSnap.Round(targetRo - st.innerRadius, grid));
             }
             if (shape == BrushShape.Arch) { st.curveAngle = Mathf.Clamp(s.newArchAngle, 1f, 180f); NewBrushParameters(out _, out p.wallThickness); }
-            if (shape == BrushShape.Door) { p.doorSide = s.newDoorSide > 0f ? s.ToMeters(s.newDoorSide) : grid; p.doorTop = s.newDoorTop > 0f ? s.ToMeters(s.newDoorTop) : grid; }
             p.stairs = st;
             return p;
         }
@@ -190,6 +190,7 @@ namespace CsgBrush.Editor
             controlId = GUIUtility.GetControlID(FocusType.Passive);
             HandleUtility.AddDefaultControl(controlId);
             if (e.alt || Tools.viewToolActive) return;
+            if (IsOpening(Shape)) { OpeningGUI(e); return; }
 
             if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
             {
@@ -214,6 +215,8 @@ namespace CsgBrush.Editor
                     {
                         GUIUtility.hotControl = controlId;
                         FindPlane(e.mousePosition, out _, out normal);
+                        var pressed = BrushHooks.PickBrushSurface(e.mousePosition, out _, out _);
+                        wallPlan = pressed != null && Mathf.Abs(normal.y) < 0.5f ? pressed.generatedBy as FloorPlan : null; // drawn on a plan's wall: rides on it
                         normal = BrushDraw.Cardinal(normal);
                         planeRotation = BrushDraw.PlaneRotation(normal);
                         origin = hoverPoint; opposite = origin; height = 0f;
@@ -261,8 +264,40 @@ namespace CsgBrush.Editor
             }
         }
 
+        /// <summary>Doors and windows are placed with one click, at a size of their own: on a floor plan's wall, into a brush's side, or on the floor.</summary>
+        public static bool IsOpening(BrushShape shape) => shape == BrushShape.Door || shape == BrushShape.Window;
+
+        WallAnchors.Placement m_Opening; bool m_OpeningValid;
+
+        void OpeningGUI(Event e)
+        {
+            if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape) { ToolManager.RestorePreviousPersistentTool(); e.Use(); return; }
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDown)
+            {
+                m_OpeningValid = WallAnchors.Find(HandleUtility.GUIPointToWorldRay(e.mousePosition), Shape, out m_Opening);
+                if (e.type == EventType.MouseMove) SceneView.RepaintAll();
+            }
+            if (e.type == EventType.MouseDown && e.button == 0 && m_OpeningValid && HandleUtility.nearestControl == controlId)
+            {
+                var brush = WallAnchors.Create(Shape, m_Opening);
+                BrushApi.ForceUpdate();
+                Selection.activeGameObject = brush.gameObject;
+                e.Use();
+            }
+            if (e.type == EventType.Repaint && m_OpeningValid)
+            {
+                var poly = BrushPolyhedron.Box(m_Opening.size);
+                var m = Matrix4x4.TRS(m_Opening.position, m_Opening.rotation, Vector3.one);
+                Handles.color = m_Opening.plan != null ? new Color(1f, 0.78f, 0.2f, 0.95f) : new Color(1f, 0.4f, 0.2f, 0.9f); // on a plan's wall: the plan's colour
+                Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+                foreach (var face in poly.faces)
+                    for (int i = 0; i < face.indices.Length; i++)
+                        Handles.DrawLine(m.MultiplyPoint3x4(poly.vertices[face.indices[i]]), m.MultiplyPoint3x4(poly.vertices[face.indices[(i + 1) % face.indices.Length]]), 2f);
+            }
+        }
+
         /// <summary>The surface under the mouse: a brush face, else the Scene view grid (see <see cref="GridPlane"/>). Nothing past the grid's horizon.</summary>
-        static bool FindPlane(Vector2 mouse, out Vector3 point, out Vector3 normal)
+        internal static bool FindPlane(Vector2 mouse, out Vector3 point, out Vector3 normal)
         {
             if (BrushHooks.PickBrushSurface(mouse, out point, out normal) != null) return true;
             var view = SceneView.lastActiveSceneView;
@@ -368,10 +403,11 @@ namespace CsgBrush.Editor
             if (brush.SupportsHollow && s.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
             if (Operation != BrushOperation.Add) BrushApi.SetOperation(brush, Operation);
             BrushSync.Ensure(brush);
+            if (wallPlan != null) WallAnchors.Attach(brush.gameObject, wallPlan);
             Undo.CollapseUndoOperations(group);
             BrushApi.ForceUpdate();
             Selection.activeGameObject = brush.gameObject;
-            state = State.Idle; hoverValid = false;
+            state = State.Idle; hoverValid = false; wallPlan = null;
             SceneView.RepaintAll();
         }
     }
@@ -465,5 +501,13 @@ namespace CsgBrush.Editor
         public override BrushShape Shape => BrushShape.Door;
         public override string Title => "Door Brush";
         [MenuItem("Tools/CSG Brush/Create/Door", false, 10)] static void Menu() => ToolManager.SetActiveTool<CreateDoorBrushTool>();
+    }
+
+    [EditorTool("Window Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 10)]
+    public sealed class CreateWindowBrushTool : BrushCreateTool
+    {
+        public override BrushShape Shape => BrushShape.Window;
+        public override string Title => "Window Brush";
+        [MenuItem("Tools/CSG Brush/Create/Window", false, 11)] static void Menu() => ToolManager.SetActiveTool<CreateWindowBrushTool>();
     }
 }

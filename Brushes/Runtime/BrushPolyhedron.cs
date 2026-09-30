@@ -340,31 +340,6 @@ namespace CsgBrush
             return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
         }
 
-        /// <summary>
-        /// A door frame filling its box (ProBuilder's Door): two sides of a width and a top of a height around an opening
-        /// that reaches the floor. Three closed convex blocks (Face.group), like the arch's segments. Centred on the transform.
-        /// </summary>
-        public static BrushPolyhedron Door(Vector3 size, float side, float top)
-        {
-            float a = Mathf.Max(0.001f, size.x * 0.5f), h = Mathf.Max(0.001f, size.y), d = Mathf.Max(0.001f, size.z) * 0.5f;
-            float s = Mathf.Clamp(side, 0.001f, a - 0.0005f), t = Mathf.Clamp(top, 0.001f, h - 0.0005f);
-            float y0 = -h * 0.5f, y1 = h * 0.5f;
-            var verts = new List<Vector3>(); var faces = new List<Face>();
-            void Block(int group, float x0, float x1, float b0, float b1)
-            {
-                int v = verts.Count;
-                foreach (var z in new[] { -d, d })
-                {
-                    verts.Add(new Vector3(x0, b0, z)); verts.Add(new Vector3(x1, b0, z));
-                    verts.Add(new Vector3(x1, b1, z)); verts.Add(new Vector3(x0, b1, z));
-                }
-                AddBlock(verts, faces, group, new[] { v, v + 1, v + 2, v + 3 }, new[] { v + 4, v + 5, v + 6, v + 7 });
-            }
-            Block(0, -a, -a + s, y0, y1);         // left side
-            Block(1, a - s, a, y0, y1);           // right side
-            Block(2, -a + s, a - s, y1 - t, y1);  // top, between the sides
-            return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
-        }
 
         /// <summary>The shape with its lowest point at y = 0: the transform is the axis at floor level whatever the first step does.</summary>
         static BrushPolyhedron OnFloor(List<Vector3> verts, List<Face> faces)
