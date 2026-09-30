@@ -24,6 +24,8 @@ namespace CsgBrush
         [InspectorName("Spiral Stairs")] SpiralStairs = 8,
         /// <summary>An arch filling its box: a ring of segments between an outer and an inner ellipse, standing on the floor.</summary>
         Arch = 9,
+        /// <summary>A door frame filling its box: two sides and a top around an opening down to the floor.</summary>
+        Door = 10,
     }
 
     public enum BrushOperation
@@ -39,6 +41,7 @@ namespace CsgBrush
     /// metres; the Inspector shows them in the world preset's units.
     /// </summary>
     [AddComponentMenu("Brush")]
+    [Icon("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/Brush.png")]
     [DisallowMultipleComponent]
     [SelectionBase]
     [ExecuteAlways]
@@ -78,20 +81,23 @@ namespace CsgBrush
         [Tooltip("Hollow walls, and the thickness of an arch: metres.")]
         public float wallThickness = 0.5f;
 
+        [Tooltip("Door: width of each side of the frame, metres.")]
+        public float doorSide = 0.5f;
+        [Tooltip("Door: height of the top of the frame, metres.")]
+        public float doorTop = 0.5f;
+
         [Tooltip("Cylinder and cone; segments of an arch.")]
         [Min(3)] public int sides = 16;
         [Tooltip("Sphere: 1 is coarse, 5 is smooth.")]
         [Range(1, 5)] public int tessellation = 2;
-        [Tooltip("Stairs: metres.")]
-        public float stepHeight = 0.5f;
-        [Tooltip("Linear stairs: length of each step along the run, metres.")]
-        public float stepDepth = 1f;
+        [Tooltip("Stairs: height of a step, metres. The number of steps comes from the stairs' height.")]
+        public float stepHeight = 0.25f;
         [Tooltip("Curved and spiral stairs: radius of the inner column the steps wrap around, metres.")]
         public float innerRadius = 0.5f;
         [Tooltip("Curved and spiral stairs: width of the steps out from the column, metres.")]
         public float stepWidth = 1.5f;
         [Tooltip("Spiral stairs: thickness of each step slab, metres.")]
-        public float stepThickness = 0.25f;
+        public float stepThickness = 0.1f;
         [Tooltip("Curved stairs: total angle the steps cover; arch: the angle it spans, up to 180. Degrees.")]
         public float curveAngle = 90f;
         [Tooltip("Curved and spiral stairs.")]
@@ -111,6 +117,49 @@ namespace CsgBrush
 
         /// <summary>Set by the editor layer; called when the component needs to push its values into the generated structure.</summary>
         public static Action<Brush> SyncRequested;
+
+        // ------------------------------------------------------------------ registry
+
+        static readonly List<Brush> s_Active = new List<Brush>();
+        [NonSerialized] int m_ActiveSlot; // index in s_Active plus one; 0 when not registered
+        [NonSerialized] Transform m_Transform;
+
+        /// <summary>Editor-side data derived from the brush (pick shape, build key); dropped whenever the brush changes. Lives and dies with the brush, so it needs no dictionary and no cleanup.</summary>
+        [NonSerialized] internal object editorCache;
+
+        /// <summary>The brush's transform without a call into Unity: for loops over every brush each frame.</summary>
+        public Transform CachedTransform => m_Transform != null ? m_Transform : (m_Transform = transform);
+
+        /// <summary>
+        /// Every enabled brush on an active GameObject: in all loaded scenes, in Prefab Mode and in prefab contents
+        /// loaded for baking, never in prefab assets. Kept by OnEnable and OnDisable, so a domain reload rebuilds it and
+        /// scene unloads, deletes and deactivation empty it. Unordered. Iterate by index: a foreach allocates.
+        /// </summary>
+        public static IReadOnlyList<Brush> Active => s_Active;
+
+        /// <summary>Incremented whenever a brush joins or leaves <see cref="Active"/>; lets callers cache what they derive from it.</summary>
+        public static int ActiveVersion { get; private set; }
+
+        void Register()
+        {
+            if (m_ActiveSlot != 0) return;
+            m_Transform = transform;
+            s_Active.Add(this);
+            m_ActiveSlot = s_Active.Count;
+            ActiveVersion++;
+        }
+
+        void Unregister()
+        {
+            int i = m_ActiveSlot - 1;
+            if (i < 0) return;
+            m_ActiveSlot = 0;
+            if (i >= s_Active.Count || !ReferenceEquals(s_Active[i], this)) { s_Active.Remove(this); ActiveVersion++; return; } // defensive: never out of step
+            int last = s_Active.Count - 1;
+            if (i != last) { var moved = s_Active[last]; s_Active[i] = moved; moved.m_ActiveSlot = i + 1; } // swap-remove: O(1)
+            s_Active.RemoveAt(last);
+            ActiveVersion++;
+        }
 
         public Vector3 ClampedSize
         {
@@ -213,7 +262,6 @@ namespace CsgBrush
             if (size.z < 0f) size.z = 0f;
             if (wallThickness < 0f) wallThickness = 0f;
             if (stepHeight < 0.001f) stepHeight = 0.001f;
-            if (stepDepth < 0.001f) stepDepth = 0.001f;
             if (innerRadius < 0f) innerRadius = 0f;
             if (stepWidth < 0.001f) stepWidth = 0.001f;
             if (stepThickness < 0.001f) stepThickness = 0.001f;
@@ -225,8 +273,11 @@ namespace CsgBrush
 
         void OnEnable()
         {
+            Register();
             SyncRequested?.Invoke(this);
         }
+
+        void OnDisable() => Unregister();
 
         void OnDrawGizmosSelected()
         {

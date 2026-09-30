@@ -17,7 +17,7 @@ namespace CsgBrush.Tests
                 case 1: return BrushPolyhedron.Wedge(new Vector3(2f, 1f, 3f));
                 case 2: return BrushPolyhedron.Prism(new Vector3(2f, 2f, 2f), 8, 1f);
                 case 3: return BrushPolyhedron.Prism(new Vector3(2f, 2f, 2f), 6, 0f);
-                default: return BrushPolyhedron.Stairs(new Vector3(2f, 1f, 2f), 0.5f, 1f);
+                default: return BrushPolyhedron.Stairs(new Vector3(2f, 1f, 2f), 0.5f);
             }
         }
 
@@ -84,7 +84,7 @@ namespace CsgBrush.Tests
             var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
             var other = BrushApi.Create(BrushShape.Box, new Vector3(5f, 0f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = Object.FindFirstObjectByType<CsgGroup>();
+            var model = Object.FindFirstObjectByType<BrushGroup>();
             int before = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
             // a bow-tie face, as a broken edit would leave it
             Undo.IncrementCurrentGroup();
@@ -158,7 +158,7 @@ namespace CsgBrush.Tests
             BrushSettings.instance.extrudeDistance = 0f; BrushSettings.instance.extrudeIndividual = true;
             var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = Object.FindFirstObjectByType<CsgGroup>();
+            var model = Object.FindFirstObjectByType<BrushGroup>();
             var mesh = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>();
             int before = mesh.sharedMesh.vertexCount;
             Selection.activeGameObject = brush.gameObject;
@@ -242,7 +242,7 @@ namespace CsgBrush.Tests
             Assert.IsTrue(BrushApi.ConvertToCustom(brush));
             brush.polyhedron = U(); BrushSync.Ensure(brush);
             BrushApi.ForceUpdate();
-            var model = Object.FindFirstObjectByType<CsgGroup>();
+            var model = Object.FindFirstObjectByType<BrushGroup>();
             var mesh = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>();
             int before = mesh.sharedMesh.vertexCount;
             int rightInner = -1, leftInner = -1;
@@ -301,7 +301,7 @@ namespace CsgBrush.Tests
             BrushSettings.instance.snapToGrid = true;
             var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = Object.FindFirstObjectByType<CsgGroup>();
+            var model = Object.FindFirstObjectByType<BrushGroup>();
             int before = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
             Undo.IncrementCurrentGroup();
             var remap = BrushApi.ExtrudeFaces(brush, new[] { 1 }, 1f, true);

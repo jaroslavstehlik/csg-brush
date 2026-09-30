@@ -23,10 +23,11 @@ namespace CsgBrush.Editor
             if (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
                 var d = BrushGeometry.ShapeParams.Default(sizeMeters);
-                brush.stepHeight = d.stepHeight; brush.stepDepth = d.stepDepth;
+                brush.stepHeight = d.stepHeight;
                 brush.innerRadius = d.stairs.innerRadius; brush.stepWidth = d.stairs.stepWidth; brush.stepThickness = d.stairs.stepThickness;
                 brush.curveAngle = d.stairs.curveAngle; brush.numSteps = d.stairs.numSteps; brush.stepsPer360 = d.stairs.stepsPer360;
             }
+            if (shape == BrushShape.Door) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.doorSide = p.doorSide; brush.doorTop = p.doorTop; }
             if (shape == BrushShape.Arch) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.curveAngle = p.stairs.curveAngle; brush.wallThickness = p.wallThickness; brush.sides = p.sides; }
             foreach (var t in ModuleTypes()) if (BrushSettings.instance.newModules.Contains(t.FullName)) Undo.AddComponent(go, t); // the project's modules for new brushes
             BrushSync.Ensure(brush);
@@ -112,11 +113,10 @@ namespace CsgBrush.Editor
             BrushSync.Ensure(brush);
         }
 
-        public static void SetStairs(Brush brush, float stepHeightMeters, float stepDepthMeters)
+        public static void SetStairs(Brush brush, float stepHeightMeters)
         {
             Undo.RecordObject(brush, "Change stairs");
             brush.stepHeight = stepHeightMeters;
-            brush.stepDepth = stepDepthMeters;
             BrushSync.Ensure(brush);
         }
 
@@ -149,6 +149,29 @@ namespace CsgBrush.Editor
             int last = t.parent != null ? t.parent.childCount - 1 : t.gameObject.scene.rootCount - 1;
             if (t.GetSiblingIndex() == last) return;
             Undo.SetSiblingIndex(t, last, "Brush to last");
+            BrushSync.RequestFullUpdate(brush);
+        }
+
+        /// <summary>The next sibling up (-1) or down (1) that the Hierarchy shows, or null at the end; hidden generated objects are skipped.</summary>
+        public static Transform VisibleNeighbour(Brush brush, int direction)
+        {
+            var t = brush.transform;
+            var roots = t.parent == null ? t.gameObject.scene.GetRootGameObjects() : null;
+            int count = t.parent != null ? t.parent.childCount : roots.Length;
+            for (int i = t.GetSiblingIndex() + direction; i >= 0 && i < count; i += direction)
+            {
+                var sibling = t.parent != null ? t.parent.GetChild(i) : roots[i].transform;
+                if ((sibling.gameObject.hideFlags & HideFlags.HideInHierarchy) == 0) return sibling;
+            }
+            return null;
+        }
+
+        /// <summary>One step up (-1) or down (1), past the next sibling the Hierarchy shows.</summary>
+        public static void Step(Brush brush, int direction)
+        {
+            var neighbour = VisibleNeighbour(brush, direction);
+            if (neighbour == null) return;
+            Undo.SetSiblingIndex(brush.transform, neighbour.GetSiblingIndex(), direction < 0 ? "Brush up" : "Brush down");
             BrushSync.RequestFullUpdate(brush);
         }
 

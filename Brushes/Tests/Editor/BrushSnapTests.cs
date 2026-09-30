@@ -212,5 +212,19 @@ namespace CsgBrush.Tests
             BrushApi.ForceUpdate();
             Assert.AreEqual(new Vector3(1.5f, 0f, 0f), b.transform.position, "redo lands on the grid again");
         }
+
+        [Test]
+        public void UnitysVisibleGridFollowsTheBrushGrid()
+        {
+            var s = BrushSettings.instance; int grid = s.gridIndex;
+            try
+            {
+                s.SetGridIndex(1);
+                Assert.AreEqual(s.GridMeters, UnityEditor.EditorSnapSettings.gridSize.x, 1e-5f);
+                s.SetGridIndex(3);
+                Assert.AreEqual(Vector3.one * s.GridMeters, UnityEditor.EditorSnapSettings.gridSize, "the Scene view grid shows the brush grid");
+            }
+            finally { s.SetGridIndex(grid); }
+        }
     }
 }

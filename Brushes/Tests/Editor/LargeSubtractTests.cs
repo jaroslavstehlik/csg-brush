@@ -22,7 +22,7 @@ namespace CsgBrush.Tests
         static List<Vector3> RenderVertices()
         {
             var list = new List<Vector3>();
-            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
                 {
                     if (mf.sharedMesh == null || mf.GetComponent<MeshCollider>() != null) continue;
@@ -34,7 +34,7 @@ namespace CsgBrush.Tests
         static List<Vector3> ColliderVertices()
         {
             var list = new List<Vector3>();
-            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var container = model.transform.Find(ConvexColliderSettings.ContainerName);
                 if (container == null) continue;

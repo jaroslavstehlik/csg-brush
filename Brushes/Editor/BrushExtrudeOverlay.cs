@@ -9,6 +9,7 @@ namespace CsgBrush.Editor
     /// Extrude settings, shown with brush edit mode: distance and whole selection or individual faces. The Extrude
     /// button in the Brushes overlay applies them. The faces stay selected, so a second press extrudes again.
     /// </summary>
+    [Icon(BrushIcons.Folder + "Extrude.png")]
     [Overlay(typeof(SceneView), PanelId, "Extrude", false)]
     public sealed class BrushExtrudeOverlay : Overlay
     {

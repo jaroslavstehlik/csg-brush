@@ -162,7 +162,7 @@ namespace CsgBrush.Tests
         [Test]
         public void RenderMeshesTakeTheirModelsTagAndStaticFlags()
         {
-            var modelGo = new GameObject("Level"); var model = modelGo.AddComponent<CsgGroup>();
+            var modelGo = new GameObject("Level"); var model = modelGo.AddComponent<BrushGroup>();
             modelGo.tag = "Respawn"; GameObjectUtility.SetStaticEditorFlags(modelGo, StaticEditorFlags.ContributeGI);
             BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, modelGo.transform);
             BrushApi.ForceUpdate();
@@ -192,7 +192,7 @@ namespace CsgBrush.Tests
                 Assert.AreEqual(material, settings.defaultMaterial, "and remembered in the settings");
                 var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
                 BrushApi.ForceUpdate();
-                var model = Object.FindFirstObjectByType<CsgGroup>();
+                var model = Object.FindFirstObjectByType<BrushGroup>();
                 Assert.AreEqual(material, BrushCsg.MeshObject(model, false).GetComponent<MeshRenderer>().sharedMaterial, "brushes without a material render with it");
             }
             finally { settings.defaultMaterial = saved; }

@@ -9,9 +9,9 @@ using UnityEngine.TestTools;
 
 namespace CsgBrush.Tests
 {
-    public class CsgGroupTests
+    public class BrushGroupTests
     {
-        const string ScenePathA = "Assets/CsgGroupTestA.unity", ScenePathB = "Assets/CsgGroupTestB.unity", PrefabPath = "Assets/CsgGroupTestPrefab.prefab", StampPath = "Assets/CsgGroupTestStamp.prefab";
+        const string ScenePathA = "Assets/BrushGroupTestA.unity", ScenePathB = "Assets/BrushGroupTestB.unity", PrefabPath = "Assets/BrushGroupTestPrefab.prefab", StampPath = "Assets/BrushGroupTestStamp.prefab";
 
         [TearDown]
         public void Clean()
@@ -20,7 +20,7 @@ namespace CsgBrush.Tests
             foreach (var p in new[] { ScenePathA, ScenePathB, PrefabPath, StampPath }) AssetDatabase.DeleteAsset(p);
         }
 
-        static int Verts(CsgGroup g)
+        static int Verts(BrushGroup g)
         {
             var t = BrushCsg.MeshObject(g, false);
             return t != null && t.GetComponent<MeshFilter>().sharedMesh != null ? t.GetComponent<MeshFilter>().sharedMesh.vertexCount : 0;
@@ -50,7 +50,7 @@ namespace CsgBrush.Tests
 
         static GameObject BuildGroupWithBrushes(string name)
         {
-            var root = new GameObject(name); root.AddComponent<CsgGroup>();
+            var root = new GameObject(name); root.AddComponent<BrushGroup>();
             BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, root.transform, "Box");
             BrushApi.Create(BrushShape.Cylinder, new Vector3(4f, 0f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity, root.transform, "Cylinder");
             BrushApi.ForceUpdate();
@@ -114,7 +114,7 @@ namespace CsgBrush.Tests
             var root = BuildGroupWithBrushes("Level");
             var grouped = root.transform.Find("Box").GetComponent<Brush>();
             BrushCsg.BakedBy(grouped, out var groupRef);
-            Assert.AreEqual(root.GetComponent<CsgGroup>(), groupRef);
+            Assert.AreEqual(root.GetComponent<BrushGroup>(), groupRef);
             // a prefab without a group: a stamp
             var stampRoot = new GameObject("Doorway");
             BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(1f, 2f, 1f), Quaternion.identity, stampRoot.transform, "Cut");
@@ -147,7 +147,7 @@ namespace CsgBrush.Tests
                 // debugging shows them, not editable
                 settings.showGenerated = true;
                 BrushSync.ApplyVisibility();
-                Assert.AreEqual(HideFlags.NotEditable, BrushCsg.MeshObject(root.GetComponent<CsgGroup>(), false).gameObject.hideFlags);
+                Assert.AreEqual(HideFlags.NotEditable, BrushCsg.MeshObject(root.GetComponent<BrushGroup>(), false).gameObject.hideFlags);
             }
             finally { settings.showGenerated = saved; BrushSync.ApplyVisibility(); }
         }
@@ -157,15 +157,15 @@ namespace CsgBrush.Tests
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var sceneGroup = BuildGroupWithBrushes("Level");
-            Assert.IsNull(BrushPrefabBaking.PrefabPathOf(sceneGroup.GetComponent<CsgGroup>()), "a scene group has no prefab to rebake");
+            Assert.IsNull(BrushPrefabBaking.PrefabPathOf(sceneGroup.GetComponent<BrushGroup>()), "a scene group has no prefab to rebake");
             PrefabUtility.SaveAsPrefabAsset(sceneGroup, PrefabPath);
             Object.DestroyImmediate(sceneGroup);
             var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
-            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(asset.GetComponent<CsgGroup>()));
+            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(asset.GetComponent<BrushGroup>()));
             var inst = (GameObject)PrefabUtility.InstantiatePrefab(asset);
-            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(inst.GetComponent<CsgGroup>()));
+            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(inst.GetComponent<BrushGroup>()));
             // a forced rebake of a prefab whose meshes were lost brings them back
-            BrushPrefabBaking.Bake(BrushPrefabBaking.PrefabPathOf(inst.GetComponent<CsgGroup>()));
+            BrushPrefabBaking.Bake(BrushPrefabBaking.PrefabPathOf(inst.GetComponent<BrushGroup>()));
             Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath));
         }
 
@@ -174,7 +174,7 @@ namespace CsgBrush.Tests
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = BuildGroupWithBrushes("Level");
-            var group = root.GetComponent<CsgGroup>();
+            var group = root.GetComponent<BrushGroup>();
             var before = BrushCsg.MeshObject(group, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
             BrushCsg.Rebake(group);
             Assert.AreEqual(2, BrushCsg.LastBuiltSolids, "every brush solid built again, none from the cache");
@@ -234,7 +234,7 @@ namespace CsgBrush.Tests
                 for (int i = 0; i < 5; i++) yield return null; // bakes queued by earlier tests for the same path land first
                 BrushSettings.instance.snapToGrid = true; BrushSettings.instance.gridIndex = BrushSettings.instance.gridSizes.Length - 1; // the coarsest step: the brush below is surely off it
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-                var root = new GameObject("Prop"); root.AddComponent<CsgGroup>();
+                var root = new GameObject("Prop"); root.AddComponent<BrushGroup>();
                 root.transform.position = new Vector3(116.75f, 29.75f, 34f);
                 var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(4.5f, 2.5f, 4f), Quaternion.identity, root.transform, "Box");
                 var offGrid = new Vector3(0.63f, 0.25f, -0.86f); // as prefabs made before snapping, or on another grid, can be
@@ -250,6 +250,45 @@ namespace CsgBrush.Tests
                 Assert.IsTrue(EditorUtility.IsPersistent(asset.GetComponentInChildren<MeshFilter>(true).sharedMesh), "the asset keeps its baked mesh: its group is not built in place");
             }
             finally { BrushSettings.instance.snapToGrid = snap; BrushSettings.instance.gridIndex = gridIndex; }
+        }
+
+        [Test]
+        public void ABrushStepsPastItsVisibleNeighbourAndOverHiddenOnes()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var root = BuildGroupWithBrushes("Level"); // Box, Cylinder, then the hidden mesh and collider objects
+            var box = root.transform.Find("Box").GetComponent<Brush>();
+            var cylinder = root.transform.Find("Cylinder").GetComponent<Brush>();
+            Assert.AreEqual(0, box.transform.GetSiblingIndex());
+            BrushApi.Step(box, 1);
+            Assert.AreEqual(0, cylinder.transform.GetSiblingIndex(), "down one: past the cylinder");
+            Assert.AreEqual(1, box.transform.GetSiblingIndex());
+            BrushApi.Step(box, 1);
+            Assert.AreEqual(1, box.transform.GetSiblingIndex(), "only hidden generated objects below: it stays");
+            Undo.IncrementCurrentGroup();
+            BrushApi.Step(box, -1);
+            Assert.AreEqual(0, box.transform.GetSiblingIndex(), "up one");
+            Undo.PerformUndo();
+            Assert.AreEqual(1, box.transform.GetSiblingIndex(), "a step is undoable");
+        }
+
+        [Test]
+        public void ASubtractiveBrushIsClickableOnlyWhileCutsAreShown()
+        {
+            bool cuts = BrushSettings.instance.showCuts;
+            try
+            {
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var cut = BrushApi.Create(BrushShape.Box, new Vector3(0f, 0f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity, null, "Cut");
+                cut.operation = BrushOperation.Subtract;
+                var ray = new Ray(new Vector3(0f, 0f, -10f), Vector3.forward);
+                BrushSettings.instance.showCuts = false;
+                Assert.IsNull(BrushHooks.PickBrushSurface(ray, out _, out _), "hidden cut: the click goes through");
+                BrushSettings.instance.showCuts = true;
+                Assert.AreEqual(cut, BrushHooks.PickBrushSurface(ray, out var point, out _), "shown cut: clickable");
+                Assert.AreEqual(-1f, point.z, 1e-4f, "on its front face");
+            }
+            finally { BrushSettings.instance.showCuts = cuts; }
         }
     }
 }

@@ -44,7 +44,7 @@ namespace CsgBrush.Tests
                 if (inner != null) { var ib = inner.Transformed(world).Bounds(); sb.AppendLine("  hollow b=" + Q(ib.center) + "/" + Q(ib.size)); }
                 sb.AppendLine(BrushLine(b));
             }
-            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var meshes = new List<string>();
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
@@ -138,7 +138,7 @@ namespace CsgBrush.Tests
                 foreach (var v in b.polyhedron.vertices) ph.Append(Q(v));
                 poly = ph.ToString();
             }
-            return "brush " + HierarchyPath(b.transform) + " #" + b.transform.GetSiblingIndex() + " " + b.shape + poly + " " + b.operation + " " + b.collision + " size=" + Q(b.size) + " hollow=" + b.hollow + " wall=" + Q(b.wallThickness) + " sides=" + b.sides + " tess=" + b.tessellation + " step=" + Q(b.stepHeight) + "/" + Q(b.stepDepth) + " mat=" + (b.material ? b.material.name : "-") + " pos=" + Q(b.transform.position) + " rot=" + Q(b.transform.rotation.eulerAngles) + " scl=" + Q(b.transform.localScale) + " children=" + children;
+            return "brush " + HierarchyPath(b.transform) + " #" + b.transform.GetSiblingIndex() + " " + b.shape + poly + " " + b.operation + " " + b.collision + " size=" + Q(b.size) + " hollow=" + b.hollow + " wall=" + Q(b.wallThickness) + " sides=" + b.sides + " tess=" + b.tessellation + " step=" + Q(b.stepHeight) + "x" + b.numSteps + " mat=" + (b.material ? b.material.name : "-") + " pos=" + Q(b.transform.position) + " rot=" + Q(b.transform.rotation.eulerAngles) + " scl=" + Q(b.transform.localScale) + " children=" + children;
         }
 
         /// <summary>A generated render mesh that is actually shown.</summary>
@@ -286,7 +286,7 @@ namespace CsgBrush.Tests
         {
             bool any = false;
             var b = new Bounds();
-            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var container = model.transform.Find(ConvexColliderSettings.ContainerName);
                 if (container == null) continue;
@@ -325,7 +325,7 @@ namespace CsgBrush.Tests
         {
             BrushApi.Create(BrushShape.Box, Vector3.zero, Vector3.one, Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
+            var model = UnityEngine.Object.FindFirstObjectByType<BrushGroup>();
             var mr = BrushCsg.MeshObject(model, false).GetComponent<MeshRenderer>();
             Assert.AreEqual(1, mr.sharedMaterials.Length);
             var mat = mr.sharedMaterials[0];
@@ -343,10 +343,11 @@ namespace CsgBrush.Tests
             Physics.SyncTransforms();
             var bounds = ColliderBounds();
             Assert.Greater(bounds.size.magnitude, 0f, "no colliders generated for " + shape);
-            // the transform is the column axis at floor level
-            Assert.AreEqual(position.y, bounds.min.y, 0.05f, shape + " floor at the transform");
+            // the transform is the column axis at floor level; a spiral's first tread hangs its thickness below one step height
+            float lowest = shape == BrushShape.SpiralStairs ? brush.stepHeight - brush.stepThickness : 0f;
+            Assert.AreEqual(position.y + lowest, bounds.min.y, 0.05f, shape + " floor at the transform");
             var grown = bounds; grown.Expand(0.05f);
-            Assert.IsTrue(grown.Contains(position), shape + " axis inside the footprint " + bounds);
+            Assert.IsTrue(grown.Contains(new Vector3(position.x, bounds.center.y, position.z)), shape + " axis inside the footprint " + bounds);
             Assert.AreEqual(brush.size.ToString("F1"), bounds.size.ToString("F1"), "size follows the parameters");
             Assert.AreEqual(brush.numSteps, UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "one convex collider per step");
             Assert.Greater(RenderVertexCount(), 0, "renders");
@@ -368,12 +369,12 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void BrushesOnDifferentLayersAreSeparateCsgGroups()
+        public void BrushesOnDifferentLayersAreCombinedSeparately()
         {
             const int other = 8;
             var wall = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1.5f, 0f), new Vector3(8f, 3f, 0.5f), Quaternion.identity);
             BrushApi.ForceUpdate();
-            var model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
+            var model = UnityEngine.Object.FindFirstObjectByType<BrushGroup>();
             int wallAlone = BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
             // a door on another layer does not carve the wall
             var door = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(1.2f, 2f, 1f), Quaternion.identity);
@@ -458,7 +459,7 @@ namespace CsgBrush.Tests
             Record("collision trigger", () => BrushApi.SetCollision(a, ColliderKind.Trigger));
             Record("box to cylinder", () => BrushApi.SetShape(a, BrushShape.Cylinder));
             Record("cylinder to stairs", () => BrushApi.SetShape(a, BrushShape.Stairs));
-            Record("stairs steps", () => BrushApi.SetStairs(a, 0.25f, 0.5f));
+            Record("stairs steps", () => BrushApi.SetStairs(a, 0.25f));
             Record("stairs to box", () => BrushApi.SetShape(a, BrushShape.Box));
             Record("door to first", () => BrushApi.ToFirst(c));
             Record("door to last", () => BrushApi.ToLast(c));
@@ -474,8 +475,8 @@ namespace CsgBrush.Tests
         static float PieceWidthX(Brush brush)
         {
             // width along x of the largest collider piece produced for this brush's model
-            var model = brush.GetComponentInParent<CsgGroup>();
-            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
+            var model = brush.GetComponentInParent<BrushGroup>();
+            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<BrushGroup>();
             var container = model.transform.Find(ConvexColliderSettings.ContainerName);
             float best = 0f;
             foreach (var bc in container.GetComponentsInChildren<BoxCollider>(true)) best = Mathf.Max(best, bc.size.x * bc.transform.lossyScale.x);
@@ -484,8 +485,8 @@ namespace CsgBrush.Tests
 
         static float RenderWidthX(Brush brush)
         {
-            var model = brush.GetComponentInParent<CsgGroup>();
-            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
+            var model = brush.GetComponentInParent<BrushGroup>();
+            if (model == null) model = UnityEngine.Object.FindFirstObjectByType<BrushGroup>();
             float best = 0f;
             foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
             {
@@ -517,7 +518,7 @@ namespace CsgBrush.Tests
         static int RenderVertexCount()
         {
             int n = 0;
-            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
                 {
                     if (!IsLiveRenderMesh(mf)) continue;
@@ -572,7 +573,7 @@ namespace CsgBrush.Tests
         static Bounds RenderBounds()
         {
             var b = new Bounds(); bool first = true;
-            foreach (var model in UnityEngine.Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var model in UnityEngine.Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                 foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
                 {
                     if (!IsLiveRenderMesh(mf)) continue;
@@ -617,7 +618,7 @@ namespace CsgBrush.Tests
             Assert.AreEqual(new Vector3(3f, 0f, 1f), a.transform.position, "position after redo");
         }
 
-        static string TreeOrder(CsgGroup model)
+        static string TreeOrder(BrushGroup model)
         {
             var sb = new StringBuilder();
             var byModel = BrushCsg.BrushesByModel();
@@ -635,7 +636,7 @@ namespace CsgBrush.Tests
             var b = BrushApi.Create(BrushShape.Box, new Vector3(2f, 0f, 0f), new Vector3(2f, 1f, 2f), Quaternion.identity);
             BrushApi.SetOperation(b, BrushOperation.Subtract);
             BrushApi.ForceUpdate();
-            var model = UnityEngine.Object.FindFirstObjectByType<CsgGroup>();
+            var model = UnityEngine.Object.FindFirstObjectByType<BrushGroup>();
             Assert.AreEqual("A1 S1", TreeOrder(model), "additive a then subtractive b");
             Assert.Greater(RenderVertexCount(), 24, "b carves a");
             string before = SiblingProbe(a) + " | " + SiblingProbe(b);
@@ -780,6 +781,20 @@ namespace CsgBrush.Tests
             Walk(history, initial, initialDesc);
             }
             finally { Application.logMessageReceived -= Trap; }
+        }
+
+        [Test]
+        public void DoorBrushBuildsAFrameWithAnOpening()
+        {
+            var brush = BrushApi.Create(BrushShape.Door, new Vector3(0f, 1.5f, 0f), new Vector3(3f, 3f, 0.5f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            Physics.SyncTransforms();
+            Assert.IsNull(brush.problem, brush.problem);
+            Assert.Greater(brush.doorSide, 0f); Assert.Greater(brush.doorTop, 0f);
+            Assert.AreEqual(3, UnityEngine.Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "one collider per side and one for the top");
+            Assert.AreEqual(0, Physics.OverlapBox(new Vector3(0f, 1f, 0f), new Vector3(0.3f, 0.3f, 0.1f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, "the opening is empty");
+            Assert.Greater(Physics.OverlapBox(new Vector3(-1.3f, 1f, 0f), new Vector3(0.1f, 0.1f, 0.1f), Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length, 0, "the side is solid");
+            Assert.Greater(RenderVertexCount(), 0, "renders");
         }
     }
 }

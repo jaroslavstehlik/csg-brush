@@ -62,6 +62,18 @@ namespace CsgBrush.Editor
             return corner + half;
         }
 
+        /// <summary>
+        /// Clear a snapped brush's changed flag. The snap check reads that flag to notice moves, so a move it would have seen
+        /// (by a script, or a parent) is passed on here: the pick shape and the rotated-parents answer are measured again.
+        /// </summary>
+        static void ClearChanged(Brush brush, Transform t)
+        {
+            if (!t.hasChanged) return;
+            BrushCache.Forget(brush);
+            s_ParentsVersion = -1;
+            t.hasChanged = false;
+        }
+
         /// <summary>Snap one brush in world space. Returns true when anything changed. Records nothing with Undo.</summary>
         public static bool Snap(Brush brush)
         {
@@ -95,7 +107,7 @@ namespace CsgBrush.Editor
             if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
 
             if (changed) BrushSync.NotifyTransformChanged(brush);
-            t.hasChanged = false;
+            ClearChanged(brush, t);
             return changed;
         }
 
@@ -132,7 +144,7 @@ namespace CsgBrush.Editor
             var position = Round(t.position, grid);
             if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
             if (changed) BrushSync.NotifyTransformChanged(brush);
-            t.hasChanged = false;
+            ClearChanged(brush, t);
             return changed;
         }
 
@@ -174,17 +186,19 @@ namespace CsgBrush.Editor
                 }
             }
             if (changed) BrushSync.NotifyTransformChanged(brush);
-            t.hasChanged = false;
+            ClearChanged(brush, t);
             return changed;
         }
 
-        /// <summary>Snap every brush; used after undo/redo and by "Snap all brushes".</summary>
+        /// <summary>Snap every brush that is off the grid; used when rotated or scaled parents are reset.</summary>
         public static int SnapAll(bool recordUndo)
         {
             int count = 0;
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            var active = Brush.Active;
+            for (int i = active.Count - 1; i >= 0; i--) // backwards: Ensure may not add, but a snap never removes; stay safe either way
             {
-                if (!IsOffGrid(brush)) continue;
+                var brush = active[i];
+                if (brush == null || !IsOffGrid(brush)) continue;
                 if (recordUndo) Undo.RecordObjects(new Object[] { brush, brush.transform }, "Snap brushes to grid");
                 if (Snap(brush)) { count++; BrushSync.Ensure(brush); }
             }
@@ -260,9 +274,12 @@ namespace CsgBrush.Editor
             {
                 if (!snap) return;
                 // preview: geometry at the snapped pose, transform free
-                foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                var dragged = Brush.Active;
+                for (int i = 0; i < dragged.Count; i++)
                 {
-                    if (!brush.transform.hasChanged && !s_Deferred.Contains(brush)) continue;
+                    var brush = dragged[i];
+                    if (brush == null || (!brush.CachedTransform.hasChanged && !s_Deferred.Contains(brush))) continue;
+                    s_ParentsVersion = -1;
                     s_Deferred.Add(brush);
                     ApplyPreview(brush);
                 }
@@ -280,10 +297,13 @@ namespace CsgBrush.Editor
                 }
                 s_Deferred.Clear();
             }
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++)
             {
-                var t = brush.transform;
+                var brush = active[i]; // registered brushes are alive: OnDisable always runs before a brush is destroyed
+                var t = brush.CachedTransform;
                 if (!t.hasChanged) continue;
+                s_ParentsVersion = -1; // a brush or one of its parents moved
                 // Something moved this brush outside Undo (a script, a parent, the snap itself): rebuild its model.
                 if (snap && Snap(brush)) BrushSync.Ensure(brush);
                 else BrushSync.NotifyTransformChanged(brush);
@@ -329,26 +349,44 @@ namespace CsgBrush.Editor
         public static List<Brush> OffGridBrushes()
         {
             var list = new List<Brush>();
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                if (IsOffGrid(brush)) list.Add(brush);
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++) if (active[i] != null && IsOffGrid(active[i])) list.Add(active[i]);
             return list;
         }
 
+        static readonly List<Transform> s_Parents = new List<Transform>();
+        static int s_ParentsVersion = -1;
+
+        /// <summary>Forget the rotated or scaled parents found last time; the hierarchy changed.</summary>
+        public static void InvalidateParents() => s_ParentsVersion = -1;
+
+        /// <summary>
+        /// The ancestors that rotate or scale brushes, each once. Drawn by the overlay on every GUI event, so the answer is
+        /// kept until a brush joins or leaves, a brush or parent moves, or the hierarchy changes. Do not modify the list.
+        /// </summary>
         public static List<Transform> TransformedParents()
         {
-            var set = new HashSet<Transform>(); var list = new List<Transform>();
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            if (s_ParentsVersion == Brush.ActiveVersion && !HasDestroyed(s_Parents)) return s_Parents;
+            s_Parents.Clear();
+            var set = new HashSet<Transform>();
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++)
             {
+                var brush = active[i];
+                if (brush == null) continue;
                 var p = TransformedParent(brush);
-                if (p != null && set.Add(p)) list.Add(p);
+                if (p != null && set.Add(p)) s_Parents.Add(p);
             }
-            return list;
+            s_ParentsVersion = Brush.ActiveVersion;
+            return s_Parents;
         }
+
+        static bool HasDestroyed(List<Transform> list) { for (int i = 0; i < list.Count; i++) if (list[i] == null) return true; return false; }
 
         /// <summary>Reset rotation and scale of the offending parents (with Undo) and re-snap their brushes.</summary>
         public static int ResetTransformedParents()
         {
-            var parents = TransformedParents();
+            var parents = new List<Transform>(TransformedParents());
             foreach (var p in parents)
             {
                 Undo.RecordObject(p, "Reset parent transform");

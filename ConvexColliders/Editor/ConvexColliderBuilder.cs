@@ -11,10 +11,10 @@ namespace CsgBrush.Colliders.Editor
     /// pieces along its planes. The result is a list of convex polytopes, one BoxCollider or convex MeshCollider
     /// each. Water and trigger brushes become convex trigger volumes instead and never carve.
     ///
-    /// Incremental: every build evaluates the whole brush list and compares every piece, so nothing stale can
-    /// survive an undo, a delete or a reorder; only the expensive steps are skipped. Each generated piece carries
-    /// the planes it was built from (<see cref="ConvexPiece"/>); a new piece with identical planes and
-    /// surface data keeps the existing object, everything unmatched is destroyed.
+    /// Incremental per brush: a brush's pieces depend only on its own parts and the subtract brushes that reach it, so
+    /// every build goes through the whole brush list (nothing stale survives an undo, a delete or a reorder) but only
+    /// brushes whose key changed are built again. Each generated piece carries the planes it was built from
+    /// (<see cref="ConvexPiece"/>), so the first build of a session reuses the pieces a scene or prefab saved.
     /// </summary>
     public static class ConvexColliderBuilder
     {
@@ -39,6 +39,10 @@ namespace CsgBrush.Colliders.Editor
             public List<ConvexPolytope> add;
             /// <summary>Convex solids removed from the brush's own parts first (the inside of a hollow shape).</summary>
             public List<ConvexPolytope> remove;
+            /// <summary>What the pieces belong to (the brush): its pieces are kept between builds while its key holds.</summary>
+            public object owner;
+            /// <summary>Identity of <see cref="add"/> and <see cref="remove"/> (shape and pose): equal keys mean equal parts.</summary>
+            public int key;
         }
 
         sealed class BrushTag
@@ -66,32 +70,45 @@ namespace CsgBrush.Colliders.Editor
         /// <summary>Counters of the last build, for tests and the performance probe.</summary>
         public static int LastReusedPieces, LastCreatedPieces, LastDestroyedPieces;
 
+        /// <summary>The pieces one input made last time, kept while its key holds.</summary>
+        sealed class Built { public long key; public readonly List<GameObject> pieces = new List<GameObject>(); public int boxes, meshes, solids, triggers; }
+
+        sealed class ByReference : IEqualityComparer<object>
+        {
+            public static readonly ByReference Instance = new ByReference();
+            public new bool Equals(object a, object b) => ReferenceEquals(a, b);
+            public int GetHashCode(object o) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o);
+        }
+
+        /// <summary>Per collider container, what each input built. In memory only: a new session (domain reload, scene open, bake) starts from the pieces' planes.</summary>
+        static readonly Dictionary<Transform, Dictionary<object, Built>> s_Built = new Dictionary<Transform, Dictionary<object, Built>>();
+
+        /// <summary>Forget what a group's inputs built: the next build matches every piece again by its planes (Rebake).</summary>
+        public static void Forget(Transform model)
+        {
+            foreach (var container in FindContainers(model)) s_Built.Remove(container);
+            var dead = new List<Transform>();
+            foreach (var c in s_Built.Keys) if (c == null) dead.Add(c);
+            foreach (var c in dead) s_Built.Remove(c);
+        }
+
+        /// <summary>
+        /// Build the colliders of a model from its inputs, per input: a brush's pieces are its own convex parts minus those of
+        /// the later subtract inputs on its layer that overlap it, so they depend on nothing else. An input whose key (its
+        /// parts, what goes on its pieces, and its cutters' keys) is unchanged keeps its pieces untouched; others are built
+        /// again; pieces of inputs that are gone are destroyed.
+        /// </summary>
         public static void Rebuild(Transform model, ConvexColliderSettings settings, List<Input> inputs)
         {
             if (DeferWhile != null && DeferWhile()) { s_Deferred[model] = new Deferred { model = model, settings = settings, inputs = inputs }; return; }
             var sw = Stopwatch.StartNew();
             Log.Clear();
-            int prevReused = LastReusedPieces, prevCreated = LastCreatedPieces, prevDestroyed = LastDestroyedPieces;
             LastReusedPieces = LastCreatedPieces = LastDestroyedPieces = 0;
-
-            var solids = new List<ConvexPolytope>();
-            var volumes = new List<ConvexPolytope>();
-            int brushCount = 0;
-            Evaluate(inputs, solids, volumes, ref brushCount);
-
-            // Skip when nothing changed: updates fire often.
-            int geometryHash = GeometryHash(solids, volumes, settings);
-            var existing = FindContainers(model);
-            if (existing.Count == 1 && settings.lastGeometryHash == geometryHash && settings.pieceCount + settings.triggerVolumes == existing[0].childCount && PiecesIntact(existing[0]))
-            {
-                LastReusedPieces = prevReused; LastCreatedPieces = prevCreated; LastDestroyedPieces = prevDestroyed;
-                return;
-            }
 
             // The pieces are derived state and are never registered with Undo: after an undo or redo they are
             // simply rebuilt from the brushes. Any duplicate containers (from earlier versions) are removed.
-            for (int i = 1; i < existing.Count; i++)
-                Object.DestroyImmediate(existing[i].gameObject);
+            var existing = FindContainers(model);
+            for (int i = 1; i < existing.Count; i++) { s_Built.Remove(existing[i]); Object.DestroyImmediate(existing[i].gameObject); }
             Transform container;
             if (existing.Count > 0) container = existing[0];
             else
@@ -100,50 +117,153 @@ namespace CsgBrush.Colliders.Editor
                 containerGo.transform.SetParent(model, false);
                 container = containerGo.transform;
             }
-            container.gameObject.hideFlags = settings.showInHierarchy ? HideFlags.NotEditable : HideFlags.HideInHierarchy | HideFlags.NotEditable;
+            var hidden = settings.showInHierarchy ? HideFlags.NotEditable : HideFlags.HideInHierarchy | HideFlags.NotEditable;
+            if (container.gameObject.hideFlags != hidden) container.gameObject.hideFlags = hidden;
 
-            // pool of existing pieces by identity hash; whatever is not claimed below is destroyed
-            var pool = new Dictionary<int, List<ConvexPiece>>();
-            var unknown = new List<GameObject>();
-            foreach (Transform child in container)
+            // a first build in this session (or after Rebake) starts from the pieces there are, matched by their planes
+            if (settings.lastGeometryHash == 0) s_Built.Remove(container);
+            bool first = !s_Built.TryGetValue(container, out var built);
+            if (first) s_Built[container] = built = new Dictionary<object, Built>(ByReference.Instance);
+            Dictionary<int, List<ConvexPiece>> pool = null; List<GameObject> unknown = null;
+            if (first)
             {
-                if (!child.TryGetComponent<ConvexPiece>(out var id) || id.planes == null) { unknown.Add(child.gameObject); continue; }
-                if (!pool.TryGetValue(id.hash, out var list)) pool[id.hash] = list = new List<ConvexPiece>();
-                list.Add(id);
+                pool = new Dictionary<int, List<ConvexPiece>>(); unknown = new List<GameObject>();
+                foreach (Transform child in container)
+                {
+                    if (!child.TryGetComponent<ConvexPiece>(out var id) || id.planes == null) { unknown.Add(child.gameObject); continue; }
+                    if (!pool.TryGetValue(id.hash, out var list)) pool[id.hash] = list = new List<ConvexPiece>();
+                    list.Add(id);
+                }
             }
 
-            int boxes = 0, meshes = 0, triggers = 0, pieces = 0;
-            for (int i = 0; i < solids.Count; i++)
+            // each input's own parts (hollow inside removed) and their bounds; computed only when needed
+            var own = new List<ConvexPolytope>[inputs.Count];
+            var bounds = new Bounds[inputs.Count];
+            var hasBounds = new bool[inputs.Count];
+            List<ConvexPolytope> Own(int i)
             {
-                var piece = solids[i];
-                if (piece.IsEmpty || piece.Volume() < settings.minPieceVolume) continue;
-                var tag = piece.tag as BrushTag;
-                if (Verbose) Log.AppendLine("piece " + pieces + " from " + (tag != null ? tag.name : "?") + " bounds " + piece.GetBounds() + " verts " + piece.vertices.Count + " faces " + piece.faces.Count + " vol " + piece.Volume().ToString("0.000"));
-                ClaimOrMake(pool, container, piece, tag != null ? tag.layer : 0, "solid " + (tag != null ? tag.name : "?"), false, tag, ref boxes, ref meshes);
-                pieces++;
+                if (own[i] != null) return own[i];
+                var input = inputs[i];
+                var tag = new BrushTag { fingerprint = input.fingerprint, layer = input.layer, name = input.name, onPiece = input.onPiece };
+                var parts = new List<ConvexPolytope>();
+                foreach (var part in input.add) { part.tag = tag; parts.Add(part); }
+                if (input.remove != null)
+                    foreach (var inner in input.remove)
+                    {
+                        var next = new List<ConvexPolytope>();
+                        foreach (var p in parts) ConvexPolytope.Subtract(p, inner, next);
+                        parts = next;
+                        foreach (var p in parts) p.tag = tag;
+                    }
+                return own[i] = parts;
             }
-            for (int i = 0; i < volumes.Count; i++)
+            Bounds BoundsOf(int i)
             {
-                var piece = volumes[i];
-                if (piece.IsEmpty) continue;
-                var tag = piece.tag as BrushTag;
-                ClaimOrMake(pool, container, piece, tag != null ? tag.layer : 0, "trigger " + (tag != null ? tag.name : "?"), true, tag, ref boxes, ref meshes);
-                triggers++;
+                if (hasBounds[i]) return bounds[i];
+                var b = inputs[i].add[0].GetBounds();
+                for (int k = 1; k < inputs[i].add.Count; k++) b.Encapsulate(inputs[i].add[k].GetBounds());
+                hasBounds[i] = true;
+                return bounds[i] = b;
             }
 
-            foreach (var go in unknown) { Object.DestroyImmediate(go); LastDestroyedPieces++; }
-            foreach (var list in pool.Values)
-                foreach (var stale in list) { Object.DestroyImmediate(stale.gameObject); LastDestroyedPieces++; }
+            // the subtract inputs that carve colliders, in order
+            var cutters = new List<int>();
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                var input = inputs[i];
+                if (input.subtract && input.kind == ColliderKind.Solid && input.add != null && input.add.Count > 0) cutters.Add(i);
+            }
 
+            var seen = new HashSet<object>(ByReference.Instance);
+            int brushCount = 0;
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                var input = inputs[i];
+                if (input.kind == ColliderKind.None || input.add == null || input.add.Count == 0) continue;
+                brushCount++;
+                if (input.subtract) continue; // a subtract input has no pieces of its own; it carves those before it
+                bool trigger = input.kind == ColliderKind.Trigger;
+                // key: the parts, what goes on the pieces, and (for solids) the cutters that reach them
+                var mine = new List<int>();
+                long key;
+                unchecked
+                {
+                    key = input.key;
+                    key = key * 31 + input.fingerprint; key = key * 31 + (int)input.kind; key = key * 31 + input.layer;
+                    key = key * 31 + (input.name != null ? input.name.GetHashCode() : 0);
+                    key = key * 31 + settings.minPieceVolume.GetHashCode();
+                    if (!trigger)
+                        foreach (int j in cutters)
+                        {
+                            if (j <= i || inputs[j].layer != input.layer || !BoundsOf(j).Intersects(BoundsOf(i))) continue; // a subtract carves only what is above it
+                            mine.Add(j); key = key * 1000003 + inputs[j].key;
+                        }
+                }
+                var owner = input.owner ?? input;
+                seen.Add(owner);
+                if (built.TryGetValue(owner, out var was) && was.key == key && Alive(was))
+                {
+                    LastReusedPieces += was.pieces.Count;
+                    continue;
+                }
+                if (was != null) foreach (var go in was.pieces) if (go != null) { Object.DestroyImmediate(go); LastDestroyedPieces++; }
+
+                // this input's pieces: its own parts, carved by its cutters in order
+                var pieces = new List<ConvexPolytope>(Own(i));
+                if (!trigger)
+                    foreach (int j in mine)
+                        foreach (var cutter in Own(j))
+                        {
+                            var next = new List<ConvexPolytope>();
+                            foreach (var p in pieces) ConvexPolytope.Subtract(p, cutter, next);
+                            pieces = next;
+                        }
+                var entry = new Built { key = key };
+                foreach (var piece in pieces)
+                {
+                    if (piece.IsEmpty || (!trigger && piece.Volume() < settings.minPieceVolume)) continue;
+                    var tag = piece.tag as BrushTag;
+                    int boxes = 0, meshes = 0;
+                    var go = ClaimOrMake(pool, container, piece, input.layer, (trigger ? "trigger " : "solid ") + (tag != null ? tag.name : "?"), trigger, tag, ref boxes, ref meshes);
+                    entry.pieces.Add(go); entry.boxes += boxes; entry.meshes += meshes;
+                    if (trigger) entry.triggers++; else entry.solids++;
+                }
+                built[owner] = entry;
+            }
+
+            // inputs that are gone (deleted, disabled, no collision) take their pieces with them
+            var gone = new List<object>();
+            foreach (var kv in built) if (!seen.Contains(kv.Key)) gone.Add(kv.Key);
+            foreach (var owner in gone)
+            {
+                foreach (var go in built[owner].pieces) if (go != null) { Object.DestroyImmediate(go); LastDestroyedPieces++; }
+                built.Remove(owner);
+            }
+            if (first)
+            {
+                foreach (var go in unknown) { Object.DestroyImmediate(go); LastDestroyedPieces++; }
+                foreach (var list in pool.Values)
+                    foreach (var stale in list) { Object.DestroyImmediate(stale.gameObject); LastDestroyedPieces++; }
+            }
+
+            int solidCount = 0, triggerCount = 0, boxCount = 0, meshCount = 0;
+            foreach (var e in built.Values) { solidCount += e.solids; triggerCount += e.triggers; boxCount += e.boxes; meshCount += e.meshes; }
             sw.Stop();
-            settings.lastGeometryHash = geometryHash;
+            bool changed = settings.lastGeometryHash != 1 || settings.brushCount != brushCount || settings.pieceCount != solidCount || settings.triggerVolumes != triggerCount || settings.boxColliders != boxCount || settings.meshColliders != meshCount;
+            settings.lastGeometryHash = 1; // non-zero: built this session (Rebake sets 0)
             settings.brushCount = brushCount;
-            settings.pieceCount = pieces;
-            settings.boxColliders = boxes;
-            settings.meshColliders = meshes;
-            settings.triggerVolumes = triggers;
+            settings.pieceCount = solidCount;
+            settings.boxColliders = boxCount;
+            settings.meshColliders = meshCount;
+            settings.triggerVolumes = triggerCount;
             settings.buildMilliseconds = (float)sw.Elapsed.TotalMilliseconds;
-            EditorUtility.SetDirty(settings);
+            if (changed) EditorUtility.SetDirty(settings);
+        }
+
+        static bool Alive(Built b)
+        {
+            foreach (var go in b.pieces) if (go == null) return false;
+            return true;
         }
 
         /// <summary>Reuse an existing piece with exactly these planes and module data, or create one; either way the input's hook runs on it.</summary>
@@ -152,7 +272,7 @@ namespace CsgBrush.Colliders.Editor
             int fingerprint = tag != null ? tag.fingerprint : 0;
             string brushName = tag != null ? tag.name : "";
             int hash = ConvexPiece.HashOf(piece.planes, fingerprint, trigger, layer, brushName);
-            if (pool.TryGetValue(hash, out var candidates))
+            if (pool != null && pool.TryGetValue(hash, out var candidates))
             {
                 for (int i = 0; i < candidates.Count; i++)
                 {
@@ -177,41 +297,12 @@ namespace CsgBrush.Colliders.Editor
             return go;
         }
 
-        /// <summary>Every mesh collider piece still has its mesh (a prefab saved from a scene loses them).</summary>
-        static bool PiecesIntact(Transform container)
-        {
-            foreach (var mc in container.GetComponentsInChildren<MeshCollider>(true)) if (mc.sharedMesh == null) return false;
-            return true;
-        }
-
         static List<Transform> FindContainers(Transform model)
         {
             var list = new List<Transform>();
             foreach (Transform child in model)
                 if (child.name == ConvexColliderSettings.ContainerName) list.Add(child);
             return list;
-        }
-
-        static int GeometryHash(List<ConvexPolytope> solids, List<ConvexPolytope> volumes, ConvexColliderSettings settings)
-        {
-            unchecked
-            {
-                int h = 17;
-                h = h * 31 + settings.minPieceVolume.GetHashCode();
-                h = h * 31 + (settings.showInHierarchy ? 1 : 0);
-                foreach (var list in new[] { solids, volumes })
-                {
-                    h = h * 31 + list.Count;
-                    for (int i = 0; i < list.Count; i++)
-                    {
-                        var p = list[i];
-                        for (int k = 0; k < p.planes.Count; k++) h = h * 31 + p.planes[k].GetHashCode();
-                        var tag = p.tag as BrushTag;
-                        if (tag != null) h = h * 31 + tag.fingerprint * 7 + tag.layer * 131;
-                    }
-                }
-                return h;
-            }
         }
 
         static GameObject MakePiece(Transform container, ConvexPolytope piece, int layer, string name, bool trigger, ref int boxes, ref int meshes)
@@ -236,50 +327,6 @@ namespace CsgBrush.Colliders.Editor
                 meshes++;
             }
             return go;
-        }
-
-        // ------------------------------------------------------------------
-        // ordered CSG on convex parts
-        // ------------------------------------------------------------------
-
-        static void Evaluate(List<Input> inputs, List<ConvexPolytope> solids, List<ConvexPolytope> volumes, ref int brushCount)
-        {
-            foreach (var input in inputs)
-            {
-                if (input.kind == ColliderKind.None || input.add == null || input.add.Count == 0) continue;
-                var tag = new BrushTag { fingerprint = input.fingerprint, layer = input.layer, name = input.name, onPiece = input.onPiece };
-                // the brush's own parts, with the hollow inside removed
-                var own = new List<ConvexPolytope>();
-                foreach (var p in input.add) { p.tag = tag; own.Add(p); }
-                if (input.remove != null)
-                    foreach (var inner in input.remove)
-                    {
-                        var next = new List<ConvexPolytope>();
-                        foreach (var s in own) ConvexPolytope.Subtract(s, inner, next);
-                        own = next;
-                        foreach (var s in own) s.tag = tag;
-                    }
-                brushCount++;
-                if (input.kind == ColliderKind.Trigger)
-                {
-                    if (!input.subtract) volumes.AddRange(own);
-                    continue;
-                }
-                if (input.subtract)
-                {
-                    foreach (var cutter in own)
-                    {
-                        var next = new List<ConvexPolytope>();
-                        for (int a = 0; a < solids.Count; a++)
-                        {
-                            if ((solids[a].tag as BrushTag)?.layer != input.layer) { next.Add(solids[a]); continue; } // another layer: another CSG group
-                            ConvexPolytope.Subtract(solids[a], cutter, next);
-                        }
-                        solids.Clear(); solids.AddRange(next);
-                    }
-                }
-                else solids.AddRange(own);
-            }
         }
     }
 }

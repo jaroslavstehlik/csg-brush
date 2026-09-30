@@ -74,15 +74,19 @@ namespace CsgBrush.Tests
         public void RadialStairsTakeWidthAndRiseFromTheDrag()
         {
             var s = BrushSettings.instance; bool snap = s.snapToGrid; int grid = s.gridIndex;
-            s.snapToGrid = true; s.SetGridIndex(4); // 16 u = 0.5 m
+            s.snapToGrid = true;
+            for (int i = 0; i < s.gridSizes.Length; i++) if (s.ToMeters(s.gridSizes[i]) <= 0.5f) s.SetGridIndex(i); // the largest step up to 0.5 m, whatever the preset
+            float g = s.GridMeters;
             try
             {
                 var p = BrushCreateTool.ParametersForRadial(BrushShape.CurvedStairs, 3f, 2f);
-                Assert.AreEqual(0.5f, p.stairs.innerRadius, 1e-4f, "inner radius defaults to one grid step");
-                Assert.AreEqual(2.5f, p.stairs.stepWidth, 1e-4f, "outer radius minus the inner radius");
-                Assert.AreEqual(BrushSnap.Round(2f / p.stairs.numSteps, 0.5f) < 0.5f ? 0.5f : BrushSnap.Round(2f / p.stairs.numSteps, 0.5f), p.stairs.stepHeight, 1e-4f, "rise over the steps, at least one grid step");
+                Assert.AreEqual(g, p.stairs.innerRadius, 1e-4f, "inner radius defaults to one grid step");
+                Assert.AreEqual(3f - g, p.stairs.stepWidth, 1e-4f, "outer radius minus the inner radius");
+                BrushCreateTool.NewBrushParameters(out float stepHeight, out _);
+                Assert.AreEqual(stepHeight, p.stairs.stepHeight, 1e-4f, "the step height is the panel's");
+                Assert.AreEqual(BrushPolyhedron.StepCount(2f, stepHeight), p.stairs.numSteps, "the steps fill the drawn height");
                 var tiny = BrushCreateTool.ParametersForRadial(BrushShape.SpiralStairs, 0.2f, 0.1f);
-                Assert.AreEqual(0.5f, tiny.stairs.stepWidth, 1e-4f, "never thinner than a grid step");
+                Assert.AreEqual(g, tiny.stairs.stepWidth, 1e-4f, "never thinner than a grid step");
             }
             finally { s.snapToGrid = snap; s.SetGridIndex(grid); }
         }
@@ -122,6 +126,16 @@ namespace CsgBrush.Tests
             Assert.AreEqual(2f, BrushDraw.HeightFromRay(corner, Vector3.up, ray), 1e-4f);
             var parallel = new Ray(new Vector3(0f, 0f, 0f), Vector3.up);
             Assert.AreEqual(0f, BrushDraw.HeightFromRay(corner, Vector3.up, parallel), "parallel rays give no height");
+        }
+
+        [Test]
+        public void TheStartPointSnapsWithinItsPlaneAndKeepsThePlanesHeight()
+        {
+            // a grid moved to a height off the grid steps (0.3), snapping by 0.5
+            var p = BrushDraw.SnapOnPlane(new Vector3(1.2f, 0.3f, -0.7f), Vector3.up, 0.5f);
+            Assert.That(Vector3.Distance(new Vector3(1f, 0.3f, -0.5f), p), Is.LessThan(1e-5f));
+            var side = BrushDraw.SnapOnPlane(new Vector3(2.1f, 0.9f, 0.4f), Vector3.left, 0.5f);
+            Assert.That(Vector3.Distance(new Vector3(2.1f, 1f, 0.5f), side), Is.LessThan(1e-5f), "on a side plane X is kept");
         }
     }
 }

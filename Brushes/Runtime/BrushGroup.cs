@@ -3,16 +3,16 @@ using UnityEngine;
 namespace CsgBrush
 {
     /// <summary>
-    /// A CSG group: the brushes below it (up to the next group) are combined into one mesh per layer and one set of
+    /// A brush group: the brushes below it (up to the next group) are combined into one mesh per layer and one set of
     /// convex colliders, which the group holds as its generated children. A brush is baked by the nearest group above
     /// it; brushes with none are baked by their scene's automatic group (hidden, one per scene). A group inside a
     /// prefab bakes into the prefab, which then carries its own mesh and colliders; a prefab without a group is a
     /// stamp that carves the level it is placed in (in the editor). The group's transform moves everything it bakes.
     /// </summary>
-    [AddComponentMenu("CSG Brush/CSG Group")]
-    [Icon("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/CsgGroup.png")]
+    [AddComponentMenu("CSG Brush/Brush Group")]
+    [Icon("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/BrushGroup.png")]
     [DisallowMultipleComponent]
-    public sealed class CsgGroup : MonoBehaviour
+    public sealed class BrushGroup : MonoBehaviour
     {
         public const string DefaultName = "<[default model]>";
         public const string MeshChildName = "<[mesh]>";

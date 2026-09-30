@@ -7,6 +7,7 @@ using UnityEngine.UIElements;
 namespace CsgBrush.Editor
 {
     /// <summary>Scene view overlay: grid size and snap, the new brush's parameters while a Create tool is active, the edit mode toggle, lint.</summary>
+    [Icon(BrushIcons.Folder + "Brush.png")]
     [Overlay(typeof(SceneView), "Brushes", true)]
     public sealed class BrushOverlay : Overlay
     {
@@ -55,17 +56,8 @@ namespace CsgBrush.Editor
             EditorGUILayout.EndHorizontal();
             if (editing) DrawExtrude(s);
 
-            // lint: what would make a level invalid for the controller
-            var offGrid = BrushSnap.OffGridBrushes();
+            // lint: parents that rotate or scale brushes off the grid
             var parents = BrushSnap.TransformedParents();
-            if (offGrid.Count > 0)
-            {
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(offGrid.Count + " brush" + (offGrid.Count == 1 ? "" : "es") + " off grid", EditorStyles.miniLabel);
-                if (GUILayout.Button("Select", GUILayout.Width(52))) Selection.objects = offGrid.ConvertAll(b => (Object)b.gameObject).ToArray();
-                if (GUILayout.Button("Snap all", GUILayout.Width(60))) { BrushSnap.SnapAll(true); BrushApi.ForceUpdate(); }
-                EditorGUILayout.EndHorizontal();
-            }
             if (parents.Count > 0)
             {
                 EditorGUILayout.BeginHorizontal();
@@ -106,7 +98,7 @@ namespace CsgBrush.Editor
                 }
                 EditorGUILayout.EndHorizontal();
             }
-            BrushCreateTool.NewBrushParameters(out float stepHeight, out float stepDepth, out float wall);
+            BrushCreateTool.NewBrushParameters(out float stepHeight, out float wall);
             switch (shape)
             {
                 case BrushShape.Cylinder:
@@ -117,20 +109,19 @@ namespace CsgBrush.Editor
                     s.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.newTessellation, 1, 5);
                     break;
                 case BrushShape.Stairs:
-                    s.newStepHeight = UnitsField(s, "Step height", "0 uses the grid (at most the max step)", s.newStepHeight, stepHeight);
-                    s.newStepDepth = UnitsField(s, "Step length", "0 uses two grid steps", s.newStepDepth, stepDepth);
+                    s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
                     break;
                 case BrushShape.CurvedStairs:
                     s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
+                    s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
                     s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
-                    s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
                     break;
                 case BrushShape.SpiralStairs:
                     s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
-                    s.newStepThickness = UnitsField(s, "Step thickness", "0 uses half a grid step", s.newStepThickness, s.GridMeters * 0.5f);
-                    s.newStepsPer360 = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps per 360"), s.newStepsPer360));
-                    s.newNumSteps = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Num steps"), s.newNumSteps));
+                    s.newStepThickness = UnitsField(s, "Step thickness", "0 uses 0.1 m", s.newStepThickness, BrushSettings.DefaultStepThicknessMeters);
+                    s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
+                    s.newStepsPer360 = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Steps per 360"), s.newStepsPer360));
                     s.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.newSlopedCeiling);
                     s.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.newSlopedFloor);
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
@@ -139,6 +130,10 @@ namespace CsgBrush.Editor
                     s.newWallThickness = UnitsField(s, "Thickness", "0 uses one grid step", s.newWallThickness, wall);
                     s.newArchAngle = EditorGUILayout.Slider(new GUIContent("Angle", "180 is a full arch; less keeps the top part of it"), s.newArchAngle, 1f, 180f);
                     s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Segments"), s.newSides));
+                    break;
+                case BrushShape.Door:
+                    s.newDoorSide = UnitsField(s, "Side width", "0 uses one grid step", s.newDoorSide, s.GridMeters);
+                    s.newDoorTop = UnitsField(s, "Top height", "0 uses one grid step", s.newDoorTop, s.GridMeters);
                     break;
             }
             if (shape == BrushShape.Box || shape == BrushShape.Cylinder)

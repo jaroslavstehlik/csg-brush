@@ -181,14 +181,16 @@ namespace CsgBrush
         }
 
         /// <summary>
-        /// Linear stairs climbing towards +z inside the size box: risers face -z, the back is a solid wall. Concave;
-        /// the side walls are one quad per step so every face stays convex.
+        /// Linear stairs climbing towards +z and filling the size box: as many steps as the step height fits into the
+        /// height (rounded), so each step rises height / steps and runs length / steps. Risers face -z, the back is a
+        /// solid wall. Concave; the side walls are one quad per step so every face stays convex.
         /// </summary>
-        public static BrushPolyhedron Stairs(Vector3 size, float stepHeight, float stepDepth)
+        public static BrushPolyhedron Stairs(Vector3 size, float stepHeight)
         {
             float w = size.x * 0.5f, h = size.y * 0.5f, d = size.z * 0.5f;
-            stepHeight = Mathf.Max(0.001f, stepHeight); stepDepth = Mathf.Max(0.001f, stepDepth);
-            int steps = Mathf.Max(1, Mathf.CeilToInt(size.z / stepDepth - 1e-4f));
+            int steps = StepCount(size.y, stepHeight);
+            stepHeight = size.y / steps;
+            float stepDepth = size.z / steps;
             var verts = new List<Vector3>(); var lookup = new Dictionary<Vector3, int>();
             int V(float x, float y, float z)
             {
@@ -239,27 +241,40 @@ namespace CsgBrush
             return p;
         }
 
+        /// <summary>The widest angle one block of a curved stair covers: 32 per full turn.</summary>
+        public const float MaxArcSegmentDegrees = 360f / 32f;
+
+        /// <summary>How many steps of about <paramref name="stepHeight"/> fill <paramref name="height"/>: at least one.</summary>
+        public static int StepCount(float height, float stepHeight) => Mathf.Max(1, Mathf.RoundToInt(Mathf.Abs(height) / Mathf.Max(0.001f, stepHeight)));
+
         /// <summary>
         /// Curved stairs (Unreal's Curved Stair): steps wrapping around an inner column over an angle, each step a solid
-        /// block from the floor to its tread. Every step is its own closed convex block (Face.group), touching its
+        /// block from the floor to its tread. A step wider than <see cref="MaxArcSegmentDegrees"/> is made of several
+        /// blocks, so the footprint follows the curve the same way whatever the number of steps (a few tall steps would
+        /// otherwise cut straight across it). Every block is closed and convex (its own Face.group) and touches its
         /// neighbours. The column axis is the local y axis and the floor is y = 0: the transform is the axis.
         /// </summary>
         public static BrushPolyhedron CurvedStairs(StairParams p)
         {
             int n = Mathf.Max(1, p.numSteps);
             float a = Mathf.Max(1f, p.curveAngle) * Mathf.Deg2Rad / n * (p.counterClockwise ? 1f : -1f);
+            int sub = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(a) * Mathf.Rad2Deg / MaxArcSegmentDegrees - 1e-4f));
             float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(0.001f, p.stepHeight);
             var verts = new List<Vector3>(); var faces = new List<Face>();
+            int group = 0;
             for (int k = 0; k < n; k++)
             {
-                float t0 = k * a, t1 = (k + 1) * a;
                 float yTop = p.addToFirstStep + (k + 1) * h;
                 if (yTop <= 0.001f) yTop = 0.001f;
-                int b0 = verts.Count;
-                verts.Add(new Vector3(ri * Mathf.Cos(t0), 0f, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), 0f, ro * Mathf.Sin(t0)));
-                verts.Add(new Vector3(ro * Mathf.Cos(t1), 0f, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), 0f, ri * Mathf.Sin(t1)));
-                for (int i = 0; i < 4; i++) verts.Add(new Vector3(verts[b0 + i].x, yTop, verts[b0 + i].z));
-                AddBlock(verts, faces, k, new[] { b0, b0 + 1, b0 + 2, b0 + 3 }, new[] { b0 + 4, b0 + 5, b0 + 6, b0 + 7 });
+                for (int j = 0; j < sub; j++)
+                {
+                    float t0 = (k + (float)j / sub) * a, t1 = (k + (float)(j + 1) / sub) * a;
+                    int b0 = verts.Count;
+                    verts.Add(new Vector3(ri * Mathf.Cos(t0), 0f, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), 0f, ro * Mathf.Sin(t0)));
+                    verts.Add(new Vector3(ro * Mathf.Cos(t1), 0f, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), 0f, ri * Mathf.Sin(t1)));
+                    for (int i = 0; i < 4; i++) verts.Add(new Vector3(verts[b0 + i].x, yTop, verts[b0 + i].z));
+                    AddBlock(verts, faces, group++, new[] { b0, b0 + 1, b0 + 2, b0 + 3 }, new[] { b0 + 4, b0 + 5, b0 + 6, b0 + 7 });
+                }
             }
             return OnFloor(verts, faces);
         }
@@ -267,7 +282,9 @@ namespace CsgBrush
         /// <summary>
         /// Spiral stairs (Unreal's Spiral Stair): separate step slabs wrapping around an inner column, any number of
         /// turns; sloped floor and ceiling turn the steps into a ramp. Each slab is its own closed block (Face.group).
-        /// The column axis is the local y axis and the first step starts at y = 0: the transform is the axis.
+        /// The column axis is the local y axis and the floor is y = 0, so the transform is the axis at floor level. Tread k
+        /// is at (k + 1) step heights, as on every other stair: the thickness only reaches down from the tread (never
+        /// below the floor), so it never changes the step height a character climbs.
         /// </summary>
         public static BrushPolyhedron SpiralStairs(StairParams p)
         {
@@ -286,9 +303,10 @@ namespace CsgBrush
                 verts.Add(new Vector3(ro * Mathf.Cos(t1), yBot1, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), yBot1, ri * Mathf.Sin(t1)));
                 verts.Add(new Vector3(ri * Mathf.Cos(t0), yTop0, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), yTop0, ro * Mathf.Sin(t0)));
                 verts.Add(new Vector3(ro * Mathf.Cos(t1), yTop1, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), yTop1, ri * Mathf.Sin(t1)));
+                for (int i = b; i < b + 8; i++) if (verts[i].y < 0f) verts[i] = new Vector3(verts[i].x, 0f, verts[i].z); // a sloped first step stops at the floor
                 AddBlock(verts, faces, k, new[] { b, b + 1, b + 2, b + 3 }, new[] { b + 4, b + 5, b + 6, b + 7 }, splitCaps: p.slopedFloor || p.slopedCeiling);
             }
-            return OnFloor(verts, faces);
+            return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
         }
 
         /// <summary>
@@ -319,6 +337,32 @@ namespace CsgBrush
                 }
                 AddBlock(verts, faces, k, new[] { v, v + 1, v + 2, v + 3 }, new[] { v + 4, v + 5, v + 6, v + 7 });
             }
+            return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+        }
+
+        /// <summary>
+        /// A door frame filling its box (ProBuilder's Door): two sides of a width and a top of a height around an opening
+        /// that reaches the floor. Three closed convex blocks (Face.group), like the arch's segments. Centred on the transform.
+        /// </summary>
+        public static BrushPolyhedron Door(Vector3 size, float side, float top)
+        {
+            float a = Mathf.Max(0.001f, size.x * 0.5f), h = Mathf.Max(0.001f, size.y), d = Mathf.Max(0.001f, size.z) * 0.5f;
+            float s = Mathf.Clamp(side, 0.001f, a - 0.0005f), t = Mathf.Clamp(top, 0.001f, h - 0.0005f);
+            float y0 = -h * 0.5f, y1 = h * 0.5f;
+            var verts = new List<Vector3>(); var faces = new List<Face>();
+            void Block(int group, float x0, float x1, float b0, float b1)
+            {
+                int v = verts.Count;
+                foreach (var z in new[] { -d, d })
+                {
+                    verts.Add(new Vector3(x0, b0, z)); verts.Add(new Vector3(x1, b0, z));
+                    verts.Add(new Vector3(x1, b1, z)); verts.Add(new Vector3(x0, b1, z));
+                }
+                AddBlock(verts, faces, group, new[] { v, v + 1, v + 2, v + 3 }, new[] { v + 4, v + 5, v + 6, v + 7 });
+            }
+            Block(0, -a, -a + s, y0, y1);         // left side
+            Block(1, a - s, a, y0, y1);           // right side
+            Block(2, -a + s, a - s, y1 - t, y1);  // top, between the sides
             return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
         }
 

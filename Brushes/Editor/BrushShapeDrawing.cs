@@ -32,9 +32,15 @@ namespace CsgBrush.Editor
         public static void DrawCuts()
         {
             var selected = new HashSet<GameObject>(Selection.gameObjects);
-            foreach (var brush in BrushHooks.BrushesInView())
+            var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
+            var stageScene = stage != null ? stage.scene : default;
+            var active = Brush.Active;
+            for (int b = 0; b < active.Count; b++)
             {
-                if (brush.operation != BrushOperation.Subtract || !brush.enabled) continue;
+                var brush = active[b];
+                if (brush == null || brush.operation != BrushOperation.Subtract) continue;
+                var scene = brush.gameObject.scene;
+                if (stage != null ? scene != stageScene : UnityEditor.SceneManagement.EditorSceneManager.IsPreviewScene(scene)) continue; // only what the Scene view shows
                 var poly = BrushGeometry.Polyhedron(brush);
                 if (poly == null || !poly.IsValid) continue;
                 bool isSelected = selected.Contains(brush.gameObject);

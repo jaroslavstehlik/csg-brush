@@ -15,20 +15,21 @@ namespace CsgBrush.Editor
         {
             public Vector3 size;
             public int sides, tessellation;
-            public float stepHeight, stepDepth, wallThickness;
+            public float stepHeight, wallThickness;
+            public float doorSide, doorTop;
             public StairParams stairs;
 
-            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, stepDepth = b.stepDepth, wallThickness = b.wallThickness, stairs = b.Stairs };
+            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, wallThickness = b.wallThickness, doorSide = b.doorSide, doorTop = b.doorTop, stairs = b.Stairs };
 
             /// <summary>Defaults for a shape of a given size (menus, conversions).</summary>
             public static ShapeParams Default(Vector3 size, int sides = 16)
             {
                 var s = BrushSettings.instance;
-                float stepHeight = s.ToMeters(Mathf.Min(s.maxStep, s.GridUnits)), stepDepth = s.ToMeters(s.GridUnits * 2f);
+                float stepHeight = BrushSettings.DefaultStepHeightMeters;
                 return new ShapeParams
                 {
-                    size = size, sides = sides, tessellation = 2, stepHeight = stepHeight, stepDepth = stepDepth, wallThickness = s.GridMeters,
-                    stairs = new StairParams { innerRadius = s.GridMeters, stepWidth = Mathf.Max(s.GridMeters, size.x - s.GridMeters), stepHeight = stepHeight, stepThickness = s.GridMeters * 0.5f, curveAngle = 90f, numSteps = 8, stepsPer360 = 16 },
+                    size = size, sides = sides, tessellation = 2, stepHeight = stepHeight, wallThickness = s.GridMeters, doorSide = s.GridMeters, doorTop = s.GridMeters,
+                    stairs = new StairParams { innerRadius = s.GridMeters, stepWidth = Mathf.Max(s.GridMeters, size.x - s.GridMeters), stepHeight = stepHeight, stepThickness = BrushSettings.DefaultStepThicknessMeters, curveAngle = 90f, numSteps = BrushPolyhedron.StepCount(size.y, stepHeight), stepsPer360 = 16 },
                 };
             }
         }
@@ -42,10 +43,11 @@ namespace CsgBrush.Editor
                 case BrushShape.Cylinder: return BrushPolyhedron.Prism(p.size, p.sides, 1f);
                 case BrushShape.Cone: return BrushPolyhedron.Prism(p.size, p.sides, 0f);
                 case BrushShape.Sphere: return BrushPolyhedron.Sphere(p.size, p.tessellation);
-                case BrushShape.Stairs: return BrushPolyhedron.Stairs(p.size, p.stepHeight, p.stepDepth);
+                case BrushShape.Stairs: return BrushPolyhedron.Stairs(p.size, p.stepHeight);
                 case BrushShape.CurvedStairs: return BrushPolyhedron.CurvedStairs(p.stairs);
                 case BrushShape.SpiralStairs: return BrushPolyhedron.SpiralStairs(p.stairs);
                 case BrushShape.Arch: return BrushPolyhedron.Arch(p.size, p.wallThickness, p.stairs.curveAngle, p.sides);
+                case BrushShape.Door: return BrushPolyhedron.Door(p.size, p.doorSide, p.doorTop);
                 default: return BrushPolyhedron.Box(p.size);
             }
         }
@@ -83,7 +85,7 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>Local-to-model matrix of a brush.</summary>
-        public static Matrix4x4 ToModel(Brush b, CsgGroup model)
+        public static Matrix4x4 ToModel(Brush b, BrushGroup model)
         {
             return (model != null ? model.transform.worldToLocalMatrix : Matrix4x4.identity) * LocalToWorld(b);
         }

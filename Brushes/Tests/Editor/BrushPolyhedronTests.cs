@@ -285,18 +285,20 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void StairsAreClosedAndDecomposeIntoSteps([Values(1f, 0.75f, 0.5f)] float stepDepth)
+        public void StairsAreClosedAndDecomposeIntoSteps([Values(0.5f, 0.4f, 0.25f)] float stepHeight)
         {
-            // 3 m deep: 3, 4 or 6 steps (the last one shorter when the depth does not divide)
-            var stairs = BrushPolyhedron.Stairs(new Vector3(2f, 1.5f, 3f), 0.5f, stepDepth);
+            // 1.5 m high: 3, 4 (1.5 / 0.4 rounded) or 6 steps, each rising 1.5 / steps and running 3 / steps
+            var stairs = BrushPolyhedron.Stairs(new Vector3(2f, 1.5f, 3f), stepHeight);
             Assert.IsTrue(stairs.IsValid);
             Assert.IsTrue(stairs.IsClosed(), "every edge shared by exactly two faces");
             Assert.IsTrue(stairs.IsSound(out var why), why);
             Assert.Greater(stairs.Volume(), 0f);
-            int steps = Mathf.CeilToInt(3f / stepDepth - 1e-4f);
+            int steps = Mathf.RoundToInt(1.5f / stepHeight);
+            Assert.AreEqual(steps, BrushPolyhedron.StepCount(1.5f, stepHeight));
+            Assert.AreEqual(1.5f, stairs.Bounds().size.y, 1e-4f, "the steps fill the height");
             // volume: each step column is a box from the floor to its tread
-            float expected = 0f; float z = -1.5f;
-            for (int k = 0; k < steps; k++) { float depth = Mathf.Min(stepDepth, 1.5f - z); float top = Mathf.Min(0.75f, -0.75f + (k + 1) * 0.5f); expected += 2f * (top + 0.75f) * depth; z += depth; }
+            float rise = 1.5f / steps, run = 3f / steps, expected = 0f;
+            for (int k = 0; k < steps; k++) expected += 2f * (k + 1) * rise * run;
             Assert.AreEqual(expected, stairs.Volume(), 1e-3f, "volume of " + steps + " step columns");
             var pieces = new List<ConvexPolytope>();
             ConvexDecomposition.Decompose(stairs, pieces);
@@ -315,7 +317,7 @@ namespace CsgBrush.Tests
             Assert.GreaterOrEqual(stairs.Bounds().min.y, -1e-4f, "nothing below the floor: the origin is the axis at floor level");
             Assert.LessOrEqual(stairs.Bounds().min.x, 1e-4f); Assert.GreaterOrEqual(stairs.Bounds().max.x, -1e-4f); // the axis is inside the footprint
             var groups = new HashSet<int>(); foreach (var f in stairs.faces) groups.Add(f.group);
-            Assert.AreEqual(6, groups.Count, "one block per step");
+            Assert.AreEqual(spiral ? 6 : 12, groups.Count, spiral ? "one block per step" : "15 degree steps: two blocks each, none wider than 11.25 degrees");
             // each block's collider is the convex hull of its corners, and they add up to the shape
             float sum = 0f;
             foreach (var g in groups)
@@ -405,7 +407,7 @@ namespace CsgBrush.Tests
         {
             var box = BrushPolyhedron.Box(new Vector3(2f, 2f, 2f));
             Assert.IsFalse(box.SelfIntersects());
-            var stairs = BrushPolyhedron.Stairs(new Vector3(2f, 4f, 8f), 0.25f, 0.25f); // 32 steps, concave, many faces
+            var stairs = BrushPolyhedron.Stairs(new Vector3(2f, 4f, 8f), 0.125f); // 32 steps, concave, many faces
             Assert.IsFalse(stairs.SelfIntersects());
             var sw = System.Diagnostics.Stopwatch.StartNew(); Assert.IsTrue(stairs.IsSound(out _)); double stairsMs = sw.Elapsed.TotalMilliseconds;
             var sphere = BrushPolyhedron.Sphere(new Vector3(4f, 4f, 4f), 5);
@@ -582,6 +584,80 @@ namespace CsgBrush.Tests
             Assert.IsTrue(quarter.IsSound(out why), why);
             Assert.AreEqual(2f, quarter.Bounds().max.y + 1f, 1e-3f, "a partial arch keeps the top of the ellipse");
             Assert.Less(quarter.Bounds().size.x, size.x, "and does not reach the box's sides");
+        }
+
+        [Test]
+        public void DoorIsAClosedFrameOfThreeBlocks()
+        {
+            var size = new Vector3(3f, 3f, 0.5f);
+            var door = BrushPolyhedron.Door(size, 0.5f, 0.75f);
+            Assert.IsTrue(door.IsClosed(), "closed"); Assert.IsTrue(door.IsSound(out var why), why);
+            Assert.AreEqual(3 * 6, door.faces.Length, "two sides and a top, six faces each");
+            var b = door.Bounds();
+            Assert.AreEqual(size.x, b.size.x, 1e-4f); Assert.AreEqual(size.y, b.size.y, 1e-4f); Assert.AreEqual(size.z, b.size.z, 1e-4f);
+            Assert.AreEqual(-1.5f, b.min.y, 1e-4f, "centred on the transform");
+            float opening = (3f - 2f * 0.5f) * (3f - 0.75f);
+            Assert.AreEqual((3f * 3f - opening) * 0.5f, door.Volume(), 1e-4f, "the box minus the opening");
+            Assert.IsTrue(BrushPolyhedron.Door(size, 10f, 10f).IsSound(out why), "oversized sides and top are clamped: " + why);
+        }
+
+        [Test]
+        public void ACurvedStairsFootprintDoesNotDependOnTheNumberOfSteps()
+        {
+            var p = new StairParams { innerRadius = 0.5f, stepWidth = 1.5f, stepHeight = 0.25f, curveAngle = 90f };
+            Bounds? first = null;
+            foreach (int steps in new[] { 1, 2, 3, 8 })
+            {
+                p.numSteps = steps;
+                var stairs = BrushPolyhedron.CurvedStairs(p);
+                Assert.IsTrue(stairs.IsClosed() && stairs.IsSound(out var why), steps + " steps: sound");
+                var b = stairs.Bounds();
+                float outer = 0f; foreach (var v in stairs.vertices) outer = Mathf.Max(outer, new Vector2(v.x, v.z).magnitude);
+                Assert.AreEqual(2f, outer, 1e-4f, steps + " steps: the outer edge stays on the circle");
+                // footprint: the faces on the floor; a quarter ring from 0.5 to 2 m, less a little for the straight segments
+                float area = 0f;
+                foreach (var f in stairs.faces)
+                {
+                    bool floor = true; foreach (var i in f.indices) floor &= Mathf.Abs(stairs.vertices[i].y) < 1e-5f;
+                    if (!floor) continue;
+                    for (int i = 0; i < f.indices.Length; i++) { var u = stairs.vertices[f.indices[i]]; var w = stairs.vertices[f.indices[(i + 1) % f.indices.Length]]; area += u.x * w.z - w.x * u.z; }
+                }
+                area = Mathf.Abs(area) * 0.5f;
+                float ring = Mathf.PI * (2f * 2f - 0.5f * 0.5f) / 4f;
+                Assert.AreEqual(ring, area, ring * 0.01f, steps + " steps: the footprint covers the curve");
+                if (first == null) { first = b; continue; }
+                Assert.AreEqual(first.Value.min.x, b.min.x, 1e-3f, steps + " steps"); Assert.AreEqual(first.Value.max.x, b.max.x, 1e-3f, steps + " steps");
+                Assert.AreEqual(first.Value.min.z, b.min.z, 1e-3f, steps + " steps"); Assert.AreEqual(first.Value.max.z, b.max.z, 1e-3f, steps + " steps");
+            }
+        }
+
+        [Test]
+        public void EveryStairClimbsTheSameStepHeight([Values(0.05f, 0.1f, 0.2f)] float thickness)
+        {
+            // treads at 0.25, 0.5, 0.75 ... whatever the kind of stair or the spiral's tread thickness
+            float h = 0.25f;
+            var p = new StairParams { innerRadius = 0.3f, stepWidth = 1f, stepHeight = h, stepThickness = thickness, curveAngle = 90f, numSteps = 4, stepsPer360 = 12 };
+            var tops = new Dictionary<string, List<float>>();
+            void Collect(string name, BrushPolyhedron shape, float floor)
+            {
+                var ys = new SortedSet<float>();
+                foreach (var f in shape.faces)
+                {
+                    float y = shape.vertices[f.indices[0]].y; bool flat = true;
+                    foreach (var i in f.indices) flat &= Mathf.Abs(shape.vertices[i].y - y) < 1e-5f;
+                    if (flat && shape.Plane(System.Array.IndexOf(shape.faces, f)).y > 0.9f) ys.Add(Mathf.Round((y - floor) * 1e4f) / 1e4f);
+                }
+                tops[name] = new List<float>(ys);
+            }
+            Collect("curved", BrushPolyhedron.CurvedStairs(p), 0f);
+            Collect("spiral", BrushPolyhedron.SpiralStairs(p), 0f);
+            Collect("linear", BrushPolyhedron.Stairs(new Vector3(1f, 4 * h, 2f), h), -2 * h);
+            foreach (var kv in tops)
+            {
+                Assert.AreEqual(4, kv.Value.Count, kv.Key + ": four treads " + string.Join(", ", kv.Value));
+                for (int k = 0; k < 4; k++) Assert.AreEqual((k + 1) * h, kv.Value[k], 1e-4f, kv.Key + " tread " + k);
+            }
+            Assert.GreaterOrEqual(BrushPolyhedron.SpiralStairs(p).Bounds().min.y, 0f, "nothing below the floor");
         }
     }
 }

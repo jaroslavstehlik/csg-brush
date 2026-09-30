@@ -21,6 +21,7 @@ namespace CsgBrush.Editor
         {
             if (brush == null) return;
             if (PrefabUtility.IsPartOfPrefabAsset(brush)) return;
+            BrushCache.Forget(brush);
             RemoveLegacyChildren(brush);
             if (brush.HasLegacySurface) MigrateLegacySurface(brush);
             brush.problem = null;
@@ -83,6 +84,7 @@ namespace CsgBrush.Editor
         public static void RequestFullUpdate(Brush brush)
         {
             if (brush == null) return;
+            BrushCsg.InvalidateGrouping(); // added, reordered or moved to another parent: the group lists change
             BrushCsg.MarkDirty(brush);
         }
 
@@ -90,6 +92,7 @@ namespace CsgBrush.Editor
         public static void NotifyTransformChanged(Brush brush)
         {
             if (brush == null) return;
+            BrushCache.Forget(brush);
             BrushCsg.MarkDirty(brush);
         }
 
@@ -98,10 +101,10 @@ namespace CsgBrush.Editor
         {
             // prefab instances included: Unity never stores hide flags in a prefab file, and hiding an instance's
             // objects is not an override, so they are hidden in memory like everything else
-            foreach (var model in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None)) HideGenerated(model);
+            foreach (var model in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None)) HideGenerated(model);
             var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
             if (stage != null && stage.prefabContentsRoot != null)
-                foreach (var model in stage.prefabContentsRoot.GetComponentsInChildren<CsgGroup>(true)) HideGenerated(model);
+                foreach (var model in stage.prefabContentsRoot.GetComponentsInChildren<BrushGroup>(true)) HideGenerated(model);
             EditorApplication.RepaintHierarchyWindow();
         }
 
@@ -111,9 +114,9 @@ namespace CsgBrush.Editor
         /// Show generated objects is on for debugging. Applied in memory wherever they appear (Unity keeps no hide flags
         /// in prefab files), right after every build and by the sweep over scenes and Prefab Mode.
         /// </summary>
-        public static void HideGenerated(CsgGroup model) => HideGenerated(model, BrushSettings.instance.showGenerated);
+        public static void HideGenerated(BrushGroup model) => HideGenerated(model, BrushSettings.instance.showGenerated);
 
-        public static void HideGenerated(CsgGroup model, bool show)
+        public static void HideGenerated(BrushGroup model, bool show)
         {
             var flags = show ? HideFlags.NotEditable : kHidden;
             if (model.isDefault && model.gameObject.hideFlags != flags) model.gameObject.hideFlags = flags;
@@ -131,6 +134,6 @@ namespace CsgBrush.Editor
             }
         }
 
-        public static bool IsGenerated(Transform t) => CsgGroup.IsMeshChildName(t.name) || t.name == ConvexColliderSettings.ContainerName;
+        public static bool IsGenerated(Transform t) => BrushGroup.IsMeshChildName(t.name) || t.name == ConvexColliderSettings.ContainerName;
     }
 }

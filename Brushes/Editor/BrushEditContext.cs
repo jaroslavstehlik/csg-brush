@@ -18,6 +18,7 @@ namespace CsgBrush.Editor
     /// so it works with any of the three tools.
     /// </summary>
     [EditorToolContext("Edit Brush", typeof(Brush))]
+    [Icon(BrushIcons.Folder + "EditBrush.png")]
     public sealed class BrushEditContext : EditorToolContext
     {
         public static bool IsActive => ToolManager.activeContextType == typeof(BrushEditContext);

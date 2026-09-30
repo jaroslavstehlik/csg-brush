@@ -6,45 +6,42 @@ using UnityEngine;
 namespace CsgBrush.Editor
 {
     /// <summary>
-    /// Project-wide world preset: units per metre, grid, defaults and the reference sizes used by the lint.
-    /// Geometry is always stored in metres; the preset only changes how sizes are displayed and snapped.
+    /// Project-wide world preset: units per metre, grid and defaults. Geometry is always stored in metres; the preset
+    /// only changes how sizes are displayed and snapped.
     /// </summary>
     [FilePath("ProjectSettings/BrushSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     public sealed class BrushSettings : ScriptableSingleton<BrushSettings>
     {
-        public enum Preset { Quake, Source, Unreal, Metric, Custom }
+        public enum Preset { Quake = 0, Source = 1, Unreal = 2, Unity = 3, Custom = 4 } // stored by value: Unity was Metric
 
-        public Preset preset = Preset.Quake;
-        public float unitsPerMeter = 32f;
-        public string unitLabel = "u";
-        public float[] gridSizes = { 1, 2, 4, 8, 16, 32, 64, 128, 256 };
-        public int gridIndex = 4;
-        public Vector3 defaultBoxSize = new Vector3(64f, 64f, 64f);
+        /// <summary>The presets in the order the settings list them.</summary>
+        public static readonly Preset[] PresetOrder = { Preset.Unity, Preset.Quake, Preset.Source, Preset.Unreal, Preset.Custom };
+
+        public Preset preset = Preset.Unity;
+        public float unitsPerMeter = 1f;
+        public string unitLabel = "m";
+        public float[] gridSizes = { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f };
+        public int gridIndex = 2;
+        public Vector3 defaultBoxSize = new Vector3(2f, 2f, 2f);
         public float rotationSnapDegrees = 15f;
-        [Header("Reference sizes (units), used by the lint")]
-        public Vector3 playerBox = new Vector3(30f, 56f, 30f);
-        public float crouchHeight = 40f;
-        public float maxStep = 18f;
-        public float maxSlopeDegrees = 45.6f;
-        public Vector2 doorwayMinimum = new Vector2(32f, 56f);
         [Header("New brushes (the Create tools)")]
         public BrushOperation newOperation = BrushOperation.Add;
         [Tooltip("Full type names of the modules (a game's data) every new brush gets.")] public List<string> newModules = new List<string>();
         [Min(3)] public int newSides = 16;
         [Range(1, 5)] public int newTessellation = 2;
-        [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepHeight = 0f;
-        [Tooltip("Units; 0 uses the grid-sized default.")] public float newStepDepth = 0f;
+        [Tooltip("Units; 0 uses 0.25 m, a comfortable step for a 1.5 to 2 m character.")] public float newStepHeight = 0f;
         public bool newHollow = false;
         [Tooltip("Units; 0 uses one grid step.")] public float newInnerRadius = 0f;
-        [Tooltip("Units; 0 uses half a grid step.")] public float newStepThickness = 0f;
+        [Tooltip("Units; 0 uses 0.1 m, a thin tread.")] public float newStepThickness = 0f;
         public float newCurveAngle = 90f;
-        [Min(1)] public int newNumSteps = 8;
         [Min(1)] public int newStepsPer360 = 16;
         public bool newCounterClockwise = false;
         public bool newSlopedFloor = false;
         public bool newSlopedCeiling = false;
         [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
         [Range(1f, 180f)] public float newArchAngle = 180f;
+        [Tooltip("Units; 0 uses one grid step.")] public float newDoorSide = 0f;
+        [Tooltip("Units; 0 uses one grid step.")] public float newDoorTop = 0f;
         [Header("Extrude (edit mode)")]
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
@@ -60,6 +57,15 @@ namespace CsgBrush.Editor
         public bool snapToGrid = true;
 
         public static event Action Changed;
+
+        /// <summary>The step height new stairs get unless one is set: a comfortable step for a 1.5 to 2 m character, and under Unity's default CharacterController step offset (0.3 m).</summary>
+        public const float DefaultStepHeightMeters = 0.25f;
+
+        /// <summary>The tread thickness spiral stairs get unless one is set: thin, well under the default step height.</summary>
+        public const float DefaultStepThicknessMeters = 0.1f;
+
+        /// <summary>The step height of the next stairs, in metres.</summary>
+        public float NewStepHeightMeters => newStepHeight > 0f ? ToMeters(newStepHeight) : DefaultStepHeightMeters;
 
         public float GridUnits => gridSizes != null && gridSizes.Length > 0 ? gridSizes[Mathf.Clamp(gridIndex, 0, gridSizes.Length - 1)] : 1f;
         public float GridMeters => ToMeters(GridUnits);
@@ -80,25 +86,21 @@ namespace CsgBrush.Editor
                     unitsPerMeter = 32f; unitLabel = "u";
                     gridSizes = new float[] { 1, 2, 4, 8, 16, 32, 64, 128, 256 }; gridIndex = 4;
                     defaultBoxSize = new Vector3(64f, 64f, 64f); rotationSnapDegrees = 15f;
-                    playerBox = new Vector3(30f, 56f, 30f); crouchHeight = 40f; maxStep = 18f; maxSlopeDegrees = 45.6f; doorwayMinimum = new Vector2(32f, 56f);
                     break;
                 case Preset.Source:
                     unitsPerMeter = 39.37f; unitLabel = "u";
                     gridSizes = new float[] { 1, 2, 4, 8, 16, 32, 64, 128, 256 }; gridIndex = 4;
                     defaultBoxSize = new Vector3(64f, 64f, 64f); rotationSnapDegrees = 15f;
-                    playerBox = new Vector3(32f, 72f, 32f); crouchHeight = 36f; maxStep = 18f; maxSlopeDegrees = 45.6f; doorwayMinimum = new Vector2(33f, 73f);
                     break;
                 case Preset.Unreal:
                     unitsPerMeter = 100f; unitLabel = "cm";
                     gridSizes = new float[] { 1, 5, 10, 25, 50, 100, 200, 500 }; gridIndex = 3;
                     defaultBoxSize = new Vector3(200f, 200f, 200f); rotationSnapDegrees = 15f;
-                    playerBox = new Vector3(68f, 176f, 68f); crouchHeight = 88f; maxStep = 45f; maxSlopeDegrees = 44f; doorwayMinimum = new Vector2(70f, 180f);
                     break;
-                case Preset.Metric:
+                case Preset.Unity:
                     unitsPerMeter = 1f; unitLabel = "m";
                     gridSizes = new float[] { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f }; gridIndex = 2;
                     defaultBoxSize = new Vector3(2f, 2f, 2f); rotationSnapDegrees = 15f;
-                    playerBox = new Vector3(0.9f, 1.8f, 0.9f); crouchHeight = 1.2f; maxStep = 0.5f; maxSlopeDegrees = 45f; doorwayMinimum = new Vector2(1f, 2f);
                     break;
                 case Preset.Custom:
                     break;
@@ -127,12 +129,13 @@ namespace CsgBrush.Editor
             var provider = new SettingsProvider("Project/Brushes", SettingsScope.Project)
             {
                 label = "Brushes",
-                keywords = new HashSet<string>(new[] { "brush", "grid", "units", "quake", "preset", "level" }),
+                keywords = new HashSet<string>(new[] { "brush", "grid", "units", "preset", "level" }),
                 guiHandler = _ =>
                 {
                     var s = BrushSettings.instance;
                     EditorGUI.BeginChangeCheck();
-                    var preset = (BrushSettings.Preset)EditorGUILayout.EnumPopup("World preset", s.preset);
+                    var presetNames = Array.ConvertAll(BrushSettings.PresetOrder, p => p.ToString());
+                    var preset = BrushSettings.PresetOrder[Mathf.Max(0, EditorGUILayout.Popup("World preset", Array.IndexOf(BrushSettings.PresetOrder, s.preset), presetNames))];
                     if (preset != s.preset)
                     {
                         s.ApplyPreset(preset);
@@ -154,12 +157,6 @@ namespace CsgBrush.Editor
                         }
                         s.defaultBoxSize = EditorGUILayout.Vector3Field("Default box size", s.defaultBoxSize);
                         s.rotationSnapDegrees = EditorGUILayout.FloatField("Rotation snap (degrees)", s.rotationSnapDegrees);
-                        EditorGUILayout.LabelField("Reference sizes (used by the lint)", EditorStyles.boldLabel);
-                        s.playerBox = EditorGUILayout.Vector3Field("Player box", s.playerBox);
-                        s.crouchHeight = EditorGUILayout.FloatField("Crouched height", s.crouchHeight);
-                        s.maxStep = EditorGUILayout.FloatField("Max step", s.maxStep);
-                        s.maxSlopeDegrees = EditorGUILayout.FloatField("Max walkable slope", s.maxSlopeDegrees);
-                        s.doorwayMinimum = EditorGUILayout.Vector2Field("Doorway minimum", s.doorwayMinimum);
                     }
                     var names = Array.ConvertAll(s.gridSizes, g => g.ToString("0.###") + " " + s.unitLabel);
                     s.gridIndex = EditorGUILayout.Popup("Default grid", Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names);

@@ -37,9 +37,9 @@ namespace CsgBrush.Editor
             this.mode = mode;
             switch (mode)
             {
-                case BrushEditMode.Vertex: icon = BrushIcons.Get("Mode_Vertex", BrushEditIcons.Vertex); tooltip = "Vertex Selection (1)"; break;
-                case BrushEditMode.Edge: icon = BrushIcons.Get("Mode_Edge", BrushEditIcons.Edge); tooltip = "Edge Selection (2)"; break;
-                default: icon = BrushIcons.Get("Mode_Face", BrushEditIcons.Face); tooltip = "Face Selection (3)"; break;
+                case BrushEditMode.Vertex: icon = BrushIcons.Get("Mode_Vertex"); tooltip = "Vertex Selection (1)"; break;
+                case BrushEditMode.Edge: icon = BrushIcons.Get("Mode_Edge"); tooltip = "Edge Selection (2)"; break;
+                default: icon = BrushIcons.Get("Mode_Face"); tooltip = "Face Selection (3)"; break;
             }
             RegisterCallback<AttachToPanelEvent>(evt => { BrushEditState.Changed += Refresh; Refresh(); });
             RegisterCallback<DetachFromPanelEvent>(evt => BrushEditState.Changed -= Refresh);
@@ -67,7 +67,7 @@ namespace CsgBrush.Editor
     {
         public BrushSelectHiddenToggle()
         {
-            icon = BrushIcons.Get("SelectHidden", BrushEditIcons.Hidden);
+            icon = BrushIcons.Get("SelectHidden");
             tooltip = "Select Hidden: also pick vertices, edges and faces that look away from the camera";
             RegisterCallback<AttachToPanelEvent>(evt => { BrushEditState.Changed += Refresh; Refresh(); });
             RegisterCallback<DetachFromPanelEvent>(evt => BrushEditState.Changed -= Refresh);
@@ -83,7 +83,7 @@ namespace CsgBrush.Editor
     {
         public BrushDragRectModeToggle()
         {
-            icon = BrushIcons.Get("DragRect", BrushEditIcons.DragRect);
+            icon = BrushIcons.Get("DragRect");
             tooltip = "Drag Rectangle Mode: on selects only what is completely inside the rectangle, off everything it touches";
             RegisterCallback<AttachToPanelEvent>(evt => { BrushEditState.Changed += Refresh; Refresh(); });
             RegisterCallback<DetachFromPanelEvent>(evt => BrushEditState.Changed -= Refresh);
@@ -105,7 +105,7 @@ namespace CsgBrush.Editor
             name = "Handle Rotation";
             options[0] = new GUIContent("Global", EditorGUIUtility.IconContent("ToolHandleGlobal").image, "The gizmo is aligned with the world axes");
             options[1] = new GUIContent("Local", EditorGUIUtility.IconContent("ToolHandleLocal").image, "The gizmo is aligned with the brush's axes");
-            options[2] = new GUIContent("Element", BrushIcons.Get("ToolHandleElement", BrushEditIcons.Element), "The gizmo is aligned with the selected face, edge or vertex: blue along the normal");
+            options[2] = new GUIContent("Element", BrushIcons.Get("ToolHandleElement"), "The gizmo is aligned with the selected face, edge or vertex: blue along the normal");
             clicked += () =>
             {
                 var menu = new GenericMenu();
@@ -122,15 +122,5 @@ namespace CsgBrush.Editor
             var c = options[(int)BrushEditState.Orientation];
             text = c.text; tooltip = c.tooltip; icon = c.image as Texture2D;
         }
-    }
-
-    static class BrushEditIcons
-    {
-        public const string Vertex = "................\n................\n...##......##...\n..####....####..\n..####....####..\n...##......##...\n................\n................\n................\n................\n...##......##...\n..####....####..\n..####....####..\n...##......##...\n................\n................";
-        public const string Edge = "................\n..............#.\n.............##.\n............##..\n...........##...\n..........##....\n.........##.....\n........##......\n.......##.......\n......##........\n.....##.........\n....##..........\n...##...........\n..##............\n.#..............\n................";
-        public const string Face = "................\n................\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n..############..\n................\n................";
-        public const string Hidden = "................\n................\n................\n.....######.....\n...##......##...\n..#...####...#..\n.#...######...#.\n#....######....#\n.#...######...#.\n..#...####...#..\n...##......##...\n.....######.....\n................\n................\n................\n................";
-        public const string DragRect = "................\n.##.##.##.##.##.\n................\n#..............#\n#..............#\n................\n#..............#\n#..............#\n................\n#..............#\n#..............#\n................\n#..............#\n#..............#\n................\n.##.##.##.##.##.";
-        public const string Element = "................\n.......##.......\n......####......\n.....##.###.....\n....##...##.....\n...##.....##....\n..##.......##...\n.##.........##..\n.##.........##..\n.##.........##..\n.#############..\n................\n.#############..\n.#############..\n................\n................";
     }
 }

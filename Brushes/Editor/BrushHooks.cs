@@ -52,8 +52,8 @@ namespace CsgBrush.Editor
             if (Application.isPlaying) return;
             BrushSync.RemoveLegacySceneObjects();
             BrushCsg.ClearCaches();
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                BrushSync.Ensure(brush);
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++) if (active[i] != null) BrushSync.Ensure(active[i]);
             BrushCsg.MarkAllDirty();
         }
 
@@ -86,16 +86,16 @@ namespace CsgBrush.Editor
         static UndoPropertyModification[] OnPostprocessModifications(UndoPropertyModification[] modifications)
         {
             if (Application.isPlaying) return modifications;
-            // a brush moved to another layer belongs to another CSG group from now on; a module's values ride on the pieces
+            // a brush moved to another layer is combined with that layer's brushes from now on; a module's values ride on the pieces
             for (int i = 0; i < modifications.Length; i++)
             {
                 var mtarget = modifications[i].currentValue.target;
                 if (mtarget is GameObject lgo && lgo.TryGetComponent<Brush>(out var layered))
                 {
                     var path = modifications[i].currentValue.propertyPath;
-                    if (path == "m_Layer" || path == "m_TagString" || path == "m_StaticEditorFlags") BrushCsg.MarkDirty(layered); // the pieces take these from the brush
+                    if (path == "m_Layer" || path == "m_TagString" || path == "m_StaticEditorFlags" || path == "m_Name") { BrushCache.Forget(layered); BrushCsg.MarkDirty(layered); } // the pieces take these from the brush
                 }
-                else if (mtarget is GameObject mgo && mgo.TryGetComponent<CsgGroup>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
+                else if (mtarget is GameObject mgo && mgo.TryGetComponent<BrushGroup>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
                 else if (mtarget is BrushModule) BrushCsg.MarkAllDirty(); // a parent's module tags every brush below it
             }
             if (!BrushSettings.instance.snapToGrid) return modifications;
@@ -155,7 +155,7 @@ namespace CsgBrush.Editor
         /// <summary>
         /// Outside edit mode: clicking a brush's surface selects the brush. Unity's own picking would hit the generated
         /// mesh, which belongs to the model and cannot tell which brush was meant, so brushes are picked here by
-        /// their own geometry (additive brushes first, a subtractive one only when nothing solid is under the mouse).
+        /// their own geometry (subtractive ones only while cuts are shown).
         /// Also draws the concave feedback for selected Custom shapes with the normal tools.
         /// </summary>
         static void OnSceneGUI(SceneView view)
@@ -186,29 +186,58 @@ namespace CsgBrush.Editor
 
         /// <summary>
         /// The active brushes of the stage the Scene view shows: in Prefab Mode only the prefab's, since the scenes
-        /// behind it are hidden and cannot be clicked or edited there. (FindObjectsByType does not see a prefab
-        /// stage's objects at all, only the hidden scenes'.)
+        /// behind it are hidden and cannot be clicked or edited there; otherwise those of the open scenes.
         /// </summary>
-        public static List<Brush> BrushesInView() => new List<Brush>(StageUtility.GetCurrentStageHandle().FindComponentsOfType<Brush>());
+        public static List<Brush> BrushesInView() { var list = new List<Brush>(); BrushesInView(list); return list; }
+
+        /// <summary>The brushes in view (see <see cref="BrushesInView()"/>) into a list the caller reuses: nothing is allocated.</summary>
+        public static void BrushesInView(List<Brush> into)
+        {
+            into.Clear();
+            var stage = PrefabStageUtility.GetCurrentPrefabStage();
+            var stageScene = stage != null ? stage.scene : default;
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++)
+            {
+                var brush = active[i];
+                if (brush == null) continue;
+                var scene = brush.gameObject.scene;
+                if (stage != null ? scene == stageScene : !EditorSceneManager.IsPreviewScene(scene)) into.Add(brush);
+            }
+        }
+
 
         /// <summary>Nearest brush under the mouse by its own shape.</summary>
         public static Brush PickBrush(Vector2 mouse) => PickBrushSurface(mouse, out _, out _);
 
         /// <summary>
-        /// Nearest brush under the mouse with the hit point and face normal (world space). Additive brushes win over
-        /// subtractive ones, except while cuts are shown: then whatever surface is drawn nearest is what a click hits.
+        /// Nearest brush under the mouse with the hit point and face normal (world space). Subtractive brushes are
+        /// picked only while cuts are shown, and then whatever surface is drawn nearest is what a click hits.
         /// </summary>
-        public static Brush PickBrushSurface(Vector2 mouse, out Vector3 point, out Vector3 normal)
+        public static Brush PickBrushSurface(Vector2 mouse, out Vector3 point, out Vector3 normal) => PickBrushSurface(HandleUtility.GUIPointToWorldRay(mouse), out point, out normal);
+
+        /// <summary>Nearest brush along a world ray (see the mouse overload).</summary>
+        public static Brush PickBrushSurface(Ray ray, out Vector3 point, out Vector3 normal)
         {
-            var ray = HandleUtility.GUIPointToWorldRay(mouse);
+            bool cuts = BrushSettings.instance.showCuts;
             Brush bestAdd = null, bestSub = null; float tAdd = float.MaxValue, tSub = float.MaxValue;
             Vector3 pAdd = Vector3.zero, nAdd = Vector3.up, pSub = Vector3.zero, nSub = Vector3.up;
-            foreach (var brush in BrushesInView())
+            var stage = PrefabStageUtility.GetCurrentPrefabStage();
+            var stageScene = stage != null ? stage.scene : default;
+            var o = ray.origin; var d = ray.direction;
+            var inv = new Vector3(Inverse(d.x), Inverse(d.y), Inverse(d.z));
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++)
             {
-                var poly = BrushGeometry.Polyhedron(brush);
-                if (poly == null || !poly.IsValid) continue;
-                var t = brush.transform;
-                var lo = t.InverseTransformPoint(ray.origin); var ld = t.InverseTransformDirection(ray.direction);
+                var brush = active[i]; // registered brushes are alive: OnDisable always runs before a brush is destroyed
+                if (brush.operation == BrushOperation.Subtract && !cuts) continue; // an invisible cut is not clickable
+                var e = BrushCache.Of(brush);
+                if (!e.pickReady) MeasureForPicking(brush, e);
+                if (e.polyhedron == null || !RayHitsBox(o, inv, e.min, e.max)) continue; // most brushes end here, without a call into Unity
+                var scene = brush.gameObject.scene;
+                if (stage != null ? scene != stageScene : EditorSceneManager.IsPreviewScene(scene)) continue; // not in the Scene view
+                var poly = e.polyhedron;
+                var lo = e.toLocal.MultiplyPoint3x4(ray.origin); var ld = e.toLocal.MultiplyVector(ray.direction);
                 for (int f = 0; f < poly.faces.Length; f++)
                 {
                     var plane = poly.Plane(f); var n = new Vector3(plane.x, plane.y, plane.z);
@@ -217,15 +246,108 @@ namespace CsgBrush.Editor
                     float tt = -(Vector3.Dot(n, lo) + plane.w) / denom;
                     if (tt < 0f) continue;
                     if (!PointInFace(poly, f, lo + ld * tt)) continue;
-                    var worldPoint = t.TransformPoint(lo + ld * tt);
+                    var worldPoint = e.toWorld.MultiplyPoint3x4(lo + ld * tt);
                     float world = (worldPoint - ray.origin).magnitude;
-                    var worldNormal = t.TransformDirection(n).normalized;
+                    var worldNormal = (e.rotation * n).normalized;
                     if (brush.operation == BrushOperation.Subtract) { if (world < tSub) { tSub = world; bestSub = brush; pSub = worldPoint; nSub = worldNormal; } }
                     else if (world < tAdd) { tAdd = world; bestAdd = brush; pAdd = worldPoint; nAdd = worldNormal; }
                 }
             }
-            if (bestAdd != null && (bestSub == null || !BrushSettings.instance.showCuts || tAdd <= tSub)) { point = pAdd; normal = nAdd; return bestAdd; }
+            if (bestAdd != null && (bestSub == null || tAdd <= tSub)) { point = pAdd; normal = nAdd; return bestAdd; }
             point = pSub; normal = nSub; return bestSub;
+        }
+
+
+
+        /// <summary>Keys compared by reference: UnityEngine.Object's own hashing and equality call into Unity, which costs more than the lookup.</summary>
+        sealed class ByReference : IEqualityComparer<Brush>
+        {
+            public static readonly ByReference Instance = new ByReference();
+            public bool Equals(Brush a, Brush b) => ReferenceEquals(a, b);
+            public int GetHashCode(Brush b) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(b);
+        }
+
+        static void MeasureForPicking(Brush brush, BrushCache e)
+        {
+            e.pickReady = true;
+            e.polyhedron = LocalShape(brush, out var local);
+            if (e.polyhedron != null)
+            {
+                var t = brush.CachedTransform;
+                e.toWorld = t.localToWorldMatrix; e.toLocal = t.worldToLocalMatrix; e.rotation = t.rotation;
+                Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
+                for (int c = 0; c < 8; c++)
+                {
+                    var corner = e.toWorld.MultiplyPoint3x4(new Vector3((c & 1) == 0 ? local.min.x : local.max.x, (c & 2) == 0 ? local.min.y : local.max.y, (c & 4) == 0 ? local.min.z : local.max.z));
+                    min = Vector3.Min(min, corner); max = Vector3.Max(max, corner);
+                }
+                const float pad = 1e-4f; // a face lying on the box still counts
+                e.min = min - new Vector3(pad, pad, pad); e.max = max + new Vector3(pad, pad, pad);
+            }
+        }
+
+        static void Prune<T>(Dictionary<Brush, T> cache)
+        {
+            var dead = new List<Brush>();
+            foreach (var b in cache.Keys) if (b == null || !b.isActiveAndEnabled) dead.Add(b);
+            foreach (var b in dead) cache.Remove(b);
+        }
+
+        static float Inverse(float v) => v != 0f ? 1f / v : float.PositiveInfinity;
+
+        /// <summary>Slab test: does the ray (from its origin on, with 1 / direction per axis) pass through the box?</summary>
+        static bool RayHitsBox(Vector3 o, Vector3 inv, Vector3 min, Vector3 max)
+        {
+            float t0 = (min.x - o.x) * inv.x, t1 = (max.x - o.x) * inv.x;
+            float enter = Mathf.Min(t0, t1), exit = Mathf.Max(t0, t1);
+            t0 = (min.y - o.y) * inv.y; t1 = (max.y - o.y) * inv.y;
+            enter = Mathf.Max(enter, Mathf.Min(t0, t1)); exit = Mathf.Min(exit, Mathf.Max(t0, t1));
+            t0 = (min.z - o.z) * inv.z; t1 = (max.z - o.z) * inv.z;
+            enter = Mathf.Max(enter, Mathf.Min(t0, t1)); exit = Mathf.Min(exit, Mathf.Max(t0, t1));
+            return exit >= Mathf.Max(enter, 0f); // NaN (origin on a slab plane of a parallel axis) fails, which only skips a touching box
+        }
+
+        sealed class CachedShape { public BrushShape shape; public BrushGeometry.ShapeParams parameters; public BrushPolyhedron polyhedron; public Bounds bounds; }
+        static readonly Dictionary<Brush, CachedShape> s_Shapes = new Dictionary<Brush, CachedShape>(ByReference.Instance);
+
+        /// <summary>
+        /// A brush's shape in local space and its bounds, for picking; read-only. A parametric shape is built once per set of
+        /// parameters; a Custom shape is the brush's own polyhedron (edited in place, so its bounds are measured each time).
+        /// </summary>
+        static BrushPolyhedron LocalShape(Brush brush, out Bounds bounds)
+        {
+            bounds = default;
+            if (brush.shape == BrushShape.Custom && brush.polyhedron != null && brush.polyhedron.IsValid)
+            {
+                var v = brush.polyhedron.vertices;
+                Vector3 min = v[0], max = v[0];
+                for (int i = 1; i < v.Length; i++) { min = Vector3.Min(min, v[i]); max = Vector3.Max(max, v[i]); }
+                bounds.SetMinMax(min, max);
+                return brush.polyhedron;
+            }
+            var shape = brush.shape == BrushShape.Custom ? brush.customFrom : brush.shape;
+            var parameters = BrushGeometry.ShapeParams.From(brush);
+            if (!s_Shapes.TryGetValue(brush, out var cached))
+            {
+                if (s_Shapes.Count > 2 * Brush.Active.Count + 64) Prune(s_Shapes);
+                s_Shapes[brush] = cached = new CachedShape();
+            }
+            else if (cached.polyhedron != null && cached.shape == shape && Same(cached.parameters, parameters)) { bounds = cached.bounds; return cached.polyhedron; }
+            var poly = BrushGeometry.ShapePolyhedron(shape, parameters);
+            cached.shape = shape; cached.parameters = parameters;
+            cached.polyhedron = poly != null && poly.IsValid ? poly : null;
+            cached.bounds = cached.polyhedron != null ? cached.polyhedron.Bounds() : default;
+            bounds = cached.bounds;
+            return cached.polyhedron;
+        }
+
+        static bool Same(in BrushGeometry.ShapeParams a, in BrushGeometry.ShapeParams b)
+        {
+            if (a.size.x != b.size.x || a.size.y != b.size.y || a.size.z != b.size.z || a.sides != b.sides || a.tessellation != b.tessellation || a.stepHeight != b.stepHeight || a.wallThickness != b.wallThickness || a.doorSide != b.doorSide || a.doorTop != b.doorTop) return false;
+            var x = a.stairs; var y = b.stairs;
+            return x.innerRadius == y.innerRadius && x.stepWidth == y.stepWidth && x.stepHeight == y.stepHeight && x.stepThickness == y.stepThickness && x.curveAngle == y.curveAngle
+                && x.addToFirstStep == y.addToFirstStep && x.numSteps == y.numSteps && x.stepsPer360 == y.stepsPer360 && x.counterClockwise == y.counterClockwise
+                && x.slopedFloor == y.slopedFloor && x.slopedCeiling == y.slopedCeiling;
         }
 
         static bool PointInFace(BrushPolyhedron poly, int face, Vector3 p)
@@ -264,8 +386,13 @@ namespace CsgBrush.Editor
             // Only the Brush fields, its transform and the brush GameObject are undo state. Everything else
             // (composite, hidden generator children, colliders) is derived and rebuilt here without Undo,
             // so this callback never adds undo entries or clears the redo stack.
-            foreach (var brush in Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            BrushSnap.InvalidateParents();
+            BrushCsg.InvalidateGrouping(); // an undone reorder or reparent
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++)
             {
+                var brush = active[i];
+                if (brush == null) continue;
                 BrushSnap.Snap(brush); // a redo re-applies the recorded pose; keep the grid rule
                 BrushSync.Ensure(brush);
             }
@@ -273,12 +400,12 @@ namespace CsgBrush.Editor
 
         static Texture2D s_GroupIcon;
 
-        /// <summary>CSG groups carry their icon at the right end of their Hierarchy row, so the baking levels stand out.</summary>
+        /// <summary>Brush groups carry their icon at the right end of their Hierarchy row, so the baking levels stand out.</summary>
         static void DrawGroupIcon(EntityId entityId, Rect row)
         {
             var go = EditorUtility.EntityIdToObject(entityId) as GameObject;
-            if (go == null || !go.TryGetComponent<CsgGroup>(out _)) return;
-            if (s_GroupIcon == null) s_GroupIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/CsgGroup.png");
+            if (go == null || !go.TryGetComponent<BrushGroup>(out _)) return;
+            if (s_GroupIcon == null) s_GroupIcon = AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/BrushGroup.png");
             if (s_GroupIcon != null) GUI.DrawTexture(new Rect(row.xMax - 16f, row.y, 16f, 16f), s_GroupIcon, ScaleMode.ScaleToFit);
         }
 
@@ -287,12 +414,16 @@ namespace CsgBrush.Editor
         {
             if (Application.isPlaying) return;
             for (int i = 0; i < stream.length; i++)
-                if (stream.GetEventType(i) == ObjectChangeKind.ChangeGameObjectStructure || stream.GetEventType(i) == ObjectChangeKind.ChangeGameObjectStructureHierarchy) { BrushCsg.MarkAllDirty(); return; }
+            {
+                var kind = stream.GetEventType(i);
+                if (kind == ObjectChangeKind.ChangeGameObjectStructure || kind == ObjectChangeKind.ChangeGameObjectStructureHierarchy || kind == ObjectChangeKind.ChangeGameObjectParent) { BrushCsg.MarkAllDirty(); return; }
+            }
         }
 
         static void OnHierarchyChanged()
         {
             if (Application.isPlaying || processing) return;
+            BrushSnap.InvalidateParents();
             BrushCsg.MarkAllDirty(); // order, parents, deletions: the brush lists are re-derived on the next build
             EditorApplication.delayCall -= Process;
             EditorApplication.delayCall += Process;
@@ -332,7 +463,7 @@ namespace CsgBrush.Editor
                     changed = true;
                     continue;
                 }
-                if (go != null && (CsgGroup.IsMeshChildName(go.name) || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == CsgGroup.DefaultName) && !BrushSettings.instance.showGenerated)
+                if (go != null && (BrushGroup.IsMeshChildName(go.name) || go.name == Colliders.ConvexColliderSettings.ContainerName || go.name == BrushGroup.DefaultName) && !BrushSettings.instance.showGenerated)
                 {
                     changed = true; // generated mesh or collider objects: never what the student meant
                     continue;
@@ -345,12 +476,13 @@ namespace CsgBrush.Editor
             finally { redirecting = false; }
         }
 
-        /// <summary>Unity's grid snapping follows the world preset's grid size.</summary>
+        /// <summary>Unity's grid snapping and its visible Scene view grid follow the world preset's grid size.</summary>
         public static void ApplyGrid()
         {
             var s = BrushSettings.instance;
             float g = s.GridMeters;
             EditorSnapSettings.move = new Vector3(g, g, g);
+            EditorSnapSettings.gridSize = new Vector3(g, g, g);
             EditorSnapSettings.rotate = s.rotationSnapDegrees;
             // Unity's absolute grid snapping (Global handle) matches how Unreal and TrenchBroom snap: to the
             // world grid, not by increments from where the object happens to be.

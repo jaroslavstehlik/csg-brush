@@ -6,7 +6,7 @@ using UnityEngine;
 namespace CsgBrush.Editor
 {
     /// <summary>
-    /// A CSG group inside a prefab bakes into the prefab: the generated meshes (render meshes and mesh colliders) are
+    /// A brush group inside a prefab bakes into the prefab: the generated meshes (render meshes and mesh colliders) are
     /// saved as sub-assets of the prefab file, so the prefab carries its own geometry and can be instantiated at
     /// runtime. Whenever a prefab is imported (created from a scene object, saved in Prefab Mode, overrides applied)
     /// and one of its groups lacks saved meshes, the prefab is rebuilt and baked. A prefab without a group is a
@@ -58,7 +58,7 @@ namespace CsgBrush.Editor
         {
             var root = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             if (root == null) return null;
-            foreach (var group in root.GetComponentsInChildren<CsgGroup>(true))
+            foreach (var group in root.GetComponentsInChildren<BrushGroup>(true))
             {
                 if (BrushesOf(group).Count == 0) continue;
                 var meshes = MeshChildren(group);
@@ -81,7 +81,7 @@ namespace CsgBrush.Editor
         public static void BakeUsedPrefabs()
         {
             var paths = new HashSet<string>();
-            foreach (var group in Object.FindObjectsByType<CsgGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 if (!PrefabUtility.IsPartOfPrefabInstance(group)) continue;
                 var path = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(group);
@@ -91,7 +91,7 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>The prefab file a group bakes into: the asset itself, the prefab of an instance, or the prefab open in Prefab Mode. Null for a scene group.</summary>
-        public static string PrefabPathOf(CsgGroup group)
+        public static string PrefabPathOf(BrushGroup group)
         {
             if (group == null) return null;
             if (PrefabUtility.IsPartOfPrefabAsset(group)) return AssetDatabase.GetAssetPath(group);
@@ -101,7 +101,7 @@ namespace CsgBrush.Editor
             return null;
         }
 
-        static bool HasGroup(string path) => path != null && path.EndsWith(".prefab") && AssetDatabase.LoadAssetAtPath<GameObject>(path)?.GetComponentInChildren<CsgGroup>(true) != null;
+        static bool HasGroup(string path) => path != null && path.EndsWith(".prefab") && AssetDatabase.LoadAssetAtPath<GameObject>(path)?.GetComponentInChildren<BrushGroup>(true) != null;
 
         [MenuItem("Assets/CSG Brush/Rebake Prefab", false, 2000)]
         static void RebakeSelected()
@@ -140,7 +140,7 @@ namespace CsgBrush.Editor
                 var contents = PrefabUtility.LoadPrefabContents(path);
                 try
                 {
-                    foreach (var group in contents.GetComponentsInChildren<CsgGroup>(true)) BrushCsg.Rebuild(group, BrushesOf(group));
+                    foreach (var group in contents.GetComponentsInChildren<BrushGroup>(true)) BrushCsg.Rebuild(group, BrushesOf(group));
                     // the meshes the contents now reference, by the sibling-index path of the object that holds them
                     var built = new Dictionary<string, (Mesh render, Mesh collider)>();
                     foreach (var mf in contents.GetComponentsInChildren<MeshFilter>(true)) if (mf.sharedMesh != null) built[PathOf(mf.transform, contents.transform)] = (mf.sharedMesh, null);
@@ -181,13 +181,13 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>The brushes a group bakes: below it, up to the next group, in hierarchy order.</summary>
-        public static List<Brush> BrushesOf(CsgGroup group)
+        public static List<Brush> BrushesOf(BrushGroup group)
         {
             var list = new List<Brush>();
             // activeSelf, not activeInHierarchy: objects of a prefab asset are in no scene and never "active in hierarchy"
             void Walk(Transform t)
             {
-                if (t != group.transform && t.TryGetComponent<CsgGroup>(out _)) return;
+                if (t != group.transform && t.TryGetComponent<BrushGroup>(out _)) return;
                 if (!t.gameObject.activeSelf) return;
                 if (t.TryGetComponent<Brush>(out var b) && b.enabled) list.Add(b);
                 for (int i = 0; i < t.childCount; i++) Walk(t.GetChild(i));
@@ -196,11 +196,11 @@ namespace CsgBrush.Editor
             return list;
         }
 
-        static List<MeshFilter> MeshChildren(CsgGroup group)
+        static List<MeshFilter> MeshChildren(BrushGroup group)
         {
             var list = new List<MeshFilter>();
             foreach (Transform child in group.transform)
-                if (CsgGroup.IsMeshChildName(child.name) && child.TryGetComponent<MeshFilter>(out var mf)) list.Add(mf);
+                if (BrushGroup.IsMeshChildName(child.name) && child.TryGetComponent<MeshFilter>(out var mf)) list.Add(mf);
             return list;
         }
 

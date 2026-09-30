@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased
+
+- CSG Group is now **Brush Group** (component, Add Component > CSG Brush > Brush Group, the brush Inspector's *Brush group*
+  field). The script keeps its GUID, so existing scenes and prefabs keep their groups.
+- Brush order from the right-click menu (Hierarchy, Scene view, the Brush component's menu): To First, To Last, Move Up,
+  Move Down; a step skips the hidden generated objects. The Inspector's Order row is gone.
+- Drawing a brush in empty space starts on the Scene view grid (its axis and position), as ProBuilder does; past the
+  grid's horizon there is nothing to draw on.
+- Subtract brushes can be clicked in the Scene view only while Cuts are shown.
+- Prefab Mode: brushes are picked from the prefab being edited (not the scene behind it); a prefab open in Prefab Mode
+  is baked when Prefab Mode closes; a prefab asset's brushes are no longer snapped or built when Unity imports it.
+- Removed the off-grid notice and its Snap all button from the Brushes overlay; shorter Inspector texts.
+- Large levels: brushes keep a registry of themselves (`Brush.Active`, maintained by OnEnable/OnDisable; inactive brushes
+  are not processed), replacing every per-frame scene search. Each scene's automatic group is remembered (finding it
+  per brush made grouping quadratic: 7.9 s for 5000 brushes, now cached). The grouping, the rotated-parents check and
+  each brush's pick shape are cached and dropped on change. With 5000 brushes: snap check 1.9 to 0.3 ms per editor
+  update, parents check 5.3 to 0.0 ms per overlay event, picking 30 to 0.35 ms, grouping for a rebuild 7.9 s to 0.0 ms
+  (10 ms once after a hierarchy change). A test holds the per-frame paths under 1 ms.
+- Islands: a group is built per island of brushes whose boxes overlap or touch, on each layer. An island keeps its
+  union and its Unity arrays until one of its pieces (or a source brush's material) changes, so a brush that touches
+  nothing costs only itself when it moves. Each brush keeps its build key, pose and collider data until it changes.
+- Colliders per brush: a brush's pieces depend only on its own parts and the subtract brushes that reach it, so a brush
+  whose key (parts, fingerprint, kind, layer, name, cutters) is unchanged keeps its pieces untouched and its hook is
+  not run again; only changed brushes are built. The fingerprint now tells physics materials apart by identity, not
+  only by name. Build with 1001 separate boxes in one group, one moved: 90 to ~9 ms (preparation 35 to 3, union 17
+  to 3, Unity mesh 22 to 2, colliders 13 to 2).
+- Stairs: set the step height, draw the height; the number of steps is the height divided by the step height, rounded,
+  and the steps fill it. Linear stairs lost Step length (each step runs the length divided by the steps) and now fill
+  their box: existing linear stairs whose height was not a whole number of steps, or whose steps did not reach the top,
+  change shape. Curved and spiral stairs show Height instead of Num steps (a new step height keeps the height); their
+  geometry is unchanged. `BrushApi.SetStairs(brush, stepHeight)`. New stairs default to 0.25 m steps (a comfortable
+  step for a 1.5 to 2 m character, under Unity's default CharacterController step offset), not one grid step.
+  Spiral stairs default to 0.1 m treads, not half a grid step.
+- Spiral stairs climb the same step height as every other stair: tread k is at (k + 1) step heights above the floor
+  (the transform); the thickness only reaches down from the tread. Before, the shape was lowered onto its first tread's
+  underside, so every step sat one thickness lower (a 0.25 m step with 0.1 m treads started at 0.1 m).
+- Curved stairs keep their footprint whatever the number of steps: a step wider than 11.25 degrees is made of several
+  convex blocks along the curve (one collider each), so a low stair with few steps no longer cuts straight across it.
+- Door brush: a frame of two sides and a top around an opening down to the floor, filling its box (as ProBuilder's
+  Door), with Side width and Top height (one grid step unless set); three convex blocks, one collider each. Create tool,
+  GameObject > Brush > Door and Tools > CSG Brush > Create > Door.
+- Icons: a new set in the style of Unity's editor icons (create tools, Vertex / Edge / Face, Select Hidden, Drag
+  Rect, Element orientation, the Edit Brush context, the Brushes and Extrude overlays, the Brush component), light and
+  dark theme variants at 2x, drawn by `Tools~/icons/generate_icons.py` (Pillow). The overlays no longer show "Br" and
+  "Ex" when docked in a toolbar; brushes no longer show the generic script icon in the Hierarchy.
+- World presets: Metric is now **Unity** and the default for new projects (listed first); saved settings keep their
+  preset. The player reference sizes (player box, crouch height, max step, slope, doorway) are gone from the settings:
+  they belong to the character controller. Stairs step by one grid step unless a step height is set.
+
 ## 0.2.0 (2026-09-14)
 
 - Rebake: the CSG Group Inspector shows its brush count and a Rebake button that builds the group again from scratch,

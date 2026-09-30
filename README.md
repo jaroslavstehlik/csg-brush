@@ -14,14 +14,14 @@ URL", the URL of this repository.
 ## Brushes (the student-facing layer)
 
 - **Cuts**: the Cuts toggle in the Brushes overlay draws subtract brushes as translucent red volumes so you can see and select them
-  where they have carved everything away; with it off, clicks always prefer the solid brushes.
-- **Layers**: a brush's Unity layer picks its CSG group. Brushes on one layer are combined with each other only: a subtract brush
+  where they have carved everything away; with it off, subtract brushes cannot be clicked in the Scene view.
+- **Layers**: brushes are combined per Unity layer. Brushes on one layer are combined with each other only: a subtract brush
   carves its own layer, each layer renders as its own mesh child on that layer, and the colliders sit on that layer. Use it for a
   collision layer per kind of thing, or to keep parts of a level from carving each other.
 - **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
-  Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
+  Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch, Door; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
   base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool. While a Create tool is active the
-  Brushes overlay shows what the next brush gets (operation, modules, sides, steps, arch thickness and angle, hollow).
+  Brushes overlay shows what the next brush gets (operation, modules, sides, steps, arch thickness and angle, door side width and top height, hollow).
   Everything snaps to the grid, and a wall makes the brush grow out of the wall. Cylinder, Cone and Sphere are drawn from the centre of
   their base: press on the centre, drag the radius, then the height (a sphere with no height is round; lift for an
   ellipsoid). Curved and Spiral Stairs are drawn by their axis: press where the column axis goes, drag the outer radius (the drag direction is
@@ -29,25 +29,25 @@ URL", the URL of this repository.
   (operation, modules, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
   edited on the brush afterwards. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
-  generated under the CSG group that bakes it (see below).
+  generated under the brush group that bakes it (see below).
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
   the brush: on release the scale is baked into the size and the transform scale returns to one.
 - **Default material**: faces without a material of their own show a generated ruler texture (lines at every grid size, strong at the
   metre, on a metre checker) that lines up with the world grid across brushes and cuts; created under `Assets/CSG Brush` on first
   use, swappable in Project Settings > Brushes.
-- **CSG groups and baking**: a `CSG Group` component (Add Component > CSG Brush > CSG Group, amber block icon in the
+- **Brush groups and baking**: a `Brush Group` component (Add Component > CSG Brush > Brush Group, amber block icon in the
   Hierarchy and Scene view) bakes the brushes below it, up to the next group, into one mesh per layer and one set of
   colliders, held as its generated children. A brush is baked by the nearest group above it; brushes with none are
   baked by their scene's automatic group (hidden, one per scene), so every scene holds its own geometry and scenes can
-  be loaded together at runtime. The brush Inspector's *CSG group* field shows what bakes it (click to find it; the
+  be loaded together at runtime. The brush Inspector's *Brush group* field shows what bakes it (click to find it; the
   scene asset for a scene's automatic group). A group inside a prefab bakes into the prefab (meshes saved as sub-assets
   whenever the prefab is saved), so it can be instantiated at runtime and never carves anything outside itself; scene
   instances use the prefab's meshes until their brushes are changed. A prefab without a group is a stamp: placed in a
   level in the editor, its brushes (a doorway cut, say) join that level's CSG; it bakes nothing of its own.
 - **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider), with a physics material and
   Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. A render mesh is its
-  group: it takes the CSG group object's tag and static flags (a scene's automatic group takes them from Project Settings). Everything a specific
+  group: it takes the brush group object's tag and static flags (a scene's automatic group takes them from Project Settings). Everything a specific
   character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
   parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
   those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however
@@ -72,20 +72,21 @@ URL", the URL of this repository.
   The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
   shape it came from) discards the edits. Concave shapes are allowed; they are split into convex parts for the colliders
   automatically. Every shape can be edited by hand.
-- **Stairs**: Linear Stairs fill their size box with steps of a given height and length. Curved Stairs and Spiral
-  Stairs follow Unreal's parameters (inner radius, step width, step height, angle of curve or steps per 360, num
-  steps, add to first step, counter clockwise, and for spirals step thickness, sloped floor, sloped ceiling);
-  their size follows the parameters. Each step is a closed block and gets its own convex collider; a sloped
+- **Stairs**: you set the step height and draw the height; the number of steps is the height divided by the step
+  height, rounded, so the steps fill it exactly. Linear Stairs fill their size box (each step runs the length divided
+  by the steps). Curved Stairs and Spiral Stairs follow Unreal's parameters (inner radius, step width, step height,
+  angle of curve or steps per 360, add to first step, counter clockwise, and for spirals step thickness, sloped floor,
+  sloped ceiling) with a Height instead of a number of steps; their size follows the parameters. Each step is a closed block and gets its own convex collider; a sloped
   spiral's collider is the hull of each twisted block, so use more steps per turn for a smoother ramp.
 - **Order**: the Hierarchy order is the CSG order. A subtract carves only the brushes above it, so a brush
   created after the cutter stays whole until it is moved above it. "To first" and "To last" change the sibling
   order.
-- **World preset**: Project Settings > Brushes selects Quake (32 units per metre), Source, Unreal, metric or
-  custom, the grid steps and the default sizes. The Scene view "Brushes" overlay shows the preset and the grid;
+- **World preset**: Project Settings > Brushes selects Unity (metres, the default), Quake (32 units per metre),
+  Source, Unreal or custom, the grid steps and the default sizes. The Scene view "Brushes" overlay shows the preset and the grid;
   `[` and `]` change the grid size.
 - **Grid**: with "Snap to grid" on (default), every brush is kept on the world grid after each edit: the minimum
   corner on the grid, sizes as grid multiples, rotation in steps, no scale. Parents may only organise brushes; a
-  rotated or scaled parent is listed in the overlay with a Reset button, off-grid brushes with Snap all.
+  rotated or scaled parent is listed in the overlay with a Reset button.
 - **Rebuild**: Brushes > Rebuild Now forces a full regeneration (meshes and convex colliders).
 - **Tests**: Window > General > Test Runner, EditMode, `CsgBrush.Tests` (also runs headlessly with
   `-runTests -testPlatform EditMode -testFilter CsgBrush.Tests`).
@@ -103,3 +104,7 @@ bumping the tag. Nothing native is needed at runtime.
   settings, menus), the Manifold model builder (`BrushCsg`), and the tests.
 - `ConvexColliders/` the convex collider builder; game data reaches the pieces through brush modules.
 - `Manifold/` the native plugin, its P/Invoke layer and the `ManifoldSolid` wrapper.
+
+## Icons
+
+The editor icons are generated: see `Tools~/icons/README.md` (Python 3 with Pillow).
