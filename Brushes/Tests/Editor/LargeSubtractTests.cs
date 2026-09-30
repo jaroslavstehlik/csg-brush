@@ -103,7 +103,7 @@ namespace CsgBrush.Tests
             var cutter = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity, null, "cutter");
             BrushApi.SetOperation(cutter, BrushOperation.Subtract); BrushApi.ForceUpdate();
             Check("small cutter on box 0", new List<Brush> { boxes[0] });
-            // grow it over the whole grid, keeping the min corner (the way the Scale tool bakes size)
+            // grow it over the whole grid, keeping the min corner (the way the Scale tool applies size)
             int rows = 4; float w = 10 * 3f + 4f, d = rows * 3f + 4f;
             BrushApi.SetSize(cutter, new Vector3(w, 2f, d));
             BrushApi.Move(cutter, new Vector3(9 * 1.5f, 1f, 3 * 1.5f)); BrushApi.ForceUpdate();

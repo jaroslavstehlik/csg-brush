@@ -27,7 +27,7 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void EachSceneBakesItsOwnBrushesWhenScenesAreOpenTogether()
+        public void EachSceneBuildsItsOwnBrushesWhenScenesAreOpenTogether()
         {
             var a = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, null, "BrushA");
@@ -58,14 +58,14 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void AGroupInAPrefabBakesItsMeshesIntoThePrefab()
+        public void AGroupInAPrefabBuildsItsMeshesIntoThePrefab()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = BuildGroupWithBrushes("Prop");
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-            Assert.IsTrue(BrushPrefabBaking.NeedsBake(PrefabPath), "saving from the scene leaves the scene's meshes behind");
-            BrushPrefabBaking.Bake(PrefabPath);
-            Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath));
+            Assert.IsTrue(BrushPrefabBuild.NeedsBuild(PrefabPath), "saving from the scene leaves the scene's meshes behind");
+            BrushPrefabBuild.Build(PrefabPath);
+            Assert.IsNull(BrushPrefabBuild.WhyBuild(PrefabPath));
             var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             var mf = asset.GetComponentInChildren<MeshFilter>(true);
             Assert.IsNotNull(mf.sharedMesh); Assert.IsTrue(EditorUtility.IsPersistent(mf.sharedMesh)); Assert.AreEqual(PrefabPath, AssetDatabase.GetAssetPath(mf.sharedMesh), "stored in the prefab file");
@@ -74,55 +74,55 @@ namespace CsgBrush.Tests
             var spawned = Object.Instantiate(asset);
             Assert.IsNotNull(spawned.GetComponentInChildren<MeshFilter>(true).sharedMesh, "a runtime instance has its mesh");
             Object.DestroyImmediate(spawned);
-            // baking again replaces the meshes instead of piling them up
-            BrushPrefabBaking.Bake(PrefabPath);
+            // building again replaces the meshes instead of piling them up
+            BrushPrefabBuild.Build(PrefabPath);
             int meshes = 0; foreach (var o in AssetDatabase.LoadAllAssetRepresentationsAtPath(PrefabPath)) if (o is Mesh) meshes++;
             Assert.AreEqual(2, meshes, "one render mesh and one collider mesh");
         }
 
         [Test]
-        public void ASceneInstanceOfABakedPrefabUsesThePrefabsMeshesUntilItsBrushesChange()
+        public void ASceneInstanceOfABuiltPrefabUsesThePrefabsMeshesUntilItsBrushesChange()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = BuildGroupWithBrushes("Prop");
-            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath); BrushPrefabBaking.Bake(PrefabPath);
+            PrefabUtility.SaveAsPrefabAsset(root, PrefabPath); BrushPrefabBuild.Build(PrefabPath);
             Object.DestroyImmediate(root);
             var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             var assetMesh = asset.GetComponentInChildren<MeshFilter>(true).sharedMesh;
             int assetVerts = assetMesh.vertexCount;
             var inst = (GameObject)PrefabUtility.InstantiatePrefab(asset);
             BrushApi.ForceUpdate();
-            Assert.AreEqual(assetMesh, inst.GetComponentInChildren<MeshFilter>(true).sharedMesh, "the instance renders the prefab's baked mesh");
+            Assert.AreEqual(assetMesh, inst.GetComponentInChildren<MeshFilter>(true).sharedMesh, "the instance renders the prefab's built mesh");
             Assert.IsFalse(PrefabUtility.HasPrefabInstanceAnyOverrides(inst, false), "and has no overrides");
-            // change a brush in the instance: now the scene bakes it, the prefab's mesh is untouched
+            // change a brush in the instance: now the scene builds it, the prefab's mesh is untouched
             var box = inst.transform.Find("Box").GetComponent<Brush>();
             BrushApi.SetSize(box, new Vector3(2f, 4f, 2f));
             BrushApi.ForceUpdate();
             var mesh = inst.GetComponentInChildren<MeshFilter>(true).sharedMesh;
             Assert.AreNotEqual(assetMesh, mesh); Assert.IsFalse(EditorUtility.IsPersistent(mesh));
-            Assert.AreEqual(assetVerts, assetMesh.vertexCount, "the baked prefab mesh was not rewritten");
+            Assert.AreEqual(assetVerts, assetMesh.vertexCount, "the built prefab mesh was not rewritten");
         }
 
         [Test]
-        public void TheInspectorNamesWhatBakesABrush()
+        public void TheInspectorNamesWhatBuildsABrush()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var free = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, null, "Free");
             EditorSceneManager.SaveScene(scene, ScenePathA);
-            StringAssert.StartsWith("scene", BrushCsg.BakedBy(free, out var sceneRef));
+            StringAssert.StartsWith("scene", BrushCsg.BuiltBy(free, out var sceneRef));
             Assert.IsInstanceOf<SceneAsset>(sceneRef, "the scene itself, clickable");
             var root = BuildGroupWithBrushes("Level");
             var grouped = root.transform.Find("Box").GetComponent<Brush>();
-            BrushCsg.BakedBy(grouped, out var groupRef);
+            BrushCsg.BuiltBy(grouped, out var groupRef);
             Assert.AreEqual(root.GetComponent<BrushGroup>(), groupRef);
             // a prefab without a group: a stamp
             var stampRoot = new GameObject("Doorway");
             BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(1f, 2f, 1f), Quaternion.identity, stampRoot.transform, "Cut");
             PrefabUtility.SaveAsPrefabAsset(stampRoot, StampPath);
             var stampAsset = AssetDatabase.LoadAssetAtPath<GameObject>(StampPath);
-            StringAssert.Contains("stamp", BrushCsg.BakedBy(stampAsset.GetComponentInChildren<Brush>(true), out var none));
+            StringAssert.Contains("stamp", BrushCsg.BuiltBy(stampAsset.GetComponentInChildren<Brush>(true), out var none));
             Assert.IsNull(none);
-            Assert.IsFalse(BrushPrefabBaking.NeedsBake(StampPath), "a stamp has nothing to bake");
+            Assert.IsFalse(BrushPrefabBuild.NeedsBuild(StampPath), "a stamp has nothing to build");
         }
 
         [Test]
@@ -137,8 +137,8 @@ namespace CsgBrush.Tests
                 foreach (Transform child in root.transform)
                     if (BrushSync.IsGenerated(child)) Assert.AreEqual(HideFlags.HideInHierarchy | HideFlags.NotEditable, child.gameObject.hideFlags, child.name + " hidden right after the build");
                 Assert.AreNotEqual(HideFlags.None, root.GetComponent<Colliders.ConvexColliderSettings>().hideFlags & HideFlags.HideInInspector);
-                // an instance of a baked prefab: hidden too, without becoming an override
-                PrefabUtility.SaveAsPrefabAsset(root, PrefabPath); BrushPrefabBaking.Bake(PrefabPath);
+                // an instance of a built prefab: hidden too, without becoming an override
+                PrefabUtility.SaveAsPrefabAsset(root, PrefabPath); BrushPrefabBuild.Build(PrefabPath);
                 var inst = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath));
                 BrushSync.ApplyVisibility();
                 foreach (Transform child in inst.transform)
@@ -153,43 +153,43 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ARebakeFindsThePrefabOfAGroupWhereverItIsSeen()
+        public void ARebuildFindsThePrefabOfAGroupWhereverItIsSeen()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var sceneGroup = BuildGroupWithBrushes("Level");
-            Assert.IsNull(BrushPrefabBaking.PrefabPathOf(sceneGroup.GetComponent<BrushGroup>()), "a scene group has no prefab to rebake");
+            Assert.IsNull(BrushPrefabBuild.PrefabPathOf(sceneGroup.GetComponent<BrushGroup>()), "a scene group has no prefab to rebuild");
             PrefabUtility.SaveAsPrefabAsset(sceneGroup, PrefabPath);
             Object.DestroyImmediate(sceneGroup);
             var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
-            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(asset.GetComponent<BrushGroup>()));
+            Assert.AreEqual(PrefabPath, BrushPrefabBuild.PrefabPathOf(asset.GetComponent<BrushGroup>()));
             var inst = (GameObject)PrefabUtility.InstantiatePrefab(asset);
-            Assert.AreEqual(PrefabPath, BrushPrefabBaking.PrefabPathOf(inst.GetComponent<BrushGroup>()));
-            // a forced rebake of a prefab whose meshes were lost brings them back
-            BrushPrefabBaking.Bake(BrushPrefabBaking.PrefabPathOf(inst.GetComponent<BrushGroup>()));
-            Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath));
+            Assert.AreEqual(PrefabPath, BrushPrefabBuild.PrefabPathOf(inst.GetComponent<BrushGroup>()));
+            // a forced rebuild of a prefab whose meshes were lost brings them back
+            BrushPrefabBuild.Build(BrushPrefabBuild.PrefabPathOf(inst.GetComponent<BrushGroup>()));
+            Assert.IsNull(BrushPrefabBuild.WhyBuild(PrefabPath));
         }
 
         [Test]
-        public void RebakeBuildsASceneGroupAgainFromScratch()
+        public void RebuildBuildsASceneGroupAgainFromScratch()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = BuildGroupWithBrushes("Level");
             var group = root.GetComponent<BrushGroup>();
             var before = BrushCsg.MeshObject(group, false).GetComponent<MeshFilter>().sharedMesh.vertexCount;
-            BrushCsg.Rebake(group);
+            BrushCsg.Rebuild(group);
             Assert.AreEqual(2, BrushCsg.LastBuiltSolids, "every brush solid built again, none from the cache");
             Assert.Greater(Colliders.Editor.ConvexColliderBuilder.LastReusedPieces + Colliders.Editor.ConvexColliderBuilder.LastCreatedPieces, 0, "the colliders were processed, not skipped");
             Assert.AreEqual(before, BrushCsg.MeshObject(group, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "same result");
         }
 
         [UnityTest]
-        public IEnumerator APrefabOpenInPrefabModeBakesWhenPrefabModeCloses()
+        public IEnumerator APrefabOpenInPrefabModeBuildsWhenPrefabModeCloses()
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = BuildGroupWithBrushes("Prop");
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             Object.DestroyImmediate(root);
-            BrushPrefabBaking.Bake(PrefabPath);
+            BrushPrefabBuild.Build(PrefabPath);
             var stage = PrefabStageUtility.OpenPrefab(PrefabPath);
             var brush = stage.prefabContentsRoot.GetComponentInChildren<Brush>();
             brush.transform.position += Vector3.up;
@@ -198,13 +198,13 @@ namespace CsgBrush.Tests
             var save = typeof(PrefabStage).GetMethod("SavePrefab", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, System.Type.EmptyTypes, null);
             if (save == null) Assert.Ignore("PrefabStage.SavePrefab not found in this Unity version");
             save.Invoke(stage, null);
-            Assert.IsTrue(BrushPrefabBaking.NeedsBake(PrefabPath));
-            BrushPrefabBaking.BakeIfNeeded(PrefabPath);
-            Assert.IsTrue(BrushPrefabBaking.NeedsBake(PrefabPath), "not baked while open: writing the file would make Unity reload the stage");
+            Assert.IsTrue(BrushPrefabBuild.NeedsBuild(PrefabPath));
+            BrushPrefabBuild.BuildIfNeeded(PrefabPath);
+            Assert.IsTrue(BrushPrefabBuild.NeedsBuild(PrefabPath), "not built while open: writing the file would make Unity reload the stage");
             Assert.AreEqual(brush, PrefabStageUtility.GetCurrentPrefabStage().prefabContentsRoot.GetComponentInChildren<Brush>(), "the stage keeps the objects being edited");
             StageUtility.GoToMainStage();
-            for (int i = 0; i < 5 && BrushPrefabBaking.NeedsBake(PrefabPath); i++) yield return null;
-            Assert.IsNull(BrushPrefabBaking.WhyBake(PrefabPath), "baked once Prefab Mode closed");
+            for (int i = 0; i < 5 && BrushPrefabBuild.NeedsBuild(PrefabPath); i++) yield return null;
+            Assert.IsNull(BrushPrefabBuild.WhyBuild(PrefabPath), "built once Prefab Mode closed");
         }
 
         [Test]
@@ -231,7 +231,7 @@ namespace CsgBrush.Tests
             bool snap = BrushSettings.instance.snapToGrid; int gridIndex = BrushSettings.instance.gridIndex; // the settings object is reloaded by asset refreshes: never held
             try
             {
-                for (int i = 0; i < 5; i++) yield return null; // bakes queued by earlier tests for the same path land first
+                for (int i = 0; i < 5; i++) yield return null; // builds queued by earlier tests for the same path land first
                 BrushSettings.instance.snapToGrid = true; BrushSettings.instance.gridIndex = BrushSettings.instance.gridSizes.Length - 1; // the coarsest step: the brush below is surely off it
                 EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
                 var root = new GameObject("Prop"); root.AddComponent<BrushGroup>();
@@ -242,12 +242,12 @@ namespace CsgBrush.Tests
                 // Unity validates the prefab's brushes on every import (each Auto Save in Prefab Mode)
                 PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
                 Object.DestroyImmediate(root);
-                BrushPrefabBaking.Bake(PrefabPath);
+                BrushPrefabBuild.Build(PrefabPath);
                 for (int i = 0; i < 5; i++) yield return null;
                 BrushApi.ForceUpdate();
                 var asset = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
                 Assert.Less(Vector3.Distance(offGrid, asset.GetComponentInChildren<Brush>(true).transform.localPosition), 1e-4f, "the asset is not edited behind the user's back");
-                Assert.IsTrue(EditorUtility.IsPersistent(asset.GetComponentInChildren<MeshFilter>(true).sharedMesh), "the asset keeps its baked mesh: its group is not built in place");
+                Assert.IsTrue(EditorUtility.IsPersistent(asset.GetComponentInChildren<MeshFilter>(true).sharedMesh), "the asset keeps its built mesh: its group is not built in place");
             }
             finally { BrushSettings.instance.snapToGrid = snap; BrushSettings.instance.gridIndex = gridIndex; }
         }

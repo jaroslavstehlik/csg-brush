@@ -93,7 +93,7 @@ namespace CsgBrush.Editor
             if (brush.HasParametricSize) return SnapPivot(brush, grid, s.rotationSnapDegrees);
 
             // The Scale tool resizes the brush: any scale the user applied on top of the parent counter-scale is
-            // baked into the size, then the world scale goes back to one.
+            // applied to the size, then the world scale goes back to one.
             var desiredScale = CounterScale(t);
             var size = brush.size;
             if ((t.localScale - desiredScale).sqrMagnitude > kEpsilon * kEpsilon)
@@ -135,7 +135,7 @@ namespace CsgBrush.Editor
 
         /// <summary>
         /// A hand-edited shape has no size box: its rule is that the pivot and every vertex lie on the world grid.
-        /// Rotation snaps as usual; the Scale tool is baked into the vertices; moving the pivot onto the grid keeps
+        /// Rotation snaps as usual; the Scale tool is applied to the vertices; moving the pivot onto the grid keeps
         /// the geometry where it is.
         /// </summary>
         /// <summary>Shapes built around an axis (curved and spiral stairs): the transform is the axis, so the pivot, rotation and scale snap; the parameters stay.</summary>

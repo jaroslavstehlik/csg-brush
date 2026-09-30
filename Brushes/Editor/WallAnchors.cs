@@ -43,7 +43,7 @@ namespace CsgBrush.Editor
             var opening = s.NewOpeningSize(shape); float sill = s.NewOpeningSill(shape);
             p = default;
             var hit = BrushHooks.PickBrushSurface(ray, out var point, out var normal);
-            if (hit != null && hit.generatedBy is FloorPlan plan)
+            if (hit != null && hit.generatedBy is FloorPlan plan && Mathf.Abs(normal.y) < 0.5f)
             {
                 var local = plan.transform.InverseTransformPoint(point);
                 if (NearestWall(plan, new Vector2(local.x, local.z), out var wall, out float along, out _))

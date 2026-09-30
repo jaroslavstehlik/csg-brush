@@ -186,6 +186,7 @@ namespace CsgBrush.Editor
         public static FloorPlan Create(Vector3 position, Transform parent, bool firstPoint)
         {
             var go = new GameObject("Floor Plan");
+            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // its walls take the plan's flags
             Undo.RegisterCreatedObjectUndo(go, "Create floor plan");
             if (parent != null) Undo.SetTransformParent(go.transform, parent, "Create floor plan");
             go.transform.position = position;

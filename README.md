@@ -11,6 +11,9 @@ CSG core, generators and tools have all been replaced; the brush layer, the snap
 collider builder are original. History: `CHANGELOG-FORK.md`. Install: Package Manager, "Install package from git
 URL", the URL of this repository.
 
+Documentation for floor plans, doors and windows, wall anchors, and Brush Group rendering is in
+[Documentation~](Documentation~/index.md).
+
 ## Brushes (the student-facing layer)
 
 - **Cuts**: the Cuts toggle in the Brushes overlay draws subtract brushes as translucent red volumes so you can see and select them
@@ -29,7 +32,7 @@ URL", the URL of this repository.
   (operation, modules, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
   edited on the brush afterwards. GameObject > Brush > ... still creates a
   default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
-  generated under the brush group that bakes it (see below).
+  generated under the brush group that builds it (see below).
 - **Floor plan**: pick Floor Plan in the Create tool's dropdown and click a floor to start a plan there (GameObject > Brush >
   Floor Plan starts one at the view pivot), then click the corners (snapped to the grid and
   to 45 degree steps, Shift for any grid point) and click the first one to close the room. The plan makes the walls (one
@@ -47,22 +50,26 @@ URL", the URL of this repository.
   to free it; Detach from Wall takes it off.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
   in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
-  the brush: on release the scale is baked into the size and the transform scale returns to one.
+  the brush: on release the scale is applied to the size and the transform scale returns to one.
 - **Default material**: faces without a material of their own show a generated ruler texture (lines at every grid size, strong at the
   metre, on a metre checker) that lines up with the world grid across brushes and cuts; created under `Assets/CSG Brush` on first
   use, swappable in Project Settings > Brushes.
-- **Brush groups and baking**: a `Brush Group` component (Add Component > CSG Brush > Brush Group, amber block icon in the
-  Hierarchy and Scene view) bakes the brushes below it, up to the next group, into one mesh per layer and one set of
-  colliders, held as its generated children. A brush is baked by the nearest group above it; brushes with none are
-  baked by their scene's automatic group (hidden, one per scene), so every scene holds its own geometry and scenes can
-  be loaded together at runtime. The brush Inspector's *Brush group* field shows what bakes it (click to find it; the
-  scene asset for a scene's automatic group). A group inside a prefab bakes into the prefab (meshes saved as sub-assets
+- **Brush groups and building**: a `Brush Group` component (Add Component > CSG Brush > Brush Group, amber block icon in the
+  Hierarchy and Scene view) builds the brushes below it, up to the next group, into one mesh per layer and one set of
+  colliders, held as its generated children. A brush is built by the nearest group above it; brushes with none are
+  built by their scene's automatic group (hidden, one per scene), so every scene holds its own geometry and scenes can
+  be loaded together at runtime. The brush Inspector's *Brush group* field shows what builds it (click to find it; the
+  scene asset for a scene's automatic group). A group inside a prefab builds into the prefab (meshes saved as sub-assets
   whenever the prefab is saved), so it can be instantiated at runtime and never carves anything outside itself; scene
   instances use the prefab's meshes until their brushes are changed. A prefab without a group is a stamp: placed in a
-  level in the editor, its brushes (a doorway cut, say) join that level's CSG; it bakes nothing of its own.
+  level in the editor, its brushes (a doorway cut, say) join that level's CSG; it builds nothing of its own.
 - **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider), with a physics material and
-  Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. A render mesh is its
-  group: it takes the brush group object's tag and static flags (a scene's automatic group takes them from Project Settings). Everything a specific
+  Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. Static flags are per brush:
+  its colliders take them, and its triangles render in a mesh of those flags (static and moving brushes still carve each
+  other; a doorway's sides take the flags of the wall they are cut into). New brushes start static (Project Settings >
+  Brushes). A render mesh takes its group object's tag. Lightmap UVs: Tools > CSG Brush > Generate Lightmap UVs, or a
+  light bake makes them first. Other renderer settings (shadows, Scale In Lightmap,
+  probes, rendering layers...) are per Brush Group, in its Rendering foldout; every mesh of the group takes them. Everything a specific
   character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
   parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
   those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however

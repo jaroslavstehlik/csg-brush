@@ -62,8 +62,8 @@ namespace CsgBrush.Editor
             if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape) { Picking = false; e.Use(); Repaint(); SceneView.RepaintAll(); return; }
             if (e.type == EventType.MouseMove || e.type == EventType.MouseDown)
             {
-                var hit = BrushHooks.PickBrushSurface(e.mousePosition, out var point, out _);
-                m_HoverPlan = hit != null ? hit.generatedBy as FloorPlan : null;
+                var hit = BrushHooks.PickBrushSurface(e.mousePosition, out var point, out var hitNormal);
+                m_HoverPlan = hit != null && Mathf.Abs(hitNormal.y) < 0.5f ? hit.generatedBy as FloorPlan : null; // a wall's side, not the floor or ceiling
                 m_HoverWall = -1;
                 if (m_HoverPlan != null)
                 {

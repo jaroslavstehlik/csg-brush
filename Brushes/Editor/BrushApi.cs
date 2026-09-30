@@ -13,6 +13,7 @@ namespace CsgBrush.Editor
         public static Brush Create(BrushShape shape, Vector3 position, Vector3 sizeMeters, Quaternion rotation, Transform parent = null, string name = null)
         {
             var go = new GameObject(name ?? shape.ToString());
+            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // static unless made otherwise: its meshes and colliders follow it
             Undo.RegisterCreatedObjectUndo(go, "Create brush");
             if (parent != null) Undo.SetTransformParent(go.transform, parent, "Create brush");
             go.transform.SetPositionAndRotation(position, rotation);
@@ -65,6 +66,16 @@ namespace CsgBrush.Editor
             BrushSync.RequestFullUpdate(brush);
             brush.operation = operation;
             BrushSync.Ensure(brush);
+        }
+
+        /// <summary>A brush's static flags (lightmaps, occlusion, batching), which its render triangles and colliders take; undoable.</summary>
+        public static void SetStaticFlags(Brush brush, StaticEditorFlags flags)
+        {
+            if (GameObjectUtility.GetStaticEditorFlags(brush.gameObject) == flags) return;
+            Undo.RecordObject(brush.gameObject, "Change static flags");
+            GameObjectUtility.SetStaticEditorFlags(brush.gameObject, flags);
+            BrushCache.Forget(brush);
+            BrushCsg.MarkDirty(brush);
         }
 
         public static void SetCollision(Brush brush, Colliders.ColliderKind kind)
@@ -278,7 +289,7 @@ namespace CsgBrush.Editor
             BrushSync.Ensure(brush);
         }
 
-        /// <summary>Bake a non-uniform transform scale into the size and reset the scale to one.</summary>
+        /// <summary>Apply a non-uniform transform scale to the size and reset the scale to one.</summary>
         public static void ApplyScale(Brush brush)
         {
             var t = brush.transform;

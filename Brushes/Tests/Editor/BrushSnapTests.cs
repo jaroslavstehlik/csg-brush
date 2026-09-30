@@ -107,7 +107,7 @@ namespace CsgBrush.Tests
             BrushApi.ForceUpdate();
             b.transform.localScale = new Vector3(2f, 1f, 1.3f);
             BrushApi.ForceUpdate();
-            Assert.AreEqual(new Vector3(2f, 1f, 2.5f), b.size, "scale baked into the size and rounded to the grid");
+            Assert.AreEqual(new Vector3(2f, 1f, 2.5f), b.size, "scale applied to the size and rounded to the grid");
             Assert.AreEqual(Vector3.one, b.transform.localScale, "scale back to one");
         }
 
@@ -129,7 +129,7 @@ namespace CsgBrush.Tests
             finally { GUIUtility.hotControl = 0; }
             BrushApi.ForceUpdate();
             Assert.AreEqual("(0.0, 15.0, 0.0)", b.transform.rotation.eulerAngles.ToString("F1"), "snapped on release");
-            Assert.AreEqual(new Vector3(1.5f, 1f, 1f), b.size, "scale baked on release");
+            Assert.AreEqual(new Vector3(1.5f, 1f, 1f), b.size, "scale applied on release");
             Assert.AreEqual(Vector3.one, b.transform.localScale);
         }
 

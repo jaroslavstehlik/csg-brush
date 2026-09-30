@@ -6,17 +6,17 @@ using UnityEngine;
 namespace CsgBrush.Editor
 {
     /// <summary>
-    /// A brush group inside a prefab bakes into the prefab: the generated meshes (render meshes and mesh colliders) are
+    /// A brush group inside a prefab builds into the prefab: the generated meshes (render meshes and mesh colliders) are
     /// saved as sub-assets of the prefab file, so the prefab carries its own geometry and can be instantiated at
     /// runtime. Whenever a prefab is imported (created from a scene object, saved in Prefab Mode, overrides applied)
-    /// and one of its groups lacks saved meshes, the prefab is rebuilt and baked. A prefab without a group is a
-    /// stamp and has nothing to bake. A prefab open in Prefab Mode bakes when Prefab Mode closes: writing its file
+    /// and one of its groups lacks saved meshes, the prefab is rebuilt. A prefab without a group is a
+    /// stamp and has nothing to build. A prefab open in Prefab Mode builds when Prefab Mode closes: writing its file
     /// while it is open makes Unity reload the stage, replacing every object being edited.
     /// </summary>
-    public sealed class BrushPrefabBaking : AssetPostprocessor
+    public sealed class BrushPrefabBuild : AssetPostprocessor
     {
         const string MeshPrefix = "csg ";
-        static bool s_Baking;
+        static bool s_Building;
         static readonly HashSet<string> s_Pending = new HashSet<string>();
 
         [InitializeOnLoadMethod]
@@ -25,23 +25,23 @@ namespace CsgBrush.Editor
             PrefabStage.prefabStageClosing += stage =>
             {
                 var path = stage.assetPath;
-                EditorApplication.delayCall += () => BakeIfNeeded(path);
+                EditorApplication.delayCall += () => BuildIfNeeded(path);
             };
         }
 
         static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
         {
-            if (s_Baking) return;
+            if (s_Building) return;
             foreach (var path in imported)
-                if (path.EndsWith(".prefab") && NeedsBake(path) && s_Pending.Add(path))
-                    EditorApplication.delayCall += () => { s_Pending.Remove(path); BakeIfNeeded(path); };
+                if (path.EndsWith(".prefab") && NeedsBuild(path) && s_Pending.Add(path))
+                    EditorApplication.delayCall += () => { s_Pending.Remove(path); BuildIfNeeded(path); };
         }
 
-        /// <summary>Bake a prefab that lacks saved meshes, unless it is open in Prefab Mode (it bakes when that closes).</summary>
-        public static void BakeIfNeeded(string path)
+        /// <summary>Build a prefab that lacks saved meshes, unless it is open in Prefab Mode (it builds when that closes).</summary>
+        public static void BuildIfNeeded(string path)
         {
-            if (IsOpenInPrefabMode(path) || !NeedsBake(path)) return;
-            Bake(path);
+            if (IsOpenInPrefabMode(path) || !NeedsBuild(path)) return;
+            Build(path);
         }
 
         static bool IsOpenInPrefabMode(string path)
@@ -50,11 +50,11 @@ namespace CsgBrush.Editor
             return stage != null && stage.assetPath == path;
         }
 
-        /// <summary>A group in the prefab bakes brushes but has no saved mesh or collider mesh.</summary>
-        public static bool NeedsBake(string path) => WhyBake(path) != null;
+        /// <summary>A group in the prefab builds brushes but has no saved mesh or collider mesh.</summary>
+        public static bool NeedsBuild(string path) => WhyBuild(path) != null;
 
-        /// <summary>Why a prefab needs baking, or null when it does not.</summary>
-        public static string WhyBake(string path)
+        /// <summary>Why a prefab needs building, or null when it does not.</summary>
+        public static string WhyBuild(string path)
         {
             var root = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             if (root == null) return null;
@@ -77,8 +77,8 @@ namespace CsgBrush.Editor
             return null;
         }
 
-        /// <summary>Prefabs used by the open scenes that need baking (saved before baking existed).</summary>
-        public static void BakeUsedPrefabs()
+        /// <summary>Prefabs used by the open scenes that need building (saved before building existed).</summary>
+        public static void BuildUsedPrefabs()
         {
             var paths = new HashSet<string>();
             foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
@@ -87,10 +87,10 @@ namespace CsgBrush.Editor
                 var path = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(group);
                 if (!string.IsNullOrEmpty(path)) paths.Add(path);
             }
-            foreach (var path in paths) if (NeedsBake(path)) Bake(path);
+            foreach (var path in paths) if (NeedsBuild(path)) Build(path);
         }
 
-        /// <summary>The prefab file a group bakes into: the asset itself, the prefab of an instance, or the prefab open in Prefab Mode. Null for a scene group.</summary>
+        /// <summary>The prefab file a group builds into: the asset itself, the prefab of an instance, or the prefab open in Prefab Mode. Null for a scene group.</summary>
         public static string PrefabPathOf(BrushGroup group)
         {
             if (group == null) return null;
@@ -103,38 +103,38 @@ namespace CsgBrush.Editor
 
         static bool HasGroup(string path) => path != null && path.EndsWith(".prefab") && AssetDatabase.LoadAssetAtPath<GameObject>(path)?.GetComponentInChildren<BrushGroup>(true) != null;
 
-        [MenuItem("Assets/CSG Brush/Rebake Prefab", false, 2000)]
-        static void RebakeSelected()
+        [MenuItem("Assets/CSG Brush/Rebuild Prefab", false, 2000)]
+        static void RebuildSelected()
         {
             foreach (var o in Selection.objects)
             {
                 var path = AssetDatabase.GetAssetPath(o);
-                if (HasGroup(path)) Bake(path);
+                if (HasGroup(path)) Build(path);
             }
         }
 
-        [MenuItem("Assets/CSG Brush/Rebake Prefab", true)]
-        static bool CanRebakeSelected()
+        [MenuItem("Assets/CSG Brush/Rebuild Prefab", true)]
+        static bool CanRebuildSelected()
         {
             foreach (var o in Selection.objects) if (HasGroup(AssetDatabase.GetAssetPath(o))) return true;
             return false;
         }
 
-        [MenuItem("Tools/CSG Brush/Bake All Prefabs")]
-        static void BakeAll()
+        [MenuItem("Tools/CSG Brush/Rebuild All Prefabs")]
+        static void BuildAll()
         {
             foreach (var guid in AssetDatabase.FindAssets("t:Prefab"))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                if (NeedsBake(path)) Bake(path);
+                if (NeedsBuild(path)) Build(path);
             }
         }
 
         /// <summary>Rebuild every group of a prefab and save the generated meshes into the prefab file.</summary>
-        public static void Bake(string path)
+        public static void Build(string path)
         {
-            if (s_Baking) return;
-            s_Baking = true;
+            if (s_Building) return;
+            s_Building = true;
             try
             {
                 var contents = PrefabUtility.LoadPrefabContents(path);
@@ -158,7 +158,7 @@ namespace CsgBrush.Editor
                         if (kv.Value.collider != null && t.TryGetComponent<MeshCollider>(out var mc)) mc.sharedMesh = Persist(kv.Value.collider, path, used);
                         EditorUtility.SetDirty(t.gameObject);
                     }
-                    // meshes of earlier bakes nothing uses any more
+                    // meshes of earlier builds nothing uses any more
                     foreach (var o in AssetDatabase.LoadAllAssetRepresentationsAtPath(path))
                         if (o is Mesh old && old.name.StartsWith(MeshPrefix) && !used.Contains(old)) AssetDatabase.RemoveObjectFromAsset(old);
                     EditorUtility.SetDirty(asset);
@@ -166,7 +166,7 @@ namespace CsgBrush.Editor
                 }
                 finally { PrefabUtility.UnloadPrefabContents(contents); }
             }
-            finally { s_Baking = false; }
+            finally { s_Building = false; }
         }
 
         static Mesh Persist(Mesh mesh, string path, HashSet<Mesh> used)
@@ -180,7 +180,7 @@ namespace CsgBrush.Editor
             return mesh;
         }
 
-        /// <summary>The brushes a group bakes: below it, up to the next group, in hierarchy order.</summary>
+        /// <summary>The brushes a group builds: below it, up to the next group, in hierarchy order.</summary>
         public static List<Brush> BrushesOf(BrushGroup group)
         {
             var list = new List<Brush>();

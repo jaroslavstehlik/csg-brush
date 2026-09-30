@@ -48,7 +48,7 @@ namespace CsgBrush.Editor
         [Header("Extrude (edit mode)")]
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
-        [Tooltip("Static flags of the hidden default model; its render meshes inherit them. A model you make has its own.")]
+        [Tooltip("The static flags new brushes and floor plans start with. A brush's own flags go to its meshes and colliders.")]
         public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.NavigationStatic | StaticEditorFlags.ReflectionProbeStatic;
         [Tooltip("Material of every brush face without one of its own. Empty: a generated grid texture (a ruler in metres) is created under Assets/CSG Brush on first use.")]
         public Material defaultMaterial;
@@ -187,7 +187,7 @@ namespace CsgBrush.Editor
                     if (GUILayout.Button(new GUIContent("Grid", "Use the generated grid material (drawn again from the grid sizes)"), GUILayout.Width(44))) { s.defaultMaterial = null; BrushGridMaterial.Regenerate(); BrushGridMaterial.GetOrCreate(); BrushApi.ForceUpdate(); }
                     EditorGUILayout.EndHorizontal();
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
-                    s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("Default model static flags", "Inherited by the render meshes of brushes that are not under a model of your own"), s.defaultModelStaticFlags);
+                    s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("New brush static flags", "The static flags new brushes and floor plans start with"), s.defaultModelStaticFlags);
                     EditorGUILayout.HelpBox("1 metre = " + s.unitsPerMeter + " " + s.unitLabel + ". Geometry is stored in metres; changing the preset only changes how sizes are shown and snapped.", MessageType.None);
                     if (EditorGUI.EndChangeCheck())
                         s.NotifyChanged();

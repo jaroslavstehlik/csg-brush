@@ -32,7 +32,7 @@ namespace CsgBrush.Editor
             EditorApplication.hierarchyWindowItemByEntityIdOnGUI -= DrawGroupIcon;
             EditorApplication.hierarchyWindowItemByEntityIdOnGUI += DrawGroupIcon;
             BrushSettings.Changed += OnSettingsChanged;
-            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => { EnsureAll(); EditorApplication.delayCall += BrushPrefabBaking.BakeUsedPrefabs; };
+            UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => { EnsureAll(); EditorApplication.delayCall += BrushPrefabBuild.BuildUsedPrefabs; };
             UnityEditor.SceneManagement.EditorSceneManager.newSceneCreated += (scene, setup, mode) => BrushCsg.ClearCaches();
             EditorApplication.playModeStateChanged += state => { if (state == PlayModeStateChange.EnteredEditMode) EditorApplication.delayCall += () => { EnsureAll(); BrushApi.ForceUpdate(); }; };
             EditorApplication.delayCall += () =>
@@ -59,7 +59,7 @@ namespace CsgBrush.Editor
 
         static void RequestSync(Brush brush)
         {
-            // a prefab asset's brushes (validated on every import, e.g. each Auto Save) are edited in Prefab Mode and built by baking, never here
+            // a prefab asset's brushes (validated on every import, e.g. each Auto Save) are edited in Prefab Mode and built when the prefab is, never here
             if (brush == null || Application.isPlaying || EditorUtility.IsPersistent(brush)) return;
             pending.Add(brush);
             EditorApplication.delayCall -= FlushPending;
@@ -391,6 +391,7 @@ namespace CsgBrush.Editor
             // so this callback never adds undo entries or clears the redo stack.
             BrushSnap.InvalidateParents();
             BrushCsg.InvalidateGrouping(); // an undone reorder or reparent
+            foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Exclude)) BrushCsg.ApplyRendererSettings(group); // undone rendering settings
             var active = Brush.Active;
             for (int i = 0; i < active.Count; i++)
             {
@@ -403,7 +404,7 @@ namespace CsgBrush.Editor
 
         static Texture2D s_GroupIcon;
 
-        /// <summary>Brush groups carry their icon at the right end of their Hierarchy row, so the baking levels stand out.</summary>
+        /// <summary>Brush groups carry their icon at the right end of their Hierarchy row, so the groups that build a level stand out.</summary>
         static void DrawGroupIcon(EntityId entityId, Rect row)
         {
             var go = EditorUtility.EntityIdToObject(entityId) as GameObject;

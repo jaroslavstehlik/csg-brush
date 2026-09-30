@@ -33,6 +33,10 @@ namespace CsgBrush
         [Tooltip("Metres; not snapped to the grid.")] public float wallThickness = 0.2f;
         [Tooltip("Metres.")] public float wallHeight = 3f;
         [Tooltip("Where the walls stand relative to the drawn line.")] public Side side = Side.Outside;
+        [Tooltip("A closed room gets a floor slab under its walls.")] public bool floor = true;
+        [Tooltip("Metres, down from the bottom of the walls.")] public float floorThickness = 0.2f;
+        [Tooltip("A closed room gets a ceiling slab on top of its walls.")] public bool ceiling;
+        [Tooltip("Metres, up from the top of the walls.")] public float ceilingThickness = 0.2f;
 
         // ------------------------------------------------------------------ points
 
@@ -82,6 +86,8 @@ namespace CsgBrush
                 h = h * 31 + Mathf.RoundToInt(wallThickness * 1e5f);
                 h = h * 31 + Mathf.RoundToInt(wallHeight * 1e5f);
                 h = h * 31 + (int)side;
+                h = h * 31 + (floor ? 1 : 0); h = h * 31 + Mathf.RoundToInt(floorThickness * 1e5f);
+                h = h * 31 + (ceiling ? 1 : 0); h = h * 31 + Mathf.RoundToInt(ceilingThickness * 1e5f);
                 return h;
             }
         }
@@ -90,6 +96,8 @@ namespace CsgBrush
         {
             if (wallThickness < 0.001f) wallThickness = 0.001f;
             if (wallHeight < 0.001f) wallHeight = 0.001f;
+            if (floorThickness < 0.001f) floorThickness = 0.001f;
+            if (ceilingThickness < 0.001f) ceilingThickness = 0.001f;
             base.OnValidate();
         }
 
@@ -162,6 +170,29 @@ namespace CsgBrush
                 if (poly == null) continue;
                 into.Add(new BrushSpec { name = "Wall " + (s + 1), operation = BrushOperation.Add, polyhedron = poly });
             }
+            if (!loop || (!floor && !ceiling)) return;
+            // floor and ceiling: slabs over the walls' outer outline, so they close under and over every wall
+            var outline = new Vector2[segments];
+            for (int s = 0; s < segments; s++) outline[s] = Offset(s, false, s_Walls[s].outer);
+            if (floor) { var slab = Slab(outline, -floorThickness, 0f); if (slab != null) into.Add(new BrushSpec { name = "Floor", operation = BrushOperation.Add, polyhedron = slab }); }
+            if (ceiling) { var slab = Slab(outline, wallHeight, wallHeight + ceilingThickness); if (slab != null) into.Add(new BrushSpec { name = "Ceiling", operation = BrushOperation.Add, polyhedron = slab }); }
+        }
+
+        /// <summary>A slab over a floor outline (x, z; convex or not) from one height to another; null when the outline crosses itself.</summary>
+        public static BrushPolyhedron Slab(Vector2[] outline, float bottom, float top)
+        {
+            int n = outline.Length;
+            if (n < 3 || top - bottom < 1e-5f) return null;
+            var v = new Vector3[n * 2];
+            for (int i = 0; i < n; i++) { v[i] = new Vector3(outline[i].x, bottom, outline[i].y); v[i + n] = new Vector3(outline[i].x, top, outline[i].y); }
+            var faces = new List<BrushPolyhedron.Face>();
+            var under = new int[n]; var over = new int[n];
+            for (int i = 0; i < n; i++) { under[i] = n - 1 - i; over[i] = n + i; }
+            faces.Add(new BrushPolyhedron.Face(under)); faces.Add(new BrushPolyhedron.Face(over));
+            for (int i = 0; i < n; i++) { int j = (i + 1) % n; faces.Add(new BrushPolyhedron.Face(new[] { i, j, n + j, n + i })); }
+            var poly = new BrushPolyhedron { vertices = v, faces = faces.ToArray() };
+            poly.EnsureOutward();
+            return poly.IsSound(out _) ? poly : null;
         }
 
         /// <summary>A closed prism from a floor quad (x, z) up to a height; null when the quad folds over itself.</summary>

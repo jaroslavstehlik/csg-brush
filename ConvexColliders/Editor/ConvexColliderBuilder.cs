@@ -80,10 +80,10 @@ namespace CsgBrush.Colliders.Editor
             public int GetHashCode(object o) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o);
         }
 
-        /// <summary>Per collider container, what each input built. In memory only: a new session (domain reload, scene open, bake) starts from the pieces' planes.</summary>
+        /// <summary>Per collider container, what each input built. In memory only: a new session (domain reload, scene open, build) starts from the pieces' planes.</summary>
         static readonly Dictionary<Transform, Dictionary<object, Built>> s_Built = new Dictionary<Transform, Dictionary<object, Built>>();
 
-        /// <summary>Forget what a group's inputs built: the next build matches every piece again by its planes (Rebake).</summary>
+        /// <summary>Forget what a group's inputs built: the next build matches every piece again by its planes (Rebuild).</summary>
         public static void Forget(Transform model)
         {
             foreach (var container in FindContainers(model)) s_Built.Remove(container);
@@ -120,7 +120,7 @@ namespace CsgBrush.Colliders.Editor
             var hidden = settings.showInHierarchy ? HideFlags.NotEditable : HideFlags.HideInHierarchy | HideFlags.NotEditable;
             if (container.gameObject.hideFlags != hidden) container.gameObject.hideFlags = hidden;
 
-            // a first build in this session (or after Rebake) starts from the pieces there are, matched by their planes
+            // a first build in this session (or after Rebuild) starts from the pieces there are, matched by their planes
             if (settings.lastGeometryHash == 0) s_Built.Remove(container);
             bool first = !s_Built.TryGetValue(container, out var built);
             if (first) s_Built[container] = built = new Dictionary<object, Built>(ByReference.Instance);
@@ -250,7 +250,7 @@ namespace CsgBrush.Colliders.Editor
             foreach (var e in built.Values) { solidCount += e.solids; triggerCount += e.triggers; boxCount += e.boxes; meshCount += e.meshes; }
             sw.Stop();
             bool changed = settings.lastGeometryHash != 1 || settings.brushCount != brushCount || settings.pieceCount != solidCount || settings.triggerVolumes != triggerCount || settings.boxColliders != boxCount || settings.meshColliders != meshCount;
-            settings.lastGeometryHash = 1; // non-zero: built this session (Rebake sets 0)
+            settings.lastGeometryHash = 1; // non-zero: built this session (Rebuild sets 0)
             settings.brushCount = brushCount;
             settings.pieceCount = solidCount;
             settings.boxColliders = boxCount;

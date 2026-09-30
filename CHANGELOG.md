@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- Floor Plan floor and ceiling: a closed plan generates a floor slab under it (on by default) and a ceiling slab on top
+  (off by default), each with its own thickness, covering the room and its walls and following the outline (concave
+  rooms too). Doors and windows, and Pick Wall, only take a wall's side, never the floor or ceiling.
+- "Bake" now means only Unity's precomputed data (lighting, navigation, occlusion). What brushes produce is built:
+  the Brush Group's Rebake button is Rebuild, Tools > CSG Brush > Bake All Prefabs is Rebuild All Prefabs, Assets > CSG
+  Brush > Rebake Prefab is Rebuild Prefab. In code: `BrushCsg.Rebuild`, `BrushCsg.BuiltBy`, `BrushPrefabBuild`
+  (was `BrushPrefabBaking`), `BrushGroup.builtKey` (saved scenes keep theirs).
+- Static flags per brush: a brush's triangles render in a mesh child of its static flags ("<[mesh moving]>" for none),
+  so static brushes batch, occlude and lightmap while moving ones do not; they still carve each other, and a cut's faces
+  take the flags of the brush they are cut into. Colliders already followed their brush. The group's own static flags
+  no longer matter. New brushes and floor plans start with the project's flags (Project Settings > Brushes, New brush
+  static flags). `BrushApi.SetStaticFlags`.
+- Rendering settings per Brush Group (its Rendering foldout): cast shadows, static shadow caster, receive shadows,
+  receive global illumination, Scale In Lightmap, stitch seams, lightmap parameters, light and reflection probes,
+  anchor override, motion vectors, dynamic occlusion and rendering layers go to every render mesh of the group.
+  The defaults are Unity's; materials still come from the brushes.
+- Lightmap UVs: Tools > CSG Brush > Generate Lightmap UVs unwraps the lit brush meshes; a light bake does it first when
+  one needs them. Not done while building (unwrapping is slow); any change to a mesh drops them.
 - CSG Group is now **Brush Group** (component, Add Component > CSG Brush > Brush Group, the brush Inspector's *Brush group*
   field). The script keeps its GUID, so existing scenes and prefabs keep their groups.
 - Brush order from the right-click menu (Hierarchy, Scene view, the Brush component's menu): To First, To Last, Move Up,

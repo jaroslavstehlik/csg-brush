@@ -160,21 +160,17 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void RenderMeshesTakeTheirModelsTagAndStaticFlags()
+        public void RenderMeshesTakeTheirModelsTagAndTheirBrushesStaticFlags()
         {
             var modelGo = new GameObject("Level"); var model = modelGo.AddComponent<BrushGroup>();
-            modelGo.tag = "Respawn"; GameObjectUtility.SetStaticEditorFlags(modelGo, StaticEditorFlags.ContributeGI);
-            BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, modelGo.transform);
+            modelGo.tag = "Respawn"; GameObjectUtility.SetStaticEditorFlags(modelGo, 0); // the group's own flags do not matter
+            var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity, modelGo.transform);
+            BrushApi.SetStaticFlags(brush, StaticEditorFlags.ContributeGI);
             BrushApi.ForceUpdate();
-            var mesh = BrushCsg.MeshObject(model, false);
+            var mesh = BrushCsg.MeshObject(model, 0, StaticEditorFlags.ContributeGI, false);
             Assert.IsNotNull(mesh);
             Assert.AreEqual("Respawn", mesh.tag);
-            Assert.AreEqual(StaticEditorFlags.ContributeGI, GameObjectUtility.GetStaticEditorFlags(mesh.gameObject));
-            // the hidden default model gets the project's default flags
-            BrushApi.Create(BrushShape.Box, new Vector3(6f, 0f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
-            BrushApi.ForceUpdate();
-            var def = BrushCsg.DefaultModel(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), false);
-            Assert.AreEqual(BrushSettings.instance.defaultModelStaticFlags, GameObjectUtility.GetStaticEditorFlags(BrushCsg.MeshObject(def, false).gameObject));
+            Assert.AreEqual(StaticEditorFlags.ContributeGI, GameObjectUtility.GetStaticEditorFlags(mesh.gameObject), "the brush's flags");
         }
 
         [Test]

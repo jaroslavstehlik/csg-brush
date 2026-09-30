@@ -119,7 +119,7 @@ namespace CsgBrush.Editor
         // Not cached: Unity keeps tool instances across domain reloads, and a cached GUIContent would keep an old tooltip.
         public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get(Shape.ToString()), Title);
 
-        public override void OnActivated() { state = State.Idle; Active = this; }
+        public override void OnActivated() { state = State.Idle; Active = this; m_OpeningValid = false; }
         public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; }
 
         /// <summary>Step sizes and wall thickness for new brushes: the settings, or grid-derived defaults when left at 0.</summary>
@@ -267,7 +267,8 @@ namespace CsgBrush.Editor
         /// <summary>Doors and windows are placed with one click, at a size of their own: on a floor plan's wall, into a brush's side, or on the floor.</summary>
         public static bool IsOpening(BrushShape shape) => shape == BrushShape.Door || shape == BrushShape.Window;
 
-        WallAnchors.Placement m_Opening; bool m_OpeningValid;
+        // not kept across a domain reload (Unity keeps tool instances and would restore the flag without the placement)
+        [NonSerialized] WallAnchors.Placement m_Opening; [NonSerialized] bool m_OpeningValid;
 
         void OpeningGUI(Event e)
         {
@@ -284,7 +285,8 @@ namespace CsgBrush.Editor
                 Selection.activeGameObject = brush.gameObject;
                 e.Use();
             }
-            if (e.type == EventType.Repaint && m_OpeningValid)
+            var q = m_Opening.rotation;
+            if (e.type == EventType.Repaint && m_OpeningValid && q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w > 0.5f)
             {
                 var poly = BrushPolyhedron.Box(m_Opening.size);
                 var m = Matrix4x4.TRS(m_Opening.position, m_Opening.rotation, Vector3.one);

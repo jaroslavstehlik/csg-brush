@@ -85,10 +85,10 @@ namespace CsgBrush.Editor
             EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
             if (targets.Length == 1 && target is Brush owner)
             {
-                string bakedBy = BrushCsg.BakedBy(owner, out var reference);
+                string builtBy = BrushCsg.BuiltBy(owner, out var reference);
                 var label = new GUIContent("Brush group", "Parent group that produces the mesh and collision geometry.");
                 if (reference != null) using (new EditorGUI.DisabledScope(true)) EditorGUILayout.ObjectField(label, reference, reference.GetType(), true);
-                else EditorGUILayout.LabelField(label, new GUIContent(bakedBy), EditorStyles.wordWrappedMiniLabel);
+                else EditorGUILayout.LabelField(label, new GUIContent(builtBy), EditorStyles.wordWrappedMiniLabel);
             }
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
@@ -200,7 +200,7 @@ namespace CsgBrush.Editor
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face. Drop a material onto a single face in the Scene view for per-face materials."));
-                EditorGUILayout.LabelField(" ", "the render mesh takes its model's tag and static flags; its layer is this object's", EditorStyles.miniLabel);
+                EditorGUILayout.LabelField(" ", "its faces render with this object's layer and static flags; the rest is its group's renderer", EditorStyles.miniLabel);
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
@@ -215,7 +215,7 @@ namespace CsgBrush.Editor
                 var s = brush.transform.localScale;
                 if (s != Vector3.one)
                 {
-                    EditorGUILayout.HelpBox("Scale is " + s + ". With snapping on, the Scale tool is baked into the size on release; otherwise apply it here.", MessageType.Info);
+                    EditorGUILayout.HelpBox("Scale is " + s + ". With snapping on, the Scale tool is applied to the size on release; otherwise apply it here.", MessageType.Info);
                     if (GUILayout.Button("Apply scale to size")) BrushApi.ApplyScale(brush);
                     break;
                 }

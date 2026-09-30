@@ -33,7 +33,8 @@ namespace CsgBrush.Tests
         public void AClosedOutlineBecomesWallsAroundTheDrawnRoom()
         {
             var plan = Room(FourByThree);
-            Assert.AreEqual(4, plan.generated.Count, "one wall per side");
+            Assert.AreEqual(4, plan.generated.FindAll(b => b.name.StartsWith("Wall")).Count, "one wall per side");
+            Assert.AreEqual(5, plan.generated.Count, "and the floor");
             foreach (var wall in plan.generated)
             {
                 Assert.IsTrue(wall.IsGenerated); Assert.AreEqual(plan, wall.generatedBy);
@@ -432,6 +433,46 @@ namespace CsgBrush.Tests
                 Near(new Vector3(2f, 1.5f, 0.05f), picture.transform.position, "detached: it stays");
             }
             finally { s.snapToGrid = snap; }
+        }
+
+        // ------------------------------------------------------------------ floor and ceiling
+
+        static Brush Generated(FloorPlan plan, string name) => plan.generated.Find(b => b != null && b.name == name);
+
+        [Test]
+        public void AClosedRoomGetsAFloorUnderItsWallsAndACeilingOnTop()
+        {
+            var plan = Room(FourByThree); // floor on by default, ceiling off
+            Assert.IsNotNull(Generated(plan, "Floor")); Assert.IsNull(Generated(plan, "Ceiling"));
+            Assert.IsTrue(Solid(new Vector3(2f, -0.1f, 1.5f)), "the floor under the room");
+            Assert.IsTrue(Solid(new Vector3(-0.15f, -0.1f, -0.15f)), "and under the outer corner of the walls");
+            Assert.IsFalse(Solid(new Vector3(2f, -0.25f, 1.5f)), "0.2 m thick");
+            Assert.IsFalse(Solid(new Vector3(2f, 3.1f, 1.5f)), "no ceiling");
+
+            plan.ceiling = true; plan.ceilingThickness = 0.3f;
+            BrushGenerators.Update(plan); BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.IsTrue(Solid(new Vector3(2f, 3.25f, 1.5f)), "the ceiling on the walls");
+            Assert.IsTrue(Solid(new Vector3(4.15f, 3.1f, 3.15f)), "over the walls too");
+            Assert.IsFalse(Solid(new Vector3(2f, 1.5f, 1.5f)), "the room stays empty");
+
+            plan.points[2] = new Vector3(6f, 0f, 3f); // the floor follows the outline
+            BrushGenerators.Update(plan); BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.IsTrue(Solid(new Vector3(5.5f, -0.1f, 2.5f)));
+
+            plan.closed = false; // an open line has no inside
+            BrushGenerators.Update(plan);
+            Assert.IsNull(Generated(plan, "Floor")); Assert.IsNull(Generated(plan, "Ceiling"));
+        }
+
+        [Test]
+        public void AnLShapedRoomGetsAnLShapedFloor()
+        {
+            var plan = Room(new Vector3(0, 0, 0), new Vector3(6, 0, 0), new Vector3(6, 0, 4), new Vector3(3, 0, 4), new Vector3(3, 0, 6), new Vector3(0, 0, 6));
+            var floor = Generated(plan, "Floor");
+            Assert.IsNotNull(floor); Assert.IsTrue(floor.polyhedron.IsSound(out var why), why);
+            Assert.IsTrue(Solid(new Vector3(1.5f, -0.1f, 5f)), "in the arm");
+            Assert.IsTrue(Solid(new Vector3(5f, -0.1f, 1f)));
+            Assert.IsFalse(Solid(new Vector3(5f, -0.1f, 5.5f)), "not in the missing corner");
         }
     }
 }
