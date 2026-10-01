@@ -29,7 +29,8 @@ The package is editor-only. Builds contain only the generated meshes and collide
 ## Requirements
 
 - Unity 6000.6 or later.
-- macOS on Apple Silicon for editing. The CSG library is a native editor plugin; the Windows and Linux builds aren't included yet.
+- An editor on macOS (Apple Silicon), Windows (x86-64) or Linux (x86-64, glibc 2.35 or later, such as Ubuntu 22.04). The
+  CSG library is a native editor plugin built for these three platforms.
 
 ## Install
 

@@ -13,9 +13,10 @@ Unity -batchmode -projectPath <project> -runTests -testPlatform EditMode -testFi
 ## Native plugin
 
 `Manifold/Plugins` holds the self-contained Manifold shared library for each editor platform, built from Manifold at a
-pinned tag by `Manifold/native/CMakeLists.txt`. Only the macOS arm64 build is in the repository so far. The GitHub
-workflow `.github/workflows/build-manifold.yml` builds macOS arm64, Windows x64 and Linux x64 and opens a pull request
-with the binaries; run it after bumping the tag. Nothing native is needed at runtime.
+pinned tag by `Manifold/native/CMakeLists.txt`. The GitHub
+workflow `.github/workflows/build-manifold.yml` builds macOS arm64, Windows x64 and Linux x64; download the artifacts
+from the workflow run and place them under `Manifold/Plugins`. The Windows exports come from a `.def` file generated
+from `manifoldc.h` at configure time: after bumping the tag, check that its list still links. Nothing native is needed at runtime.
 
 ## Layout
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Windows (x86-64) and Linux (x86-64) editor plugins of the Manifold library, built by the repository's workflow. The
+  Windows DLL exports the C binding through a generated `.def` file.
 - Floor Plan floor and ceiling: a closed plan generates a floor slab under it (on by default) and a ceiling slab on top
   (off by default), each with its own thickness, covering the room and its walls and following the outline (concave
   rooms too). Doors and windows, and Pick Wall, only take a wall's side, never the floor or ceiling.
