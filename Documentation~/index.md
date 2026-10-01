@@ -2,6 +2,8 @@
 
 CSG Brush is a level editor for building game levels from convex brushes. You add and subtract brushes on a world grid, and the package combines them into render meshes and convex colliders.
 
+The source code, issues and the latest version of this manual are on GitHub: [jaroslavstehlik/csg-brush](https://github.com/jaroslavstehlik/csg-brush).
+
 This documentation covers the following features:
 
 | **Feature** | **Description** |
@@ -11,6 +13,7 @@ This documentation covers the following features:
 | [Doors and windows](doors-and-windows.md) | Cut openings of a set size into walls with one click. |
 | [Wall Anchor](wall-anchor.md) | Keep doors, windows, props, and brushes on a wall when the wall changes. |
 | [Brush Group rendering and lightmapping](brush-group-rendering.md) | Control static flags, renderer settings, and lightmap UVs for brush geometry. |
+| [Brush reference](brush-reference.md) | Detailed notes on the brush tools and components. |
 
 ## Terminology
 

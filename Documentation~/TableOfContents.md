@@ -8,3 +8,4 @@
   * [Wall Anchor component reference](wall-anchor.md#wall-anchor-component-reference)
 * [Brush Group rendering and lightmapping](brush-group-rendering.md)
   * [Brush Group component reference](brush-group-rendering.md#brush-group-component-reference)
+* [Brush reference](brush-reference.md)
