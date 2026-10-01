@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-01)
 
+- Convex collider meshes ask for pre-baked collision data, so player builds no longer warn about it and keep loading
+  them pre-baked in future Unity versions.
 - Windows (x86-64) and Linux (x86-64) editor plugins of the Manifold library, built by the repository's workflow. The
   Windows DLL exports the C binding through a generated `.def` file.
 - Floor Plan floor and ceiling: a closed plan generates a floor slab under it (on by default) and a ceiling slab on top

@@ -1,7 +1,7 @@
 {
   "name": "digital.dream.csgbrush",
   "displayName": "CSG Brush",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "unity": "6000.6",
   "description": "Quake/Unreal-style brush level editor for Unity 6000.6: convex brushes on a world grid, add and subtract, hand-editable shapes, CSG rendering through the Manifold library and one convex collider per brush piece.",
   "documentationUrl": "https://github.com/jaroslavstehlik/csg-brush/blob/main/Documentation~/index.md",

@@ -321,7 +321,9 @@ namespace CsgBrush.Colliders.Editor
             else
             {
                 var mc = go.AddComponent<MeshCollider>();
-                mc.sharedMesh = piece.ToMesh(name);
+                var mesh = piece.ToMesh(name);
+                mesh.SetPreBakeCollisionMesh(true, true); // builds take the convex collision data pre-baked, as for an imported mesh
+                mc.sharedMesh = mesh;
                 mc.convex = true;
                 mc.isTrigger = trigger;
                 meshes++;

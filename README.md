@@ -38,7 +38,7 @@ The package is editor-only. Builds contain only the generated meshes and collide
 2. Click **+** and select **Install package from git URL**.
 3. Enter `https://github.com/jaroslavstehlik/csg-brush.git` and click **Install**.
 
-To install a specific version, add a tag to the URL, for example `https://github.com/jaroslavstehlik/csg-brush.git#v0.2.0`.
+To install a specific version, add a tag to the URL, for example `https://github.com/jaroslavstehlik/csg-brush.git#v0.3.0`.
 
 ## Documentation
 
