@@ -1,4 +1,5 @@
-# Builds the Manifold native library for the editor platforms and opens a pull request with the binaries.
+# Builds the Manifold native library for the editor platforms. Each platform's library is uploaded as an artifact of
+# the run; download them and place them under Manifold/Plugins (see CONTRIBUTING.md).
 # Run it from the Actions tab (workflow_dispatch) after changing Manifold/native or bumping MANIFOLD_TAG.
 name: Build Manifold plugin
 
@@ -40,26 +41,3 @@ jobs:
         with:
           name: plugin-${{ matrix.os }}
           path: out
-
-  pull-request:
-    needs: build
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      - name: Place binaries
-        run: |
-          mkdir -p Manifold/Plugins
-          cp -R artifacts/*/. Manifold/Plugins/
-          ls -R Manifold/Plugins
-      - uses: peter-evans/create-pull-request@v6
-        with:
-          branch: manifold-binaries
-          title: "Update Manifold native binaries"
-          commit-message: "Update Manifold native binaries (built by CI)"
-          body: "Binaries built by the Build Manifold plugin workflow. Unity meta files for new files are added on first import."

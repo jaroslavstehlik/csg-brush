@@ -53,8 +53,12 @@ checked with the package's EditMode test suite. See [CONTRIBUTING.md](CONTRIBUTI
 
 ## Support this project
 
-CSG Brush is free to use under the MIT license. Maintenance and new features can be supported through
-[GitHub Sponsors](https://github.com/sponsors/jaroslavstehlik).
+CSG Brush is free to use under the MIT license, and it will stay free. Development is unpaid; sponsorship pays for
+maintenance, new tools, and support for more platforms.
+
+- Individuals: [GitHub Sponsors](https://github.com/sponsors/jaroslavstehlik).
+- Companies and schools: invoiced sponsorship, support, and workshops are available. Contact the author through
+  [GitHub](https://github.com/jaroslavstehlik).
 
 ## License
 
