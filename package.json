@@ -6,7 +6,7 @@
   "description": "Quake/Unreal-style brush level editor for Unity 6000.6: convex brushes on a world grid, add and subtract, hand-editable shapes, CSG rendering through the Manifold library and one convex collider per brush piece.",
   "documentationUrl": "https://github.com/jaroslavstehlik/csg-brush/blob/main/Documentation~/index.md",
   "changelogUrl": "https://github.com/jaroslavstehlik/csg-brush/blob/main/CHANGELOG.md",
-  "licensesUrl": "https://github.com/jaroslavstehlik/csg-brush/blob/main/LICENSE",
+  "licensesUrl": "https://github.com/jaroslavstehlik/csg-brush/blob/main/LICENSE.md",
   "license": "MIT",
   "keywords": [
     "level design",

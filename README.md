@@ -57,4 +57,4 @@ CSG Brush is free to use under the MIT license. Maintenance and new features can
 
 ## License
 
-CSG Brush is released under the [MIT license](LICENSE). It includes the [Manifold](https://github.com/elalish/manifold) library, released under the Apache License 2.0; see [LICENSE-manifold.txt](Manifold/LICENSE-manifold.txt). The package began as a fork of [Chisel](https://github.com/RadicalCSG/Chisel.Prototype); its code has since been replaced.
+CSG Brush is released under the [MIT license](LICENSE.md). It includes the [Manifold](https://github.com/elalish/manifold) library, released under the Apache License 2.0; see [LICENSE-manifold.txt](Manifold/LICENSE-manifold.txt). The package began as a fork of [Chisel](https://github.com/RadicalCSG/Chisel.Prototype); its code has since been replaced.

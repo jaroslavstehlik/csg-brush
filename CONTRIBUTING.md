@@ -1,6 +1,6 @@
 # Contributing
 
-Contributions are accepted under the [MIT license](LICENSE), the same license as the package.
+Contributions are accepted under the [MIT license](LICENSE.md), the same license as the package.
 
 ## Run the tests
 
