@@ -81,7 +81,7 @@ namespace CsgBrush.Editor
         public static void BuildUsedPrefabs()
         {
             var paths = new HashSet<string>();
-            foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include))
             {
                 if (!PrefabUtility.IsPartOfPrefabInstance(group)) continue;
                 var path = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(group);

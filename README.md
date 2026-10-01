@@ -6,10 +6,10 @@ brush piece so character controllers get clean contacts. Rendering goes through 
 [Manifold](https://github.com/elalish/manifold) library (Apache 2.0), a robust mesh boolean engine loaded as an
 editor-only native plugin; the game only ships the generated meshes and colliders.
 
-The package grew out of a fork of [Chisel](https://github.com/RadicalCSG/digital.dream.csgbrush) (MIT, see LICENSE). Chisel's
+The package grew out of a fork of [Chisel](https://github.com/RadicalCSG/Chisel.Prototype) (MIT, see LICENSE). Chisel's
 CSG core, generators and tools have all been replaced; the brush layer, the snapping rules, the edit tools and the
-collider builder are original. History: `CHANGELOG-FORK.md`. Install: Package Manager, "Install package from git
-URL", the URL of this repository.
+collider builder are original. Install: Package Manager > **+** > **Install package from git URL**, then
+`https://github.com/jaroslavstehlik/csg-brush.git`.
 
 Documentation for floor plans, doors and windows, wall anchors, and Brush Group rendering is in
 [Documentation~](Documentation~/index.md).
@@ -130,3 +130,14 @@ bumping the tag. Nothing native is needed at runtime.
 ## Icons
 
 The editor icons are generated: see `Tools~/icons/README.md` (Python 3 with Pillow).
+
+## Support this project
+
+CSG Brush is free for everyone under the MIT license: students, schools, hobbyists and studios alike. If it saves you
+time, you can support its maintenance and new features through
+[GitHub Sponsors](https://github.com/sponsors/jaroslavstehlik).
+
+## License
+
+CSG Brush is released under the [MIT license](LICENSE). It includes the [Manifold](https://github.com/elalish/manifold)
+library, released under the Apache License 2.0; see [LICENSE-manifold.txt](LICENSE-manifold.txt).

@@ -136,7 +136,7 @@ namespace CsgBrush.Tests
         static Bounds RenderBounds()
         {
             var b = new Bounds(); bool first = true;
-            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include))
             {
                 if (mf.sharedMesh == null || mf.sharedMesh.vertexCount == 0 || mf.name.StartsWith("‹[debug") || !mf.TryGetComponent<MeshRenderer>(out var mr) || !mr.enabled) continue;
                 foreach (var v in mf.sharedMesh.vertices) { var w = mf.transform.TransformPoint(v); if (first) { b = new Bounds(w, Vector3.zero); first = false; } else b.Encapsulate(w); }
@@ -146,7 +146,7 @@ namespace CsgBrush.Tests
 
         static BoxCollider SingleBox()
         {
-            var boxes = Object.FindObjectsByType<BoxCollider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var boxes = Object.FindObjectsByType<BoxCollider>(FindObjectsInactive.Include);
             Assert.AreEqual(1, boxes.Length, "one axis-aligned collider piece");
             return boxes[0];
         }

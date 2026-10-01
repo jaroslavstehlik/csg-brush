@@ -49,7 +49,7 @@ namespace CsgBrush.Editor
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
         [Tooltip("The static flags new brushes and floor plans start with. A brush's own flags go to its meshes and colliders.")]
-        public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.NavigationStatic | StaticEditorFlags.ReflectionProbeStatic;
+        public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.ReflectionProbeStatic;
         [Tooltip("Material of every brush face without one of its own. Empty: a generated grid texture (a ruler in metres) is created under Assets/CSG Brush on first use.")]
         public Material defaultMaterial;
         [Header("Editor")]

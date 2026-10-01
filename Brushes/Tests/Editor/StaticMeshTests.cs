@@ -15,7 +15,7 @@ namespace CsgBrush.Tests
 
         static StaticEditorFlags Default => BrushSettings.instance.defaultModelStaticFlags;
 
-        static BrushGroup Group() => Object.FindFirstObjectByType<BrushGroup>(FindObjectsInactive.Include);
+        static BrushGroup Group() => Object.FindAnyObjectByType<BrushGroup>(FindObjectsInactive.Include);
 
         static HashSet<Brush> BrushesIn(Transform meshObject) => new HashSet<Brush>(BrushCsg.TriangleBrushes(meshObject));
 

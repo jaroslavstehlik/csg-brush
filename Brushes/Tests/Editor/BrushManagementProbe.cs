@@ -47,7 +47,7 @@ namespace CsgBrush.Tests
 
             var log = new System.Text.StringBuilder();
             log.AppendLine("MGMT level: " + Folders * BrushesPerFolder + " brushes in " + Folders + " folders, " + OtherObjects + " other objects");
-            log.AppendLine(Time("FindObjectsByType<Brush>", () => Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None)));
+            log.AppendLine(Time("FindObjectsByType<Brush>", () => Object.FindObjectsByType<Brush>(FindObjectsInactive.Include)));
             log.AppendLine(Time("snap check (every editor update)", () => BrushSnap.ProcessChanged()));
             log.AppendLine(Time("rotated/scaled parents (every overlay GUI event)", () => BrushSnap.TransformedParents()));
             var ray = new Ray(new Vector3(-10f, 1f, 200f), Vector3.right); // across the whole level
@@ -56,7 +56,7 @@ namespace CsgBrush.Tests
             log.AppendLine(Time("pick where nothing is hit (each mouse move with a Create tool)", () => BrushHooks.PickBrushSurface(down, out _, out _)));
             var onto = new Ray(new Vector3(100f, 50f, 200f), Vector3.down); // onto one brush from above
             log.AppendLine(Time("pick onto one brush (a click)", () => BrushHooks.PickBrushSurface(onto, out _, out _)));
-            var one = Object.FindFirstObjectByType<Brush>();
+            var one = Object.FindAnyObjectByType<Brush>();
             log.AppendLine(Time("mark one brush's group dirty (every drag frame)", () => BrushCsg.MarkDirty(one)));
             log.AppendLine(Time("brushes by group (every rebuild)", () => BrushCsg.BrushesByModel()));
             log.AppendLine(Time("brushes by group after a hierarchy change (a walk)", () => { BrushCsg.InvalidateGrouping(); BrushCsg.BrushesByModel(); }, 5));

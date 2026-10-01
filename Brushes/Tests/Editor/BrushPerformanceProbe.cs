@@ -29,8 +29,8 @@ namespace CsgBrush.Tests
             var sb = new System.Text.StringBuilder("PERF " + name + "\n");
             var cutter = makeCutter();
             BrushApi.ForceUpdate();
-            int brushes = Object.FindObjectsByType<Brush>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length;
-            sb.Append("  brushes " + brushes + ", triangles " + BrushCsg.LastTriangles + ", colliders " + Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length + "\n");
+            int brushes = Object.FindObjectsByType<Brush>(FindObjectsInactive.Include).Length;
+            sb.Append("  brushes " + brushes + ", triangles " + BrushCsg.LastTriangles + ", colliders " + Object.FindObjectsByType<Collider>(FindObjectsInactive.Include).Length + "\n");
             var start = cutter.transform.position; var pos = start;
             sb.Append("  " + Time("BrushSync.Ensure(cutter)", () => BrushSync.Ensure(cutter), 3) + "\n");
             // a drag frame: the cutter alternates between two overlapping positions, everything else is cached

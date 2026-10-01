@@ -445,7 +445,7 @@ namespace CsgBrush.Tests
         static float AreaOnBox(Brush box)
         {
             var bounds = new Bounds(box.transform.position, box.size); float area = 0f;
-            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include))
             {
                 if (mf.sharedMesh == null || mf.name.StartsWith("‹[debug")) continue;
                 var v = mf.sharedMesh.vertices; var t = mf.sharedMesh.triangles; var m = mf.transform.localToWorldMatrix;
@@ -504,7 +504,7 @@ namespace CsgBrush.Tests
         static Bounds ColliderBounds()
         {
             Physics.SyncTransforms();
-            var colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include);
             Assert.Greater(colliders.Length, 0, "colliders generated");
             var b = colliders[0].bounds;
             foreach (var c in colliders) b.Encapsulate(c.bounds);
@@ -552,14 +552,14 @@ namespace CsgBrush.Tests
             BrushApi.ConvertToCustom(a);
             BrushApi.SetPolyhedron(a, LShape());
             BrushApi.ForceUpdate();
-            var colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include);
             Assert.AreEqual(2, colliders.Length, "two convex parts, two colliders");
             foreach (var c in colliders) Assert.IsTrue(c is BoxCollider || (c is MeshCollider m && m.convex), "every collider convex");
             Assert.Greater(BrushCsg.LastTriangles, 12, "the L shape renders as one concave mesh");
             BrushApi.ResetShape(a);
             BrushApi.ForceUpdate();
             Assert.AreEqual(BrushShape.Box, a.shape);
-            Assert.AreEqual(1, Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length);
+            Assert.AreEqual(1, Object.FindObjectsByType<Collider>(FindObjectsInactive.Include).Length);
         }
 
         [Test]

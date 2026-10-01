@@ -228,7 +228,7 @@ namespace CsgBrush.Tests
             }
             // the scene's own render meshes, for comparison: signed volume
             double chiselVolume = 0; int chiselTris = 0;
-            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include))
             {
                 if (mf.sharedMesh == null || mf.GetComponent<MeshCollider>() != null || mf.name.StartsWith("‹[debug")) continue;
                 var mv = mf.sharedMesh.vertices; var mt = mf.sharedMesh.triangles; var m = mf.transform.localToWorldMatrix;

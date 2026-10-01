@@ -14,7 +14,7 @@ namespace CsgBrush.Tests
         static Bounds ColliderBounds()
         {
             Physics.SyncTransforms();
-            var colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var colliders = Object.FindObjectsByType<Collider>(FindObjectsInactive.Include);
             Assert.Greater(colliders.Length, 0, "colliders exist");
             var b = colliders[0].bounds; foreach (var c in colliders) b.Encapsulate(c.bounds); return b;
         }
@@ -22,7 +22,7 @@ namespace CsgBrush.Tests
         static int RenderVertices()
         {
             int n = 0;
-            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var mf in Object.FindObjectsByType<MeshFilter>(FindObjectsInactive.Include))
                 if (mf.sharedMesh != null && !mf.name.StartsWith("‹[debug") && mf.TryGetComponent<MeshRenderer>(out var mr) && mr.enabled) n += mf.sharedMesh.vertexCount;
             return n;
         }
@@ -56,7 +56,7 @@ namespace CsgBrush.Tests
                 Assert.AreEqual(4f, ColliderBounds().size.x, 1e-3f, "geometry follows a resize after play mode");
                 var b = BrushApi.Create(BrushShape.Box, new Vector3(0f, 0f, 5f), Vector3.one, Quaternion.identity);
                 BrushApi.ForceUpdate();
-                Assert.AreEqual(2, Object.FindObjectsByType<Collider>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length, "new brush has a collider");
+                Assert.AreEqual(2, Object.FindObjectsByType<Collider>(FindObjectsInactive.Include).Length, "new brush has a collider");
                 Assert.AreEqual(48, RenderVertices(), "a new brush after play mode renders");
                 for (int i = 0; i < 4; i++) yield return null; // flush deferred calls before the next test starts
             }

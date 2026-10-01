@@ -32,7 +32,7 @@ namespace CsgBrush.Tests
         static List<ConvexPiece> PiecesOf(Brush brush)
         {
             var list = new List<ConvexPiece>();
-            foreach (var p in Object.FindObjectsByType<ConvexPiece>(FindObjectsInactive.Include, FindObjectsSortMode.None)) if (p.brushName == brush.name) list.Add(p);
+            foreach (var p in Object.FindObjectsByType<ConvexPiece>(FindObjectsInactive.Include)) if (p.brushName == brush.name) list.Add(p);
             return list;
         }
 
@@ -142,13 +142,13 @@ namespace CsgBrush.Tests
             var mat = new PhysicsMaterial("bouncy") { bounciness = 0.9f };
             brush.physicsMaterial = mat; brush.provideContacts = true;
             brush.gameObject.tag = "Finish";
-            GameObjectUtility.SetStaticEditorFlags(brush.gameObject, StaticEditorFlags.OccluderStatic | StaticEditorFlags.NavigationStatic);
+            GameObjectUtility.SetStaticEditorFlags(brush.gameObject, StaticEditorFlags.OccluderStatic);
             BrushApi.ForceUpdate();
             var piece = PiecesOf(brush)[0];
             var collider = piece.GetComponent<Collider>();
             Assert.AreEqual(mat, collider.sharedMaterial); Assert.IsTrue(collider.providesContacts);
             Assert.AreEqual("Finish", piece.tag);
-            Assert.AreEqual(StaticEditorFlags.OccluderStatic | StaticEditorFlags.NavigationStatic, GameObjectUtility.GetStaticEditorFlags(piece.gameObject));
+            Assert.AreEqual(StaticEditorFlags.OccluderStatic, GameObjectUtility.GetStaticEditorFlags(piece.gameObject));
             brush.physicsMaterial = null;
             BrushApi.ForceUpdate();
             Assert.AreEqual(1, Colliders.Editor.ConvexColliderBuilder.LastCreatedPieces, "a changed material is a new piece identity");
@@ -188,7 +188,7 @@ namespace CsgBrush.Tests
                 Assert.AreEqual(material, settings.defaultMaterial, "and remembered in the settings");
                 var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
                 BrushApi.ForceUpdate();
-                var model = Object.FindFirstObjectByType<BrushGroup>();
+                var model = Object.FindAnyObjectByType<BrushGroup>();
                 Assert.AreEqual(material, BrushCsg.MeshObject(model, false).GetComponent<MeshRenderer>().sharedMaterial, "brushes without a material render with it");
             }
             finally { settings.defaultMaterial = saved; }

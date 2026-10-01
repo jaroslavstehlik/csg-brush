@@ -69,13 +69,13 @@ namespace CsgBrush.Editor
         public static void RemoveLegacySceneObjects()
         {
             var doomed = new List<GameObject>();
-            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include))
             {
                 if (t == null) continue;
                 if (t.name == "‹[default-model]›" || t.name.StartsWith("‹[generated")) doomed.Add(t.gameObject);
             }
             foreach (var go in doomed) if (go != null) Object.DestroyImmediate(go);
-            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            foreach (var t in Object.FindObjectsByType<Transform>(FindObjectsInactive.Include))
                 if (GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(t.gameObject) > 0)
                     GameObjectUtility.RemoveMonoBehavioursWithMissingScript(t.gameObject);
         }
@@ -101,7 +101,7 @@ namespace CsgBrush.Editor
         {
             // prefab instances included: Unity never stores hide flags in a prefab file, and hiding an instance's
             // objects is not an override, so they are hidden in memory like everything else
-            foreach (var model in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None)) HideGenerated(model);
+            foreach (var model in Object.FindObjectsByType<BrushGroup>(FindObjectsInactive.Include)) HideGenerated(model);
             var stage = UnityEditor.SceneManagement.PrefabStageUtility.GetCurrentPrefabStage();
             if (stage != null && stage.prefabContentsRoot != null)
                 foreach (var model in stage.prefabContentsRoot.GetComponentsInChildren<BrushGroup>(true)) HideGenerated(model);
