@@ -17,9 +17,12 @@ grid, and colliders are made of convex pieces.
   library.
 - Grid snapping of position, size and rotation, in metres or Quake units.
 - Vertex, edge and face editing with move, rotate, scale and extrude.
+- A pivot per brush, as a fraction of its size or a distance from its corner.
+- Materials dragged onto a brush in the Scene view, with an outline of where they will go.
 - Floor plans: networks of walls with automatic junctions, and rooms with their own floors, ceilings and materials.
 - Door and window brushes that cut openings of a set size.
-- Wall anchors that keep doors, windows and other objects attached to floor plan walls.
+- Wall anchors that keep doors, windows and other objects on floor plan walls, lined up with the wall and at a set
+  distance from it.
 - One convex collider per brush piece, with trigger, physics material and module support.
 - Static flags per brush, renderer settings per Brush Group, and lightmap UV generation.
 - Brush Groups that build into prefabs and scenes.

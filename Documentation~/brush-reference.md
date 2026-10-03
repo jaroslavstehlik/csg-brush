@@ -1,107 +1,218 @@
 # Brush reference
 
-Detailed notes on the brush tools and components. For a task-by-task guide to floor plans, doors and windows, wall anchors, and rendering, see the other pages of this manual.
+A brush is a GameObject with a **Brush** component. It describes a solid shape: a box, a cylinder, a flight of stairs, or a shape you edit by hand. CSG Brush combines the brushes of a scene into render meshes and convex colliders. A brush has nothing hidden under it; the meshes and colliders are generated under the [Brush Group](#brush-groups-and-prefabs) that builds it.
 
-- **Cuts**: the Cuts toggle in the Brushes overlay draws subtract brushes as translucent red volumes so you can see and select them
-  where they have carved everything away; with it off, subtract brushes cannot be clicked in the Scene view.
-- **Layers**: brushes are combined per Unity layer. Brushes on one layer are combined with each other only: a subtract brush
-  carves its own layer, each layer renders as its own mesh child on that layer, and the colliders sit on that layer. Use it for a
-  collision layer per kind of thing, or to keep parts of a level from carving each other.
-- **Create**: the Create tool in the Scene view toolbar (one button with a shape dropdown: Box, Wedge, Cylinder,
-  Cone, Sphere, Linear Stairs, Curved Stairs, Spiral Stairs, Arch, Door, Window, Floor Plan; also Tools > CSG Brush > Create). Press on a surface, a brush face or the ground, drag the
-  base rectangle, release, move the mouse to set the height, click to create; Escape cancels or leaves the tool. While a Create tool is active the
-  Brushes overlay shows what the next brush gets (operation, modules, sides, steps, arch thickness and angle, door side width and top height, hollow).
-  Everything snaps to the grid, and a wall makes the brush grow out of the wall. Cylinder, Cone and Sphere are drawn from the centre of
-  their base: press on the centre, drag the radius, then the height (a sphere with no height is round; lift for an
-  ellipsoid). Curved and Spiral Stairs are drawn by their axis: press where the column axis goes, drag the outer radius (the drag direction is
-  where the first step starts), then the height; the transform of those brushes is the axis at floor level. The values a new brush is made with
-  (operation, modules, sides, tessellation, step sizes, hollow) come from Project Settings > Brushes and are
-  edited on the brush afterwards. GameObject > Brush > ... still creates a
-  default-sized brush at the view pivot, and the `Brush` component can be added to any empty object. A brush is one GameObject with nothing hidden underneath it; the level's mesh and colliders are
-  generated under the brush group that builds it (see below).
-- **Floor plan**: pick Floor Plan in the Create tool's dropdown and click a floor to start a plan there (GameObject > Brush >
-  Floor Plan starts one at the view pivot), then click the corners (snapped to the grid and
-  to 45 degree steps, Shift for any grid point) and click the first one to close the room. The plan makes the walls (one
-  hidden brush per wall, rebuilt whenever the plan changes); set their thickness, height and side of the line in its
-  Inspector. Its Edit button (or Edit plan in the Brushes overlay) works like Edit Brush for points and walls: Vertex
-  or Edge selection (1, 2), click, Shift, Ctrl, drag rectangle, then Move, Rotate and Scale on the floor; + adds a point.
-  Delete or Backspace removes the selected points, or the selected walls in Edge mode (a room opens there; a line cut
-  in the middle becomes two plans). Clicking a wall selects its plan.
-- **Doors and windows**: Door and Window in the Create tool place a cut of a set size with one click: on a floor plan's
-  wall it rides on that wall (it follows it, and stays where it was if the wall is deleted); on any other brush it cuts
-  through the side it was put on. Move one along its wall with the Move tool; its size is on the brush.
-- **Anything on a wall**: put an object under a floor plan and use GameObject > Brush > Attach to Wall (or add a Wall
-  Anchor), or draw a brush on a wall's face. Pick Wall on the Wall Anchor, then click a wall, moves it there; its wall
-  is outlined while it is selected. Distance along it, height and face are in the Inspector. It follows its wall; move it along the wall, or away from every wall
-  to free it; Detach from Wall takes it off.
-- **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
-  in world units (the metre value is shown next to it). The Scale tool resizes the brush: on release the scale is
-  applied to the size and the transform scale returns to one.
-- **Pivot**: where the transform sits in the brush, measured from its left, bottom, back corner. Pivot mode
-  Normalized gives it as 0 to 1 of the size (0.5 is the centre, the default), and it follows the brush when it is
-  resized; Absolute gives it in grid units, and it stays that far from the corner. A pivot with Y 0 stands the brush
-  on what it is placed on; Y 0 and Z 0 stand it against a wall, the way a wardrobe goes on a
-  [wall anchor](wall-anchor.md). Setting the pivot moves the transform, never the shape; switching the mode moves
-  nothing. On a Custom shape the pivot moves the vertices. Curved and spiral stairs, doors and windows keep their own pivot.
-- **Default material**: faces without a material of their own show a generated ruler texture (lines at every grid size, strong at the
-  metre, on a metre checker) that lines up with the world grid across brushes and cuts; created under `Assets/CSG Brush` on first
-  use, swappable in Project Settings > Brushes.
-- **Brush groups and building**: a `Brush Group` component (Add Component > CSG Brush > Brush Group, amber block icon in the
-  Hierarchy and Scene view) builds the brushes below it, up to the next group, into one mesh per layer and one set of
-  colliders, held as its generated children. A brush is built by the nearest group above it; brushes with none are
-  built by their scene's automatic group (hidden, one per scene), so every scene holds its own geometry and scenes can
-  be loaded together at runtime. The brush Inspector's *Brush group* field shows what builds it (click to find it; the
-  scene asset for a scene's automatic group). A group inside a prefab builds into the prefab (meshes saved as sub-assets
-  whenever the prefab is saved), so it can be instantiated at runtime and never carves anything outside itself; scene
-  instances use the prefab's meshes until their brushes are changed. A prefab without a group is a stamp: placed in a
-  level in the editor, its brushes (a doorway cut, say) join that level's CSG; it builds nothing of its own.
-- **Operation and collision**: Add or Subtract; Collision is Solid, Trigger or None (no collider), with a physics material and
-  Provide Contacts for the colliders. A piece is its brush: it also takes the brush's tag, layer and static flags. Static flags are per brush:
-  its colliders take them, and its triangles render in a mesh of those flags (static and moving brushes still carve each
-  other; a doorway's sides take the flags of the wall they are cut into). New brushes start static (Project Settings >
-  Brushes). A render mesh takes its group object's tag. Lightmap UVs: Tools > CSG Brush > Generate Lightmap UVs, or a
-  light bake makes them first. Other renderer settings (shadows, Scale In Lightmap,
-  probes, rendering layers...) are per Brush Group, in its Rendering foldout; every mesh of the group takes them. Everything a specific
-  character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
-  parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
-  those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however
-  many pieces they are made of: put a script with `OnTriggerEnter` / `OnTriggerStay` / `OnTriggerExit` on the brush, subscribe to
-  `Brush.TriggerEntered` / `TriggerExited`, implement `IBrushTriggerListener` on the same object, or add the
-  `BrushTrigger` module and wire its UnityEvents. Project Settings > Brushes lists the modules every new
-  brush gets. The Quake controller's module is `QuakeBrushSurface` in the project, not in this package. Hollow turns a box or cylinder into a room
-  with a wall thickness.
-- **Edit shape**: the Edit Brush context (Inspector or overlay button, or the tool context dropdown in the Scene
-  view Tools overlay) puts Vertex, Edge and Face selection in the Tool Settings toolbar, laid out like ProBuilder:
-  the three mode toggles (keys 1, 2, 3), Select Hidden (also pick elements facing away from the camera), Drag
-  Rectangle Mode (only what is completely inside, or everything the rectangle touches) and the handle
-  orientation: Global, Local, or Element, which aligns the gizmo with the selection so the blue axis runs along
-  the face normal, the natural way to push a face in or out. Click selects, Shift adds, Ctrl removes, drag a rectangle to select several, Esc clears. The Extrude panel that opens
-  with edit mode holds the distance in world units (negative cuts a pocket) and whether the whole selection
-  extrudes as one block or each face on its own; the Extrude button in the Brushes overlay applies it. It is a boolean, so the block may run through
-  other parts of the brush, and the faces stay selected for the next extrusion. Your own faces, edges and vertices survive it: the boolean only adds the walls
-  and moves the face, so coplanar faces you keep apart stay apart (a belt of walls keeps its edges, a split face keeps its other half) and per-face materials hold.
-  Holding Shift when you start dragging the Move gizmo on selected faces extrudes them by the dragged distance along their normal instead of moving them
-  (drag into the brush to cut). Bridge (next to Extrude) connects two selected faces of one brush with a block between them, the way a corridor joins two rooms; the faces need the same
-  number of corners, and the new walls stay selected. When the result would not be a sound shape (a block ending exactly where the
-  brush would touch itself, or a cut that removes everything) the brush is left as it was and the panel says so; pick another distance.
-  The Move gizmo moves the selection on the grid; vertices dropped onto each other weld. The first edit turns the brush into a Custom shape; "Reset to Box" (or the
-  shape it came from) discards the edits. Concave shapes are allowed; they are split into convex parts for the colliders
-  automatically. Every shape can be edited by hand.
-- **Stairs**: you set the step height and draw the height; the number of steps is the height divided by the step
-  height, rounded, so the steps fill it exactly. Linear Stairs fill their size box (each step runs the length divided
-  by the steps). Curved Stairs and Spiral Stairs follow Unreal's parameters (inner radius, step width, step height,
-  angle of curve or steps per 360, add to first step, counter clockwise, and for spirals step thickness, sloped floor,
-  sloped ceiling) with a Height instead of a number of steps; their size follows the parameters. Each step is a closed block and gets its own convex collider; a sloped
-  spiral's collider is the hull of each twisted block, so use more steps per turn for a smoother ramp.
-- **Order**: the Hierarchy order is the CSG order. A subtract carves only the brushes above it, so a brush
-  created after the cutter stays whole until it is moved above it. "To first" and "To last" change the sibling
-  order.
-- **World preset**: Project Settings > Brushes selects Unity (metres, the default), Quake (32 units per metre),
-  Source, Unreal or custom, the grid steps and the default sizes. The Scene view "Brushes" overlay shows the preset and the grid;
-  `[` and `]` change the grid size.
-- **Grid**: with "Snap to grid" on (default), every brush is kept on the world grid after each edit: the minimum
-  corner on the grid, sizes as grid multiples, rotation in steps, no scale. Parents may only organise brushes; a
-  rotated or scaled parent is listed in the overlay with a Reset button.
-- **Rebuild**: Brushes > Rebuild Now forces a full regeneration (meshes and convex colliders).
-- **Tests**: Window > General > Test Runner, EditMode, `CsgBrush.Tests` (also runs headlessly with
-  `-runTests -testPlatform EditMode -testFilter CsgBrush.Tests`).
+This page describes brushes in detail. For floor plans, doors and windows, wall anchors, and rendering, see [Additional resources](#additional-resources).
+
+## Create a brush
+
+To draw a brush in the Scene view:
+
+1. In the Scene view toolbar, open the **Create** tool dropdown and select a shape.
+2. Optional: In the **Brushes** overlay, set what the new brush gets, such as its operation, modules, number of sides, step height, or **Hollow**.
+3. Press on a surface, a brush face, or the ground, and drag out the base.
+4. Release, then move the pointer to set the height.
+5. Click to create the brush.
+
+Press **Esc** to cancel the brush, or to leave the tool.
+
+Everything snaps to the grid. If you start on a wall, the brush grows out of the wall. While you draw, the Scene view shows the width and depth of the base, then the height. To hide these sizes, turn off **Sizes** in the **Brushes** overlay.
+
+Some shapes are drawn differently:
+
+| **Shape** | **How to draw it** |
+| :--- | :--- |
+| **Box**, **Wedge**, **Linear Stairs**, **Arch** | Drag the base rectangle, then set the height. |
+| **Cylinder**, **Cone**, **Sphere** | Press on the centre of the base, drag the radius, then set the height. A sphere with no height is round; lift it to make an ellipsoid. |
+| **Curved Stairs**, **Spiral Stairs** | Press where the column's axis goes and drag the outer radius. The drag direction is where the first step starts. Then set the height. The brush's transform is on the axis, at floor level. |
+| **Door**, **Window** | Click once. See [Doors and windows](doors-and-windows.md). |
+| **Floor Plan** | Click the corners of the walls. See [Floor plans](floor-plans.md). |
+
+The settings a new brush starts with come from **Project Settings** > **Brushes**. After you create a brush, change them on the brush itself.
+
+You can also create a brush in these ways:
+
+* **Tools** > **CSG Brush** > **Create** selects a shape in the Create tool.
+* **GameObject** > **Brush** creates a brush of the default size at the centre of the Scene view.
+* Add a **Brush** component to an empty GameObject.
+
+## Place, size, and rotate a brush
+
+Use the **Move** and **Rotate** tools as for any GameObject. Set the brush's **Size** in the Inspector, in the units of the world preset; the size in metres is shown below it.
+
+The **Scale** tool also resizes the brush. When you release it, the scale goes into the brush's **Size** and the transform's scale returns to one.
+
+### Grid snapping
+
+With **Snap to grid** on in the **Brushes** overlay (the default), every brush stays on the world grid after each edit:
+
+* The brush's faces lie on grid lines.
+* Its size is a multiple of the grid step.
+* Its rotation snaps to fixed angles.
+* It has no scale.
+
+Press **[** and **]** to change the grid step. Doors, windows, and brushes on a [wall anchor](wall-anchor.md) don't snap, because their wall places them.
+
+Parent GameObjects may only organise brushes. If a brush's parent is rotated or scaled, the **Brushes** overlay lists it with a **Reset** button.
+
+### World presets
+
+**Project Settings** > **Brushes** selects the units, the grid steps, and the default sizes:
+
+| **Preset** | **Units** |
+| :--- | :--- |
+| **Unity** | Metres. This is the default. |
+| **Quake** | 32 units per metre. |
+| **Source**, **Unreal** | The units of those editors. |
+| **Custom** | Your own units and grid steps. |
+
+The **Brushes** overlay shows the current preset and grid step.
+
+## Set a brush's pivot
+
+The pivot is where the brush's transform sits inside the brush. It's measured from the brush's left, bottom, back corner, where the back is the side away from the direction the brush faces (+Z).
+
+**Pivot mode** sets how the **Pivot** values are measured:
+
+| **Pivot mode** | **Values** | **When you resize the brush** |
+| :--- | :--- | :--- |
+| **Normalized** | 0 to 1 of the brush's size on each axis. 0.5, 0.5, 0.5 is the centre, which is the default. | The pivot stays at the same fraction of the size. |
+| **Absolute** | A distance from the corner, in the units of the world preset. | The pivot stays at the same distance from the corner. |
+
+Useful pivots:
+
+* **Y = 0** puts the pivot on the bottom face, so the brush stands on whatever you place it on.
+* **Y = 0 and Z = 0** put the pivot at the bottom of the back face, so the brush stands against a wall. Use this for furniture on a [wall anchor](wall-anchor.md#stand-an-object-away-from-the-wall).
+
+Setting the pivot moves the transform, never the shape. Switching the pivot mode doesn't move anything. On a Custom shape, setting the pivot moves the vertices instead.
+
+Curved and spiral stairs, doors, and windows don't have a pivot setting, because their placement depends on their transform.
+
+## Add and subtract
+
+A brush's **Operation** is **Add** or **Subtract**. An added brush fills space; a subtract brush carves it out.
+
+The Hierarchy order is the CSG order. A subtract brush carves only the brushes above it in the Hierarchy, so a brush you create after a cutter stays whole until you move it above the cutter. To change the order, drag brushes in the Hierarchy, or use **To First** and **To Last** in the Brush component's context menu.
+
+Turn on **Cuts** in the **Brushes** overlay to see subtract brushes as translucent red volumes. This lets you select a subtract brush where it has carved everything away. With **Cuts** off, you can't click subtract brushes in the Scene view, except doors and windows.
+
+### Layers
+
+Brushes are combined per Unity layer. A subtract brush carves only brushes on its own layer, and each layer renders as its own mesh and has its own colliders on that layer. Use layers for a collision layer per kind of thing, or to keep parts of a level from carving each other.
+
+## Edit a brush's shape
+
+Every shape can be edited by hand. To start editing, click **Edit shape** in the Brush Inspector or **Edit brush** in the **Brushes** overlay, or select **Edit Brush** in the tool context dropdown of the Scene view's Tools overlay.
+
+In edit mode, the Tool Settings toolbar holds the selection settings:
+
+| **Setting** | **Description** |
+| :--- | :--- |
+| **Vertex**, **Edge**, **Face** | What you select. Press **1**, **2**, or **3** to switch. |
+| **Select Hidden** | Also select vertices, edges, and faces that face away from the camera. |
+| **Drag Rectangle Mode** | Select only what's completely inside the rectangle, or everything it touches. |
+| Handle orientation | **Global**, **Local**, or **Element**. **Element** aligns the gizmo with the selection, so the blue axis runs along a face's normal. |
+
+To select, click an element. Shift-click adds to the selection, Ctrl-click removes from it, and dragging a rectangle selects several. **Esc** clears the selection.
+
+The **Move**, **Rotate**, and **Scale** tools act on the selection, snapped to the grid. Vertices that you drop onto each other weld together.
+
+The first edit turns the brush into a **Custom** shape. **Reset to Box** (or to the shape the brush came from) discards your edits. Concave shapes are allowed; CSG Brush splits them into convex parts for the colliders.
+
+### Extrude
+
+The **Extrude** panel opens with edit mode. To extrude:
+
+1. Select one or more faces.
+2. In the **Extrude** panel, set the distance. A negative distance cuts a pocket into the brush.
+3. Choose whether the selection extrudes as one block or each face on its own.
+4. Click **Extrude** in the **Brushes** overlay.
+
+The faces stay selected, ready for the next extrusion. You can also hold **Shift** when you start dragging the **Move** gizmo on selected faces: they extrude by the distance you drag. Drag into the brush to cut.
+
+An extrusion can run through other parts of the brush. Your own faces, edges, and vertices survive it, so coplanar faces you keep apart stay apart, and per-face materials stay where they were.
+
+### Bridge
+
+**Bridge** connects two selected faces of one brush with a block between them, the way a corridor joins two rooms. The faces need the same number of corners. The new walls stay selected.
+
+If an extrusion or bridge wouldn't make a sound shape, for example because it would end exactly where the brush touches itself, or a cut would remove everything, the brush stays as it was and the panel says why. Try another distance.
+
+## Materials
+
+A brush's **Material** applies to every face of the brush.
+
+To set a material, you can also drag it from the Project window onto a brush in the Scene view. While you drag, the Scene view outlines the brushes the material will go to. On a [Floor Plan](floor-plans.md), the material goes to all of the plan's walls, or to the floor or ceiling of the one room under the pointer. A regular mesh in front of a brush takes the material the usual Unity way.
+
+The faces a subtract brush carves take the subtract brush's material. For example, the sides of a doorway can have a different material from the wall.
+
+Faces without a material show a generated ruler texture: lines at every grid step, stronger at each metre, on a metre checker. It lines up with the world grid across brushes and cuts. CSG Brush creates it under `Assets/CSG Brush` the first time it's needed. To use your own material instead, set it in **Project Settings** > **Brushes**.
+
+## Collision and triggers
+
+**Collision** sets what colliders the brush makes:
+
+| **Collision** | **Result** |
+| :--- | :--- |
+| **Solid** | Solid colliders. |
+| **Trigger** | Trigger colliders. |
+| **None** | No colliders. |
+
+A brush's colliders are convex pieces. Each piece takes the brush's **Physics Material**, **Provide Contacts** setting, tag, layer, and static flags.
+
+A trigger brush made of several pieces still raises one enter and one exit per collider. To react to triggers, do one of the following:
+
+* Put a script with `OnTriggerEnter`, `OnTriggerStay`, or `OnTriggerExit` on the brush, as on any trigger.
+* Subscribe to `Brush.TriggerEntered` and `Brush.TriggerExited`.
+* Implement `IBrushTriggerListener` in a component on the brush's GameObject.
+* Add the **Brush Trigger** module and connect its UnityEvents.
+
+### Modules
+
+A module carries the game-specific values of a surface, such as ice, water, or fall damage. A module is a `BrushModule` component on the brush, or on a parent GameObject, where it applies to every brush below it. Its values go onto each collider piece of the brush, and changing them rebuilds only those pieces. A module can also make a brush a trigger, for example for water.
+
+**Project Settings** > **Brushes** lists the modules every new brush gets. The Quake controller's module, `QuakeBrushSurface`, is part of the project, not of this package.
+
+## Shape settings
+
+### Hollow
+
+**Hollow** turns a box or cylinder into a room: only walls of **Wall thickness** remain.
+
+### Stairs
+
+You set the step height and draw the total height. The number of steps is the height divided by the step height, rounded, so the steps fill the height exactly.
+
+* **Linear Stairs** fill their size box. Each step runs the length divided by the number of steps.
+* **Curved Stairs** and **Spiral Stairs** use Unreal's parameters: inner radius, step width, step height, angle of the curve or steps per 360 degrees, add to first step, and counter clockwise. Spiral stairs also have step thickness, sloped floor, and sloped ceiling. You set a height instead of a number of steps, and the brush's size follows from the parameters.
+
+Linear and curved stairs stand on solid support down to the floor. Turn off **Support under steps** for open steps, each a slab of **Step thickness**. Set it on the brush, or in the **Brushes** overlay for new stairs.
+
+Each step is a closed block with its own convex collider. A sloped spiral's collider is the hull of each twisted block, so use more steps per turn for a smoother ramp.
+
+## Brush groups and prefabs
+
+A **Brush Group** component builds the brushes below it in the Hierarchy, down to the next group, into one mesh per layer and one set of colliders. These are generated as the group's children. To add one, choose **Add Component** > **CSG Brush** > **Brush Group**. A group has an amber block icon in the Hierarchy and the Scene view.
+
+A brush is built by the nearest group above it. Brushes without one are built by their scene's automatic group, which is hidden. Every scene has its own, so every scene holds its own geometry and scenes can be loaded together at runtime. The **Brush group** field in the Brush Inspector shows what builds the brush; click it to find the group.
+
+A Brush Group inside a prefab builds into the prefab: its meshes are saved as sub-assets whenever you save the prefab. You can instantiate such a prefab at runtime, and it never carves anything outside itself. Instances in a scene use the prefab's meshes until you change their brushes.
+
+A prefab without a Brush Group is a stamp. When you place it in a level in the editor, its brushes, such as a doorway cut, join that level's CSG. It builds nothing of its own.
+
+For static flags, renderer settings, and lightmap UVs, see [Brush Group rendering and lightmapping](brush-group-rendering.md).
+
+## Rebuild
+
+CSG Brush builds automatically when you change a brush. To build everything again from scratch, meshes and colliders, choose **Brushes** > **Rebuild Now**.
+
+## Run the package tests
+
+Open **Window** > **General** > **Test Runner**, select **EditMode**, and run `CsgBrush.Tests`. To run them from the command line, use `-runTests -testPlatform EditMode -testFilter CsgBrush.Tests`.
+
+## Additional resources
+
+* [Floor plans](floor-plans.md)
+* [Doors and windows](doors-and-windows.md)
+* [Attach objects to walls](wall-anchor.md)
+* [Brush Group rendering and lightmapping](brush-group-rendering.md)

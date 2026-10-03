@@ -5,6 +5,8 @@
 * [Edit a floor plan](floor-plan-edit-mode.md)
 * [Doors and windows](doors-and-windows.md)
 * [Attach objects to walls](wall-anchor.md)
+  * [Turn an object on its wall](wall-anchor.md#turn-an-object-on-its-wall)
+  * [Stand an object away from the wall](wall-anchor.md#stand-an-object-away-from-the-wall)
   * [Wall Anchor component reference](wall-anchor.md#wall-anchor-component-reference)
 * [Brush Group rendering and lightmapping](brush-group-rendering.md)
   * [Brush Group component reference](brush-group-rendering.md#brush-group-component-reference)

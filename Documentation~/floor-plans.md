@@ -69,6 +69,8 @@ To give a room its own floor, ceiling or materials:
 2. Press **3** for Room mode, and click the room. Shift-click to select more rooms.
 3. In the Inspector, under **Selected rooms**, set **Floor**, **Floor material**, **Ceiling** and **Ceiling material**.
 
+You can also drag a material from the Project window onto a floor or ceiling in the Scene view: it becomes that room's material. Dropped on a wall, a material becomes the plan's **Wall Material**. While you drag, the Scene view outlines what the material will go to.
+
 **Use Plan Defaults** returns the selected rooms to the plan's settings. A room keeps its settings while you move walls, and when you split it with a new wall, both halves keep them.
 
 ![An L-shaped floor plan with a ceiling, a door, and a window.](images/floor-plan-floor-ceiling.png)

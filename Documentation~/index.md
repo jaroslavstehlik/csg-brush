@@ -8,10 +8,10 @@ This documentation covers the following features:
 
 | **Feature** | **Description** |
 | :--- | :--- |
-| [Floor plans](floor-plans.md) | Draw an outline on the floor and generate walls of one thickness and height. |
-| [Floor plan edit mode](floor-plan-edit-mode.md) | Select, move, rotate, scale, add, and delete the points and walls of a floor plan. |
+| [Floor plans](floor-plans.md) | Draw walls on the floor, joined automatically, with a floor and ceiling in every room. |
+| [Floor plan edit mode](floor-plan-edit-mode.md) | Select, move, rotate, scale, add, and delete the points, walls, and rooms of a floor plan. |
 | [Doors and windows](doors-and-windows.md) | Cut openings of a set size into walls with one click. |
-| [Wall Anchor](wall-anchor.md) | Keep doors, windows, props, and brushes on a wall when the wall changes. |
+| [Wall Anchor](wall-anchor.md) | Keep doors, windows, props, and brushes on a wall when the wall changes, lined up with it and at a set distance. |
 | [Brush Group rendering and lightmapping](brush-group-rendering.md) | Control static flags, renderer settings, and lightmap UVs for brush geometry. |
 | [Brush reference](brush-reference.md) | Detailed notes on the brush tools and components. |
 
