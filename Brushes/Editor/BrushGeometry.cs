@@ -17,8 +17,10 @@ namespace CsgBrush.Editor
             public int sides, tessellation;
             public float stepHeight, wallThickness;
             public StairParams stairs;
+            /// <summary>Moves the shape off the transform (see <see cref="Brush.PivotShift"/>).</summary>
+            public Vector3 shift;
 
-            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, wallThickness = b.wallThickness, stairs = b.Stairs };
+            public static ShapeParams From(Brush b) => new ShapeParams { size = b.ClampedSize, sides = b.sides, tessellation = b.tessellation, stepHeight = b.stepHeight, wallThickness = b.wallThickness, stairs = b.Stairs, shift = b.PivotShift };
 
             /// <summary>Defaults for a shape of a given size (menus, conversions).</summary>
             public static ShapeParams Default(Vector3 size, int sides = 16)
@@ -33,8 +35,14 @@ namespace CsgBrush.Editor
             }
         }
 
-        /// <summary>The polyhedron of a parametric shape in local space (centred on the transform).</summary>
+        /// <summary>The polyhedron of a parametric shape in local space: centred on the transform unless shifted by its pivot.</summary>
         public static BrushPolyhedron ShapePolyhedron(BrushShape shape, in ShapeParams p)
+        {
+            var poly = CentredPolyhedron(shape, p);
+            return p.shift == Vector3.zero || poly == null ? poly : poly.Transformed(Matrix4x4.Translate(p.shift));
+        }
+
+        static BrushPolyhedron CentredPolyhedron(BrushShape shape, in ShapeParams p)
         {
             switch (shape)
             {
@@ -42,7 +50,7 @@ namespace CsgBrush.Editor
                 case BrushShape.Cylinder: return BrushPolyhedron.Prism(p.size, p.sides, 1f);
                 case BrushShape.Cone: return BrushPolyhedron.Prism(p.size, p.sides, 0f);
                 case BrushShape.Sphere: return BrushPolyhedron.Sphere(p.size, p.tessellation);
-                case BrushShape.Stairs: return BrushPolyhedron.Stairs(p.size, p.stepHeight);
+                case BrushShape.Stairs: return p.stairs.open ? BrushPolyhedron.OpenStairs(p.size, p.stepHeight, p.stairs.stepThickness) : BrushPolyhedron.Stairs(p.size, p.stepHeight);
                 case BrushShape.CurvedStairs: return BrushPolyhedron.CurvedStairs(p.stairs);
                 case BrushShape.SpiralStairs: return BrushPolyhedron.SpiralStairs(p.stairs);
                 case BrushShape.Arch: return BrushPolyhedron.Arch(p.size, p.wallThickness, p.stairs.curveAngle, p.sides);
@@ -66,13 +74,14 @@ namespace CsgBrush.Editor
         {
             if (!b.IsHollow) return null;
             var size = b.ClampedSize; float t = Mathf.Max(0f, b.wallThickness);
+            var shift = Matrix4x4.Translate(b.PivotShift);
             if (b.shape == BrushShape.Cylinder)
             {
                 var inner = new Vector3(Mathf.Max(size.x - 2f * t, 0.001f), size.y * 1.002f, Mathf.Max(size.z - 2f * t, 0.001f));
-                return BrushPolyhedron.Prism(inner, b.sides, 1f);
+                return BrushPolyhedron.Prism(inner, b.sides, 1f).Transformed(shift);
             }
             var innerBox = Vector3.Max(size - Vector3.one * (2f * t), Vector3.one * 0.001f);
-            return BrushPolyhedron.Box(innerBox);
+            return BrushPolyhedron.Box(innerBox).Transformed(shift);
         }
 
         /// <summary>Local-to-world matrix of a brush's geometry: during a drag, the snapped preview pose and size.</summary>

@@ -304,7 +304,7 @@ namespace CsgBrush.Editor
             Handles.color = FloorPlanTools.Preview;
             Handles.DrawDottedLine(from, hover, 4f);
             float length = new Vector2(m_Hover.x - plan.points[last].x, m_Hover.z - plan.points[last].z).magnitude;
-            Handles.Label((from + hover) * 0.5f, BrushSettings.instance.FormatUnits(length), EditorStyles.whiteMiniLabel);
+            if (BrushSettings.instance.showDimensions) Handles.Label((from + hover) * 0.5f, BrushSettings.instance.FormatUnits(length), EditorStyles.whiteMiniLabel);
         }
 
         void Finish() => ToolManager.RestorePreviousPersistentTool();

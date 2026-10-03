@@ -16,6 +16,32 @@
 - Wall anchors: deleting a wall no longer moves its doors and windows onto a neighbouring wall (they stay where they
   were, free), and undoing the deletion puts them back on their wall. Automatic placement never changes an anchor's
   saved values; only moving it, Pick Wall and placing it do, and those are undoable.
+- Trigger brushes send Unity's OnTriggerEnter, OnTriggerStay and OnTriggerExit to scripts on the brush object (once
+  per brush, however many pieces it has). Before, only the brush's own events and listeners got them: Unity sends
+  trigger messages to the hidden collider pieces, not to the brush.
+- Dropping a material onto a brush in the Scene view sets that brush's material (on a floor plan: its walls, or that
+  room's floor or ceiling). While dragging, the brushes it will go to are outlined and the mesh no longer flickers. A
+  regular mesh in front of a brush still takes the material Unity's way. Before, Unity gave it to the generated mesh,
+  so every brush of the group showed it until the next rebuild.
+- Changing a cutting brush's material (a door, a window, any subtract brush) now repaints the faces it carved right
+  away. Before, they kept the old material until something else rebuilt the mesh.
+- Brushes have a Pivot: where the transform sits in the brush, from its left, bottom, back corner. Pivot mode Normalized
+  measures it as 0 to 1 of the size, which follows a resize; Absolute measures it in grid units, which stay put.
+  Setting it moves the transform and leaves the shape where it is, and grid snapping still puts the faces on grid
+  lines. A box with its pivot at the bottom of its back stands against a wall without an extra parent object. Curved
+  and spiral stairs, doors and windows keep their own pivot.
+- Wall Anchor: Offset in the Inspector, metres from the wall face to the pivot, to stand furniture away from a wall.
+  A typed offset never frees the object; dragging it frees it only when pulled further out than its offset, and a freed
+  object attaches again only against a wall.
+- Wall Anchor: Face is Outside, Centered or Inside, as a floor plan's Side (Through is now Centered; saved values
+  are kept). Attaching an object lines it up with its wall (front out of the face, up is up) instead of keeping its
+  world rotation; a brush drawn on a wall keeps the pose it was drawn with. Rotation in the Inspector, relative to
+  the wall, and Turn around (180 degrees about the wall's up); dragged to another wall, an object keeps its rotation
+  relative to the wall.
+- Linear and curved stairs: Support under steps (on by default); off, each step is a slab of Step thickness. In the
+  Brush Inspector and in the Brushes overlay while creating stairs.
+- The Create tool shows the width, depth and height of the brush being drawn. The Sizes toggle in the Brushes overlay
+  hides them, and the length of the wall being drawn in a floor plan.
 
 ## 0.3.0 (2026-10-01)
 

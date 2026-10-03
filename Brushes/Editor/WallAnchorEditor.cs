@@ -6,7 +6,7 @@ namespace CsgBrush.Editor
 {
     /// <summary>
     /// A Wall Anchor's Inspector: Pick Wall, then click a wall in the Scene view; the wall it is on is outlined while it is
-    /// selected. Distance along the wall, height and face below.
+    /// selected. Distance along the wall, height, face, offset and rotation relative to it below.
     /// </summary>
     [CustomEditor(typeof(WallAnchor)), CanEditMultipleObjects]
     sealed class WallAnchorEditor : UnityEditor.Editor
@@ -31,8 +31,68 @@ namespace CsgBrush.Editor
             EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(WallAnchor.distance)));
             EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(WallAnchor.height)));
             bool opening = a.TryGetComponent<Brush>(out var brush) && brush.IsOpening;
-            if (!opening) EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(WallAnchor.face))); // a door or window always goes through
+            if (!opening) // a door or window always goes through, in the middle of the wall
+            {
+                FaceField(serializedObject.FindProperty(nameof(WallAnchor.face)));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(WallAnchor.offset)));
+            }
             serializedObject.ApplyModifiedProperties();
+            if (!opening) RotationField();
+        }
+
+        static readonly WallFace[] s_FaceOrder = { WallFace.Outside, WallFace.Centered, WallFace.Inside }; // as the floor plan's Side
+        static GUIContent[] s_FaceNames;
+
+        static void FaceField(SerializedProperty face)
+        {
+            s_FaceNames ??= System.Array.ConvertAll(s_FaceOrder, f => new GUIContent(f.ToString()));
+            var rect = EditorGUILayout.GetControlRect();
+            var label = EditorGUI.BeginProperty(rect, new GUIContent("Face", "On the wall's outside face, in its middle, or on its inside face."), face);
+            EditorGUI.showMixedValue = face.hasMultipleDifferentValues;
+            EditorGUI.BeginChangeCheck();
+            int picked = EditorGUI.Popup(rect, label, System.Array.IndexOf(s_FaceOrder, (WallFace)face.intValue), s_FaceNames);
+            if (EditorGUI.EndChangeCheck() && picked >= 0) face.intValue = (int)s_FaceOrder[picked];
+            EditorGUI.showMixedValue = false;
+            EditorGUI.EndProperty();
+        }
+
+        Vector3 m_Euler; Quaternion m_EulerOf = new Quaternion(0f, 0f, 0f, 0f); // what was typed, kept while it still matches (as the Transform Inspector does)
+
+        /// <summary>The rotation relative to the wall, as angles, and Turn around: 180 degrees about the wall's up.</summary>
+        void RotationField()
+        {
+            var first = (WallAnchor)target; bool mixed = false;
+            foreach (var t in targets) if (Quaternion.Angle(((WallAnchor)t).rotation, first.rotation) > 1e-3f) mixed = true;
+            if (Quaternion.Angle(m_EulerOf, first.rotation) > 1e-3f || m_EulerOf == new Quaternion(0f, 0f, 0f, 0f)) { m_Euler = Tidy(first.rotation.eulerAngles); m_EulerOf = first.rotation; }
+            EditorGUI.BeginChangeCheck();
+            EditorGUI.showMixedValue = mixed;
+            var euler = EditorGUILayout.Vector3Field(new GUIContent("Rotation", "Relative to the wall: 0, 0, 0 faces out of it, up is up."), m_Euler);
+            EditorGUI.showMixedValue = false;
+            if (EditorGUI.EndChangeCheck()) { m_Euler = euler; m_EulerOf = Quaternion.Euler(euler); SetRotation(_ => Quaternion.Euler(euler), "Rotate on wall"); }
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(EditorGUIUtility.labelWidth + 2f);
+            if (GUILayout.Button(new GUIContent("Turn around", "Turns the object 180 degrees about the wall's up axis."), EditorStyles.miniButton))
+                SetRotation(r => Quaternion.Euler(0f, 180f, 0f) * r, "Turn around on wall");
+            EditorGUILayout.EndHorizontal();
+        }
+
+        void SetRotation(System.Func<Quaternion, Quaternion> change, string undo)
+        {
+            foreach (var t in targets)
+            {
+                var a = (WallAnchor)t;
+                Undo.RecordObject(a, undo);
+                a.rotation = change(a.rotation).normalized;
+                EditorUtility.SetDirty(a);
+                WallAnchor.Changed?.Invoke(a);
+            }
+        }
+
+        /// <summary>Angles near whole numbers as whole numbers, and 360 as 0.</summary>
+        static Vector3 Tidy(Vector3 e)
+        {
+            float T(float v) { v = Mathf.Abs(v - Mathf.Round(v)) < 1e-3f ? Mathf.Round(v) : v; return v >= 360f ? v - 360f : v; }
+            return new Vector3(T(e.x), T(e.y), T(e.z));
         }
 
         void OnSceneGUI()

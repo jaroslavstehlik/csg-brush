@@ -9,7 +9,7 @@ namespace CsgBrush.Editor
     public sealed class BrushEditor : UnityEditor.Editor
     {
         SerializedProperty shapeProp, operationProp, collisionProp, physicsMaterialProp, provideContactsProp, sizeProp, hollowProp, wallProp, sidesProp, tessProp, stepHeightProp, materialProp;
-        SerializedProperty innerRadiusProp, stepWidthProp, stepThicknessProp, curveAngleProp, numStepsProp, stepsPer360Prop, addToFirstStepProp, ccwProp, slopedFloorProp, slopedCeilingProp;
+        SerializedProperty innerRadiusProp, stepWidthProp, stepThicknessProp, supportUnderStepsProp, curveAngleProp, numStepsProp, stepsPer360Prop, addToFirstStepProp, ccwProp, slopedFloorProp, slopedCeilingProp;
 
         void OnEnable()
         {
@@ -28,6 +28,7 @@ namespace CsgBrush.Editor
             innerRadiusProp = serializedObject.FindProperty(nameof(Brush.innerRadius));
             stepWidthProp = serializedObject.FindProperty(nameof(Brush.stepWidth));
             stepThicknessProp = serializedObject.FindProperty(nameof(Brush.stepThickness));
+            supportUnderStepsProp = serializedObject.FindProperty(nameof(Brush.supportUnderSteps));
             curveAngleProp = serializedObject.FindProperty(nameof(Brush.curveAngle));
             numStepsProp = serializedObject.FindProperty(nameof(Brush.numSteps));
             stepsPer360Prop = serializedObject.FindProperty(nameof(Brush.stepsPer360));
@@ -75,6 +76,48 @@ namespace CsgBrush.Editor
             EditorGUI.EndProperty();
         }
 
+        /// <summary>The pivot and how it is measured; setting it moves the transform, so the shape stays put.</summary>
+        void DrawPivot(BrushSettings settings)
+        {
+            Vector3? first = null; bool mixed = false, mixedMode = false; var mode = ((Brush)target).pivotMode;
+            foreach (var t in targets)
+            {
+                var b = (Brush)t;
+                var p = BrushApi.PivotOf(b);
+                if (!p.HasValue) return; // a shape that keeps its own
+                if (b.pivotMode != mode) mixedMode = true;
+                if (first == null) first = p; else if ((first.Value - p.Value).sqrMagnitude > 1e-10f) mixed = true;
+            }
+            EditorGUI.BeginChangeCheck();
+            EditorGUI.showMixedValue = mixedMode;
+            var pickedMode = (PivotMode)EditorGUILayout.EnumPopup(new GUIContent("Pivot mode", "Normalized: 0 to 1 of the size, follows a resize. Absolute: distance from the left, bottom, back corner."), mode);
+            EditorGUI.showMixedValue = false;
+            if (EditorGUI.EndChangeCheck()) { foreach (var t in targets) BrushApi.SetPivotMode((Brush)t, pickedMode); return; }
+            if (mixedMode) return;
+            bool relative = mode == PivotMode.Normalized;
+            var shown = relative ? first.Value : settings.ToUnits(first.Value);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel(new GUIContent(relative ? "Pivot" : "Pivot (" + settings.unitLabel + ")", "Where the transform sits in the brush, from its left, bottom, back corner. Y 0 is the bottom, Z 0 the back."));
+            float w = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = 14f;
+            EditorGUI.BeginChangeCheck();
+            EditorGUI.showMixedValue = mixed;
+            var picked = new Vector3(EditorGUILayout.FloatField("X", shown.x), EditorGUILayout.FloatField("Y", shown.y), EditorGUILayout.FloatField("Z", shown.z));
+            EditorGUI.showMixedValue = false;
+            EditorGUIUtility.labelWidth = w;
+            EditorGUILayout.EndHorizontal();
+            if (EditorGUI.EndChangeCheck())
+                foreach (var t in targets)
+                {
+                    var b = (Brush)t; var own = BrushApi.PivotOf(b).Value;
+                    var value = Changed(relative ? own : settings.ToUnits(own), shown, picked);
+                    BrushApi.SetPivot(b, relative ? value : settings.ToMeters(value));
+                }
+        }
+
+        /// <summary>Only the axes the field changed, so a mixed selection keeps its other axes.</summary>
+        static Vector3 Changed(Vector3 own, Vector3 shown, Vector3 picked) => new Vector3(picked.x != shown.x ? picked.x : own.x, picked.y != shown.y ? picked.y : own.y, picked.z != shown.z ? picked.z : own.z);
+
         public override void OnInspectorGUI()
         {
             var settings = BrushSettings.instance;
@@ -113,6 +156,7 @@ namespace CsgBrush.Editor
                 EditorGUILayout.LabelField("Size (" + settings.unitLabel + ")", sz.x.ToString("0.#") + " x " + sz.y.ToString("0.#") + " x " + sz.z.ToString("0.#") + "  (from the parameters)");
             }
             else DrawSize(settings, shape);
+            DrawPivot(settings);
 
             if (shape != BrushShape.Custom && BrushApi.CanConvertToCustom(shape))
             {
@@ -148,6 +192,7 @@ namespace CsgBrush.Editor
                     EditorGUILayout.PropertyField(curveAngleProp, new GUIContent("Angle of curve"));
                     DrawUnitsField(settings, addToFirstStepProp, "Add to first step", true);
                     EditorGUILayout.PropertyField(ccwProp, new GUIContent("Counter clockwise"));
+                    DrawSupportUnderSteps(settings);
                     break;
                 case BrushShape.SpiralStairs:
                     DrawUnitsField(settings, innerRadiusProp, "Inner radius");
@@ -165,6 +210,7 @@ namespace CsgBrush.Editor
                     var sz = sizeProp.vector3Value;
                     int steps = Mathf.Max(1, Mathf.RoundToInt(sz.y / Mathf.Max(0.001f, stepHeightProp.floatValue)));
                     EditorGUILayout.LabelField(" ", steps + " steps over " + settings.FormatUnits(sz.z) + " (" + settings.FormatUnits(sz.z / steps) + " each)", EditorStyles.miniLabel);
+                    DrawSupportUnderSteps(settings);
                     break;
             }
 
@@ -199,7 +245,7 @@ namespace CsgBrush.Editor
             if (s_RenderingOpen)
             {
                 EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face. Drop a material onto a single face in the Scene view for per-face materials."));
+                EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face; dropping a material onto the brush in the Scene view sets it too."));
                 EditorGUILayout.LabelField(" ", "its faces render with this object's layer and static flags; the rest is its group's renderer", EditorStyles.miniLabel);
                 EditorGUI.indentLevel--;
             }
@@ -227,7 +273,7 @@ namespace CsgBrush.Editor
             var size = sizeProp.vector3Value;
             var units = settings.ToUnits(size);
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.PrefixLabel(new GUIContent("Size (" + settings.unitLabel + ")", shape == BrushShape.Wedge ? "X width, Y height, Z length. The ramp rises along Z." : shape == BrushShape.Stairs ? "X width, Y total rise, Z run. Stairs climb along Z." : "Centred on the transform."));
+            EditorGUILayout.PrefixLabel(new GUIContent("Size (" + settings.unitLabel + ")", shape == BrushShape.Wedge ? "X width, Y height, Z length. The ramp rises along Z." : shape == BrushShape.Stairs ? "X width, Y total rise, Z run. Stairs climb along Z." : "X width, Y height, Z depth."));
             float w = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = 14f;
             EditorGUI.BeginChangeCheck();
@@ -245,6 +291,12 @@ namespace CsgBrush.Editor
         /// Curved and spiral stairs: the step height and the height they climb. The number of steps follows from the two;
         /// a new step height keeps the height, a new height keeps the step height.
         /// </summary>
+        void DrawSupportUnderSteps(BrushSettings settings)
+        {
+            EditorGUILayout.PropertyField(supportUnderStepsProp, new GUIContent("Support under steps", "The steps stand on solid support down to the floor"));
+            if (!supportUnderStepsProp.boolValue) DrawUnitsField(settings, stepThicknessProp, "Step thickness");
+        }
+
         void DrawStepsByHeight(BrushSettings settings)
         {
             float stepHeight = Mathf.Max(0.001f, stepHeightProp.floatValue);

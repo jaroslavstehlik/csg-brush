@@ -346,11 +346,11 @@ namespace CsgBrush.Editor
 
         static bool Same(in BrushGeometry.ShapeParams a, in BrushGeometry.ShapeParams b)
         {
-            if (a.size.x != b.size.x || a.size.y != b.size.y || a.size.z != b.size.z || a.sides != b.sides || a.tessellation != b.tessellation || a.stepHeight != b.stepHeight || a.wallThickness != b.wallThickness) return false;
+            if (a.size.x != b.size.x || a.size.y != b.size.y || a.size.z != b.size.z || a.sides != b.sides || a.tessellation != b.tessellation || a.stepHeight != b.stepHeight || a.wallThickness != b.wallThickness || a.shift != b.shift) return false;
             var x = a.stairs; var y = b.stairs;
             return x.innerRadius == y.innerRadius && x.stepWidth == y.stepWidth && x.stepHeight == y.stepHeight && x.stepThickness == y.stepThickness && x.curveAngle == y.curveAngle
                 && x.addToFirstStep == y.addToFirstStep && x.numSteps == y.numSteps && x.stepsPer360 == y.stepsPer360 && x.counterClockwise == y.counterClockwise
-                && x.slopedFloor == y.slopedFloor && x.slopedCeiling == y.slopedCeiling;
+                && x.slopedFloor == y.slopedFloor && x.slopedCeiling == y.slopedCeiling && x.open == y.open;
         }
 
         static bool PointInFace(BrushPolyhedron poly, int face, Vector3 p)

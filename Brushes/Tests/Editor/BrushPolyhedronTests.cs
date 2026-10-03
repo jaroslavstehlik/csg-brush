@@ -587,6 +587,24 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void StairsWithoutSupportAreSlabsUnderTheTreads()
+        {
+            var size = new Vector3(2f, 1f, 4f); // 4 steps of 0.25 m, 1 m deep
+            var open = BrushPolyhedron.OpenStairs(size, 0.25f, 0.1f);
+            Assert.IsTrue(open.IsSound(out var why), why);
+            Assert.AreEqual(2f * 4f * 1f * 0.1f, open.Volume(), 1e-4f, "four slabs, 0.1 m thick");
+            var solid = BrushPolyhedron.Stairs(size, 0.25f);
+            Assert.AreEqual(open.Bounds().max.y, solid.Bounds().max.y, 1e-5f, "the treads are where the solid stairs' are");
+            var p = new StairParams { innerRadius = 1f, stepWidth = 1f, stepHeight = 0.25f, stepThickness = 0.1f, curveAngle = 90f, numSteps = 4, open = true };
+            var curved = BrushPolyhedron.CurvedStairs(p);
+            Assert.IsTrue(curved.IsSound(out why), why);
+            Assert.AreEqual(0.15f, curved.Bounds().min.y, 1e-4f, "the first slab hangs under its tread, not on the floor");
+            Assert.AreEqual(1f, curved.Bounds().max.y, 1e-4f, "the top tread at four steps");
+            p.open = false;
+            Assert.Greater(BrushPolyhedron.CurvedStairs(p).Volume(), curved.Volume() * 2f, "with support: solid to the floor");
+        }
+
+        [Test]
         public void ACurvedStairsFootprintDoesNotDependOnTheNumberOfSteps()
         {
             var p = new StairParams { innerRadius = 0.5f, stepWidth = 1.5f, stepHeight = 0.25f, curveAngle = 90f };

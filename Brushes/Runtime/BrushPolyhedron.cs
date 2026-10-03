@@ -17,6 +17,8 @@ namespace CsgBrush
         public float innerRadius, stepWidth, stepHeight, stepThickness, curveAngle, addToFirstStep;
         public int numSteps, stepsPer360;
         public bool counterClockwise, slopedFloor, slopedCeiling;
+        /// <summary>Linear and curved stairs: no support under the steps; each step is a slab of <see cref="stepThickness"/>.</summary>
+        public bool open;
     }
 
     [Serializable]
@@ -185,6 +187,29 @@ namespace CsgBrush
         /// height (rounded), so each step rises height / steps and runs length / steps. Risers face -z, the back is a
         /// solid wall. Concave; the side walls are one quad per step so every face stays convex.
         /// </summary>
+        /// <summary>
+        /// Linear stairs with no support under them: one slab per step, its tread where the solid stairs' tread is and
+        /// <paramref name="thickness"/> deep (never below the box's floor). Each slab is its own closed block (Face.group).
+        /// </summary>
+        public static BrushPolyhedron OpenStairs(Vector3 size, float stepHeight, float thickness)
+        {
+            float w = size.x * 0.5f, h = size.y * 0.5f, d = size.z * 0.5f;
+            int steps = StepCount(size.y, stepHeight);
+            stepHeight = size.y / steps;
+            float stepDepth = size.z / steps, th = Mathf.Max(0.001f, thickness);
+            var verts = new List<Vector3>(); var faces = new List<Face>();
+            for (int k = 0; k < steps; k++)
+            {
+                float top = Mathf.Min(h, -h + (k + 1) * stepHeight), bottom = Mathf.Max(-h, top - th);
+                float z0 = -d + k * stepDepth, z1 = Mathf.Min(d, z0 + stepDepth);
+                int b = verts.Count;
+                verts.Add(new Vector3(-w, bottom, z0)); verts.Add(new Vector3(w, bottom, z0)); verts.Add(new Vector3(w, bottom, z1)); verts.Add(new Vector3(-w, bottom, z1));
+                verts.Add(new Vector3(-w, top, z0)); verts.Add(new Vector3(w, top, z0)); verts.Add(new Vector3(w, top, z1)); verts.Add(new Vector3(-w, top, z1));
+                AddBlock(verts, faces, k, new[] { b, b + 1, b + 2, b + 3 }, new[] { b + 4, b + 5, b + 6, b + 7 });
+            }
+            return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+        }
+
         public static BrushPolyhedron Stairs(Vector3 size, float stepHeight)
         {
             float w = size.x * 0.5f, h = size.y * 0.5f, d = size.z * 0.5f;
@@ -273,9 +298,15 @@ namespace CsgBrush
                     verts.Add(new Vector3(ri * Mathf.Cos(t0), 0f, ri * Mathf.Sin(t0))); verts.Add(new Vector3(ro * Mathf.Cos(t0), 0f, ro * Mathf.Sin(t0)));
                     verts.Add(new Vector3(ro * Mathf.Cos(t1), 0f, ro * Mathf.Sin(t1))); verts.Add(new Vector3(ri * Mathf.Cos(t1), 0f, ri * Mathf.Sin(t1)));
                     for (int i = 0; i < 4; i++) verts.Add(new Vector3(verts[b0 + i].x, yTop, verts[b0 + i].z));
+                    if (p.open) // a slab under the tread instead of a block from the floor
+                    {
+                        float yBottom = Mathf.Max(0f, yTop - Mathf.Max(0.001f, p.stepThickness));
+                        for (int i = 0; i < 4; i++) verts[b0 + i] = new Vector3(verts[b0 + i].x, yBottom, verts[b0 + i].z);
+                    }
                     AddBlock(verts, faces, group++, new[] { b0, b0 + 1, b0 + 2, b0 + 3 }, new[] { b0 + 4, b0 + 5, b0 + 6, b0 + 7 });
                 }
             }
+            if (p.open) return new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() }; // the floor stays at y = 0 below the first slab
             return OnFloor(verts, faces);
         }
 

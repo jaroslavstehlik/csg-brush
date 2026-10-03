@@ -165,6 +165,7 @@ namespace CsgBrush.Editor
             st.stepThickness = s.newStepThickness > 0f ? s.ToMeters(s.newStepThickness) : BrushSettings.DefaultStepThicknessMeters;
             st.curveAngle = Mathf.Max(1f, s.newCurveAngle); st.stepsPer360 = Mathf.Max(1, s.newStepsPer360);
             st.counterClockwise = s.newCounterClockwise; st.slopedFloor = s.newSlopedFloor; st.slopedCeiling = s.newSlopedCeiling;
+            st.open = (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs) && !s.newSupportUnderSteps;
             if (shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
                 // steps from the drawn height; step width so the footprint's x extent matches the drawn one
@@ -386,6 +387,18 @@ namespace CsgBrush.Editor
             foreach (var face in poly.faces)
                 for (int i = 0; i < face.indices.Length; i++)
                     Handles.DrawLine(m.MultiplyPoint3x4(poly.vertices[face.indices[i]]), m.MultiplyPoint3x4(poly.vertices[face.indices[(i + 1) % face.indices.Length]]), 2f);
+            if (BrushSettings.instance.showDimensions) DrawDimensions(poly, m, state == State.Height);
+        }
+
+        /// <summary>The drawn brush's width and depth along two edges of its base, and its height once it has one, as the floor plan shows a wall's length.</summary>
+        static void DrawDimensions(BrushPolyhedron poly, Matrix4x4 m, bool withHeight)
+        {
+            var b = poly.Bounds();
+            var s = BrushSettings.instance;
+            void Label(Vector3 local, float value) { if (value > 1e-4f) Handles.Label(m.MultiplyPoint3x4(local), s.FormatUnits(value), EditorStyles.whiteMiniLabel); }
+            Label(new Vector3(b.center.x, b.min.y, b.min.z), b.size.x);
+            Label(new Vector3(b.max.x, b.min.y, b.center.z), b.size.z);
+            if (withHeight) Label(new Vector3(b.min.x, b.center.y, b.min.z), b.size.y); // on the other side from the depth
         }
 
         void Finish()
@@ -402,10 +415,11 @@ namespace CsgBrush.Editor
             brush.innerRadius = p.stairs.innerRadius; brush.stepWidth = p.stairs.stepWidth; brush.stepThickness = p.stairs.stepThickness;
             brush.curveAngle = p.stairs.curveAngle; brush.numSteps = p.stairs.numSteps; brush.stepsPer360 = p.stairs.stepsPer360;
             brush.counterClockwise = p.stairs.counterClockwise; brush.slopedFloor = p.stairs.slopedFloor; brush.slopedCeiling = p.stairs.slopedCeiling;
+            brush.supportUnderSteps = !p.stairs.open;
             if (brush.SupportsHollow && s.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
             if (Operation != BrushOperation.Add) BrushApi.SetOperation(brush, Operation);
             BrushSync.Ensure(brush);
-            if (wallPlan != null) WallAnchors.Attach(brush.gameObject, wallPlan);
+            if (wallPlan != null) WallAnchors.Attach(brush.gameObject, wallPlan, true); // as drawn: its height out of the wall
             Undo.CollapseUndoOperations(group);
             BrushApi.ForceUpdate();
             Selection.activeGameObject = brush.gameObject;

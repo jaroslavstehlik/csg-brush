@@ -114,5 +114,47 @@ namespace CsgBrush.Tests
             Assert.AreEqual(1f, RendererProperty(BrushCsg.MeshObject(def, false), "m_ScaleInLightmap").floatValue, 1e-5f);
             Assert.IsNotNull(wall);
         }
+
+        [Test]
+        public void ABrushsMaterialGoesOnlyOnItsOwnFaces()
+        {
+            var a = BrushApi.Create(BrushShape.Box, new Vector3(0f, 0.5f, 0f), new Vector3(2f, 1f, 2f), Quaternion.identity, null, "A");
+            BrushApi.ForceUpdate();
+            var b = BrushApi.Create(BrushShape.Box, new Vector3(2f, 0.5f, 0f), new Vector3(2f, 1f, 2f), Quaternion.identity, null, "B"); // touching A: one island
+            var red = new Material(Shader.Find("Hidden/InternalErrorShader")) { name = "red" };
+            BrushApi.SetMaterial(b, red);
+            BrushApi.ForceUpdate();
+            var t = BrushCsg.MeshObject(Group(), 0, Default, false);
+            var mesh = t.GetComponent<MeshFilter>().sharedMesh; var mats = t.GetComponent<MeshRenderer>().sharedMaterials;
+            var owners = BrushCsg.TriangleBrushes(t);
+            int tri = 0;
+            for (int sm = 0; sm < mesh.subMeshCount; sm++)
+                for (int k = 0; k < mesh.GetTriangles(sm).Length / 3; k++, tri++)
+                    Assert.AreEqual(owners[tri] == b, mats[sm] == red, owners[tri].name + "'s triangle has " + mats[sm].name);
+            Object.DestroyImmediate(red);
+        }
+
+        [Test]
+        public void ACuttersNewMaterialGoesOnTheFacesItCarved()
+        {
+            var wall = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1.5f, 0f), new Vector3(6f, 3f, 0.4f), Quaternion.identity, null, "Wall");
+            var door = BrushApi.Create(BrushShape.Door, new Vector3(0f, 1.1f, 0f), new Vector3(1f, 2.2f, 0.6f), Quaternion.identity, null, "Door");
+            BrushApi.ForceUpdate();
+            var red = new Material(Shader.Find("Hidden/InternalErrorShader")) { name = "red" };
+            BrushApi.SetMaterial(door, red); // only the cutter changes
+            BrushApi.ForceUpdate();
+            var t = BrushCsg.MeshObject(Group(), 0, Default, false);
+            var mesh = t.GetComponent<MeshFilter>().sharedMesh; var mats = t.GetComponent<MeshRenderer>().sharedMaterials;
+            var owners = BrushCsg.TriangleBrushes(t);
+            int tri = 0, carved = 0;
+            for (int sm = 0; sm < mesh.subMeshCount; sm++)
+                for (int k = 0; k < mesh.GetTriangles(sm).Length / 3; k++, tri++)
+                {
+                    if (owners[tri] == door) carved++;
+                    Assert.AreEqual(owners[tri] == door, mats[sm] == red, owners[tri].name + "'s triangle has " + mats[sm].name);
+                }
+            Assert.Greater(carved, 0, "the door carved faces into the wall");
+            Object.DestroyImmediate(red);
+        }
     }
 }

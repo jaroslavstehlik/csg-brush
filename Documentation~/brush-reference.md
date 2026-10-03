@@ -35,8 +35,14 @@ Detailed notes on the brush tools and components. For a task-by-task guide to fl
   is outlined while it is selected. Distance along it, height and face are in the Inspector. It follows its wall; move it along the wall, or away from every wall
   to free it; Detach from Wall takes it off.
 - **Place and size**: use the normal Move and Rotate tools with Unity snapping. Size is edited in the Inspector
-  in world units (the metre value is shown next to it) and is centred on the transform. The Scale tool resizes
-  the brush: on release the scale is applied to the size and the transform scale returns to one.
+  in world units (the metre value is shown next to it). The Scale tool resizes the brush: on release the scale is
+  applied to the size and the transform scale returns to one.
+- **Pivot**: where the transform sits in the brush, measured from its left, bottom, back corner. Pivot mode
+  Normalized gives it as 0 to 1 of the size (0.5 is the centre, the default), and it follows the brush when it is
+  resized; Absolute gives it in grid units, and it stays that far from the corner. A pivot with Y 0 stands the brush
+  on what it is placed on; Y 0 and Z 0 stand it against a wall, the way a wardrobe goes on a
+  [wall anchor](wall-anchor.md). Setting the pivot moves the transform, never the shape; switching the mode moves
+  nothing. On a Custom shape the pivot moves the vertices. Curved and spiral stairs, doors and windows keep their own pivot.
 - **Default material**: faces without a material of their own show a generated ruler texture (lines at every grid size, strong at the
   metre, on a metre checker) that lines up with the world grid across brushes and cuts; created under `Assets/CSG Brush` on first
   use, swappable in Project Settings > Brushes.
@@ -59,8 +65,9 @@ Detailed notes on the brush tools and components. For a task-by-task guide to fl
   character controller cares about (ice, water, fall damage) is a *module*: a `BrushModule` component on the brush object or on a
   parent, which tags all its children. A module's values ride onto every collider piece of the brush and a change rebuilds exactly
   those pieces; a module may make the brush a trigger (water). Trigger brushes raise one Enter and one Exit per collider however
-  many pieces they are made of: subscribe to `Brush.TriggerEntered` / `TriggerExited`, implement `IBrushTriggerListener` on the
-  same object, or add the `BrushTrigger` module and wire its UnityEvents. Project Settings > Brushes lists the modules every new
+  many pieces they are made of: put a script with `OnTriggerEnter` / `OnTriggerStay` / `OnTriggerExit` on the brush, subscribe to
+  `Brush.TriggerEntered` / `TriggerExited`, implement `IBrushTriggerListener` on the same object, or add the
+  `BrushTrigger` module and wire its UnityEvents. Project Settings > Brushes lists the modules every new
   brush gets. The Quake controller's module is `QuakeBrushSurface` in the project, not in this package. Hollow turns a box or cylinder into a room
   with a wall thickness.
 - **Edit shape**: the Edit Brush context (Inspector or overlay button, or the tool context dropdown in the Scene

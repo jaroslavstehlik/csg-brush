@@ -6,9 +6,10 @@ namespace CsgBrush
     /// <summary>Where on its wall an anchored object sits.</summary>
     public enum WallFace
     {
-        [Tooltip("In the middle of the wall: doors and windows cut through it.")] Through,
-        [Tooltip("On the wall's inside face (the room's side of a closed plan).")] Inside,
-        [Tooltip("On the wall's outside face.")] Outside,
+        // the names and the Inspector's order are the floor plan's (FloorPlan.Side); the values are the saved ones
+        [Tooltip("In the middle of the wall: doors and windows cut through it.")] Centered = 0,
+        [Tooltip("On the wall's inside face (the room's side).")] Inside = 1,
+        [Tooltip("On the wall's outside face.")] Outside = 2,
     }
 
     /// <summary>
@@ -30,10 +31,9 @@ namespace CsgBrush
         [HideInInspector] public int startId = Unplaced, endId = Unplaced;
         [Tooltip("Metres along the wall from its first corner.")] public float distance;
         [Tooltip("Metres above the floor: a door's or window's bottom, anything else's pivot.")] public float height;
-        [Tooltip("Through the wall, or on its inside or outside face.")] public WallFace face = WallFace.Inside;
-        /// <summary>Metres from the face to the pivot, out of the wall.</summary>
-        [HideInInspector] public float offset;
-        /// <summary>The object's rotation relative to the face (identity: facing out of the wall, up is up).</summary>
+        [Tooltip("On the wall's outside face, in its middle, or on its inside face.")] public WallFace face = WallFace.Inside;
+        [Tooltip("Metres from the wall face to the pivot, out of the wall.")] public float offset;
+        /// <summary>The object's rotation relative to the face: identity faces out of the wall (+Z out, up is up).</summary>
         [HideInInspector] public Quaternion rotation = Quaternion.identity;
         /// <summary>The wall's length when last placed: finds the place again from the far end if the first corner is gone.</summary>
         [HideInInspector] public float wallLength;

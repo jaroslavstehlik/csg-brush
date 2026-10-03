@@ -216,9 +216,79 @@ namespace CsgBrush.Editor
         {
             if (brush.shape != BrushShape.Custom) return;
             Undo.RecordObject(brush, "Reset brush shape");
+            var custom = PivotOf(brush);
             brush.size = brush.polyhedron != null && brush.polyhedron.IsValid ? brush.polyhedron.Bounds().size : brush.size;
+            if (custom.HasValue) brush.pivot = custom.Value; // the shape stays where it was
             brush.shape = brush.customFrom;
             brush.polyhedron = new BrushPolyhedron();
+            BrushSync.Ensure(brush);
+        }
+
+        /// <summary>
+        /// Where the transform sits in the brush's box, in its <see cref="Brush.pivotMode"/> (a fraction of the size, or
+        /// metres from the left, bottom, back corner); a Custom shape's comes from its vertices. Null for shapes that keep
+        /// their own: curved and spiral stairs, doors and windows.
+        /// </summary>
+        public static Vector3? PivotOf(Brush brush)
+        {
+            if (!PivotBox(brush, out var size, out var distance)) return null;
+            return brush.pivotMode == PivotMode.Normalized ? new Vector3(Fraction(distance.x, size.x), Fraction(distance.y, size.y), Fraction(distance.z, size.z)) : distance;
+        }
+
+        /// <summary>The brush's box size and its pivot in metres from the box's left, bottom, back corner.</summary>
+        static bool PivotBox(Brush brush, out Vector3 size, out Vector3 distance)
+        {
+            if (brush.HasPivot) { size = brush.ClampedSize; distance = brush.PivotDistance(size); return true; }
+            size = distance = default;
+            if (brush.shape != BrushShape.Custom || brush.polyhedron == null || !brush.polyhedron.IsValid) return false;
+            var b = brush.polyhedron.Bounds();
+            size = b.size; distance = -b.min;
+            return true;
+        }
+
+        static float Fraction(float distance, float size) => size > 1e-6f ? Mathf.Clamp01(distance / size) : 0.5f;
+
+        /// <summary>
+        /// Move the brush's pivot (in its <see cref="Brush.pivotMode"/>) and its transform with it, so the shape stays where
+        /// it is; on a Custom shape the vertices move instead. Children stay where they are too. Undoable.
+        /// </summary>
+        public static void SetPivot(Brush brush, Vector3 pivot)
+        {
+            if (!PivotBox(brush, out var size, out var current)) return;
+            bool relative = brush.pivotMode == PivotMode.Normalized;
+            if (relative) pivot = new Vector3(Mathf.Clamp01(pivot.x), Mathf.Clamp01(pivot.y), Mathf.Clamp01(pivot.z));
+            else pivot = new Vector3(Mathf.Clamp(pivot.x, 0f, size.x), Mathf.Clamp(pivot.y, 0f, size.y), Mathf.Clamp(pivot.z, 0f, size.z));
+            var target = relative ? Vector3.Scale(pivot, size) : pivot;
+            var move = target - current; // the new pivot in the old local space, from the old one
+            if (move.sqrMagnitude < 1e-12f && (!brush.HasPivot || (brush.pivot - pivot).sqrMagnitude < 1e-12f)) return; // no-op edits must not create undo entries
+            var t = brush.transform;
+            Undo.RecordObject(brush, "Set brush pivot");
+            Undo.RecordObject(t, "Set brush pivot");
+            var children = new List<(Transform child, Vector3 position, Quaternion rotation)>();
+            foreach (Transform c in t)
+                if (!Brush.IsGeneratedChildName(c.name)) { Undo.RecordObject(c, "Set brush pivot"); children.Add((c, c.position, c.rotation)); }
+            var world = t.TransformPoint(move);
+            if (brush.HasPivot) brush.pivot = pivot;
+            else
+            {
+                var poly = brush.polyhedron.Clone();
+                for (int i = 0; i < poly.vertices.Length; i++) poly.vertices[i] -= move;
+                brush.polyhedron = poly;
+            }
+            t.position = world;
+            foreach (var (c, position, rotation) in children) c.SetPositionAndRotation(position, rotation);
+            BrushSync.NotifyTransformChanged(brush);
+            BrushSync.Ensure(brush);
+        }
+
+        /// <summary>Measure the pivot as a fraction of the size or as a distance; the pivot itself stays where it is. Undoable.</summary>
+        public static void SetPivotMode(Brush brush, PivotMode mode)
+        {
+            if (brush.pivotMode == mode) return;
+            Undo.RecordObject(brush, "Set brush pivot mode");
+            bool has = PivotBox(brush, out var size, out var distance) && brush.HasPivot;
+            brush.pivotMode = mode;
+            if (has) brush.pivot = mode == PivotMode.Normalized ? new Vector3(Fraction(distance.x, size.x), Fraction(distance.y, size.y), Fraction(distance.z, size.z)) : distance;
             BrushSync.Ensure(brush);
         }
 

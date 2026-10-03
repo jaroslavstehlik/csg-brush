@@ -66,5 +66,59 @@ namespace CsgBrush.Tests
                 AssetDatabase.DeleteAsset(path);
             }
         }
+
+        /// <summary>A plain trigger script, as a student writes it, on the brush object.</summary>
+        public sealed class TriggerCounter : MonoBehaviour
+        {
+            public int enters, exits, stays;
+            void OnTriggerEnter(Collider other) => enters++;
+            void OnTriggerExit(Collider other) => exits++;
+            void OnTriggerStay(Collider other) => stays++;
+        }
+
+        [UnityTest]
+        public IEnumerator ATriggerBrushSendsUnitysTriggerMessagesToItsOwnObject()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var brush = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
+            brush.name = "TriggerBox";
+            BrushApi.SetCollision(brush, Colliders.ColliderKind.Trigger);
+            BrushApi.ForceUpdate();
+            string path = "Assets/__brush_trigger_test.unity";
+            EditorSceneManager.SaveScene(scene, path);
+            try
+            {
+                yield return new EnterPlayMode();
+                GameObject box = null; // the brush, not its collider piece of the same name
+                for (int i = 0; i < 20 && box == null; i++) { yield return null; foreach (var b in Object.FindObjectsByType<Brush>()) if (b.name == "TriggerBox") box = b.gameObject; }
+                Assert.IsNotNull(box, "the scene is loaded in play mode");
+                var counter = box.AddComponent<TriggerCounter>(); // a test script cannot be saved in the scene
+                int events = 0; box.GetComponent<Brush>().TriggerEntered += _ => events++;
+                var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                ball.transform.position = new Vector3(0f, 1f, -5f);
+                var body = ball.AddComponent<Rigidbody>(); body.isKinematic = true;
+                var mode = Physics.simulationMode; Physics.simulationMode = SimulationMode.Script; // time does not run in a batch test: step by hand
+                void Step() { for (int i = 0; i < 4; i++) { Physics.SyncTransforms(); Physics.Simulate(0.02f); } }
+                Step();
+                ball.transform.position = new Vector3(0f, 1f, 0f);
+                Step();
+                int afterEnter = events, enters = counter.enters, stays = counter.stays;
+                ball.transform.position = new Vector3(0f, 1f, 5f);
+                Step();
+                int exits = counter.exits;
+                Physics.simulationMode = mode;
+                yield return new ExitPlayMode();
+                for (int i = 0; i < 10; i++) yield return null; // let the editor settle before the next play mode test
+                Assert.AreEqual(1, afterEnter, "the brush's own event");
+                Assert.AreEqual(1, enters, "OnTriggerEnter on the brush object");
+                Assert.Greater(stays, 0, "OnTriggerStay too");
+                Assert.AreEqual(1, exits, "OnTriggerExit");
+            }
+            finally
+            {
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                AssetDatabase.DeleteAsset(path);
+            }
+        }
     }
 }

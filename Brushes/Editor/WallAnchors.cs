@@ -93,7 +93,7 @@ namespace CsgBrush.Editor
             if (p.plan != null)
             {
                 var a = Undo.AddComponent<WallAnchor>(brush.gameObject);
-                a.face = WallFace.Through;
+                a.face = WallFace.Centered;
                 a.startId = p.wall.startId; a.endId = p.wall.endId; a.distance = p.distance; a.height = p.sill; a.wallLength = p.wall.Length;
                 Layout(p.plan);
             }
@@ -114,10 +114,16 @@ namespace CsgBrush.Editor
         // ------------------------------------------------------------------ anything else
 
         /// <summary>
-        /// Put an object on the nearest wall of a plan (the nearest plan when null), keeping where it is: it becomes the plan's
-        /// child and follows the wall from now on. Undoable. Null when there is no plan.
+        /// Put an object on the nearest wall of a plan (the nearest plan when null), keeping where it is and lined up with the
+        /// wall: it becomes the plan's child and follows the wall from now on. Undoable. Null when there is no plan.
         /// </summary>
-        public static WallAnchor Attach(GameObject go, FloorPlan plan = null)
+        public static WallAnchor Attach(GameObject go, FloorPlan plan = null) => Attach(go, plan, false);
+
+        /// <summary>
+        /// <see cref="Attach(GameObject, FloorPlan)"/>; the object lines up with the wall (its front out of the face, up is up)
+        /// unless <paramref name="keepRotation"/>, as a brush drawn on the wall keeps the pose it was drawn with.
+        /// </summary>
+        public static WallAnchor Attach(GameObject go, FloorPlan plan, bool keepRotation)
         {
             if (go == null) return null;
             if (plan == null) plan = NearestPlan(go.transform.position);
@@ -126,10 +132,12 @@ namespace CsgBrush.Editor
             if (!go.TryGetComponent<WallAnchor>(out var a)) a = Undo.AddComponent<WallAnchor>(go);
             Undo.RecordObject(a, "Attach to wall");
             a.startId = a.endId = WallAnchor.Unplaced;
-            if (go.TryGetComponent<Brush>(out var b) && b.IsOpening) a.face = WallFace.Through;
-            else if (a.face == WallFace.Through) a.face = WallFace.Inside; // the side it is on decides
+            if (go.TryGetComponent<Brush>(out var b) && b.IsOpening) a.face = WallFace.Centered;
+            else if (a.face == WallFace.Centered) a.face = WallFace.Inside; // the side it is on decides
             a.MarkBrushes(true);
+            if (keepRotation) s_KeepPose.Add(a);
             Layout(plan);
+            s_KeepPose.Remove(a);
             return a;
         }
 
@@ -174,7 +182,7 @@ namespace CsgBrush.Editor
                 {
                     if (!opening) continue; // an object under the plan rides on a wall only when attached
                     a = child.gameObject.AddComponent<WallAnchor>(); // a door put under the plan by hand
-                    a.face = WallFace.Through;
+                    a.face = WallFace.Centered;
                 }
                 if (a.startId == WallAnchor.Unplaced) { s_Moved.Remove(a); Reanchor(plan, a, opening, true); }
                 else if (s_Moved.Remove(a)) Reanchor(plan, a, opening, false);
@@ -267,8 +275,8 @@ namespace CsgBrush.Editor
 
         /// <summary>
         /// Take the wall nearest the object (undoable with the move that caused it). A door stays on a wall it is near; anything
-        /// else keeps its pose relative to the face of the side it is on, while some part of it is near that face. Forced (a new
-        /// anchor), it takes the nearest wall wherever it is.
+        /// else keeps its place relative to the face of the side it is on, while some part of it is near that face (or its
+        /// offset from its own wall). Forced (a new anchor), it takes the nearest wall wherever it is, lined up with it.
         /// </summary>
         static void Reanchor(FloorPlan plan, WallAnchor a, bool opening, bool force)
         {
@@ -281,18 +289,28 @@ namespace CsgBrush.Editor
                 var brush = a.GetComponent<Brush>();
                 if (!force && across > (wall.outer - wall.inner) * 0.5f + CatchMeters) { SetFree(a); return; } // off every wall: a free cut
                 float sill = Mathf.Max(0f, local.y - brush.size.y * 0.5f);
-                Set(a, wall, WallFace.Through, Snap(along), sill, 0f, Quaternion.identity);
+                Set(a, wall, WallFace.Centered, Snap(along), sill, 0f, Quaternion.identity);
                 return;
             }
             float middle = (wall.inner + wall.outer) * 0.5f;
-            var face = a.face == WallFace.Through ? WallFace.Through : Vector2.Dot(p2 - wall.a, wall.outward) - middle >= 0f ? WallFace.Outside : WallFace.Inside;
+            var face = a.face == WallFace.Centered ? WallFace.Centered : Vector2.Dot(p2 - wall.a, wall.outward) - middle >= 0f ? WallFace.Outside : WallFace.Inside;
             float distance = Mathf.Clamp(Snap(along), 0f, wall.Length);
             Frame(plan, wall, face, distance, out var origin, out var frame);
             var inv = Quaternion.Inverse(frame);
             var rel = inv * (t.position - origin);
-            if (!force && Gap(t, origin, inv, rel.z) > CatchMeters) { SetFree(a); return; } // pulled away from every wall
-            Set(a, wall, face, distance, rel.y, rel.z, inv * t.rotation);
+            // off the wall: a free object, or one taken to another wall, takes it only against it; one on its own wall is
+            // freed only when pulled further out than its offset (a typed offset never frees it)
+            bool sameWall = Resolve(a, s_Walls, out var own, out _) && own.startId == wall.startId && own.endId == wall.endId; // its wall, split or not
+            bool pulled = !sameWall || face != a.face || rel.z - a.offset > CatchMeters;
+            if (!force && pulled && Gap(t, origin, inv, rel.z) > CatchMeters) { SetFree(a); return; }
+            // a new anchor lines up with the wall (unless it keeps the pose it was drawn with); one turned by hand on its own
+            // wall keeps that turn; one taken to another wall or side keeps its rotation relative to the wall
+            var rotation = force ? (s_KeepPose.Remove(a) ? inv * t.rotation : Quaternion.identity) : sameWall && face == a.face ? inv * t.rotation : a.rotation;
+            Set(a, wall, face, distance, rel.y, rel.z, rotation);
         }
+
+        /// <summary>New anchors that keep their object's rotation instead of lining up with the wall: brushes drawn on it.</summary>
+        static readonly HashSet<WallAnchor> s_KeepPose = new HashSet<WallAnchor>();
 
         static void Set(WallAnchor a, FloorPlan.Wall wall, WallFace face, float distance, float height, float offset, Quaternion rotation)
         {
@@ -380,7 +398,7 @@ namespace CsgBrush.Editor
         /// <summary>The world pose and size of a door or window on a wall: through the wall's thickness, facing across it.</summary>
         public static void OpeningPose(FloorPlan plan, FloorPlan.Wall wall, float distance, float sill, Vector2 opening, out Vector3 position, out Quaternion rotation, out Vector3 size)
         {
-            Frame(plan, wall, WallFace.Through, distance, out var origin, out rotation);
+            Frame(plan, wall, WallFace.Centered, distance, out var origin, out rotation);
             position = origin + plan.transform.up * (sill + opening.y * 0.5f);
             size = new Vector3(opening.x, opening.y, (wall.outer - wall.inner) + 2f * BrushSettings.OpeningMarginMeters);
         }

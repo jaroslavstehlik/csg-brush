@@ -438,7 +438,8 @@ namespace CsgBrush.Editor
             unchecked
             {
                 int meshKey = 17;
-                for (int i = 0; i < job.pieceKeys.Count; i++) { var pr = job.records[job.pieceRecord[i]]; meshKey = meshKey * 31 + job.pieceKeys[i].GetHashCode(); var mat = pr.brush.material; if (mat == null) mat = DefaultMaterial(); meshKey = meshKey * 31 + MaterialKey(mat); meshKey = meshKey * 31 + pr.layer; meshKey = meshKey * 31 + StaticFlags(pr.brush); } // static flags: which mesh its triangles go to
+                for (int i = 0; i < job.pieceKeys.Count; i++) { var pr = job.records[job.pieceRecord[i]]; meshKey = meshKey * 31 + job.pieceKeys[i].GetHashCode(); var mat = pr.brush.material; if (mat == null) mat = DefaultMaterial(); meshKey = meshKey * 31 + MaterialKey(mat); meshKey = meshKey * 31 + pr.layer; meshKey = meshKey * 31 + StaticFlags(pr.brush);
+                    foreach (int c in job.pieceCutters[i]) { var cm = job.records[c].brush.material; meshKey = meshKey * 31 + MaterialKey(cm != null ? cm : DefaultMaterial()); } } // static flags: which mesh its triangles go to; carved faces take the cutter's material
                 job.meshKey = meshKey;
             }
             bool anyMesh = false; foreach (var t in MeshObjects(model)) if (t.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null) { anyMesh = true; break; }

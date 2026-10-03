@@ -55,8 +55,12 @@ namespace CsgBrush.Editor
         /// <summary>A brush's snapped size: grid multiples, except a door's or window's, which is its own.</summary>
         public static Vector3 SnapBrushSize(Brush brush, Vector3 size, float grid) => brush.IsOpening ? size : SnapSize(size, grid);
 
-        /// <summary>A brush's snapped position (see <see cref="SnapPosition"/>): faces on grid lines, as in Hammer or TrenchBroom.</summary>
-        public static Vector3 SnapBrushPosition(Brush brush, Vector3 worldPosition, Vector3 size, Quaternion worldRotation, float grid) => SnapPosition(worldPosition, size, worldRotation, grid);
+        /// <summary>A brush's snapped position (see <see cref="SnapPosition"/>): faces on grid lines, as in Hammer or TrenchBroom, wherever its pivot is.</summary>
+        public static Vector3 SnapBrushPosition(Brush brush, Vector3 worldPosition, Vector3 size, Quaternion worldRotation, float grid)
+        {
+            var shift = worldRotation * brush.PivotShiftFor(size); // pivot to the shape's centre
+            return SnapPosition(worldPosition + shift, size, worldRotation, grid) - shift;
+        }
 
         /// <summary>Snapped world position: the minimum corner lands on the grid for axis-aligned brushes, the pivot otherwise.</summary>
         public static Vector3 SnapPosition(Vector3 worldPosition, Vector3 size, Quaternion worldRotation, float grid)
@@ -254,7 +258,9 @@ namespace CsgBrush.Editor
             var scaledSize = Vector3.Scale(brush.size, new Vector3(Mathf.Abs(lossy.x), Mathf.Abs(lossy.y), Mathf.Abs(lossy.z)));
             var sizeS = SnapBrushSize(brush, scaledSize, grid);
             var Ts = SnapBrushPosition(brush, T, sizeS, Rs, grid);
-            s_Preview[brush] = (Matrix4x4.TRS(Ts, Rs, Vector3.one), Divide(sizeS, brush.size));
+            var factor = Divide(sizeS, brush.size);
+            Ts += Rs * (brush.PivotShiftFor(sizeS) - Vector3.Scale(factor, brush.PivotShift)); // the geometry is scaled about the transform; a distance pivot does not scale with it
+            s_Preview[brush] = (Matrix4x4.TRS(Ts, Rs, Vector3.one), factor);
             BrushSync.NotifyTransformChanged(brush);
             t.hasChanged = false;
         }

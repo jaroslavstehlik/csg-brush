@@ -386,13 +386,14 @@ namespace CsgBrush.Tests
                 Rebuild(plan);
                 Assert.AreEqual(plan, a.Plan, "the nearest plan"); Assert.AreEqual(WallFace.Inside, a.face);
                 Near(new Vector3(1.3f, 1.2f, 0.2f), shelf.transform.position, "attached where it was");
+                Assert.That(Quaternion.Angle(Quaternion.identity, shelf.transform.rotation), Is.LessThan(0.01f), "lined up with the wall: its tilt is gone");
                 Assert.IsTrue(shelf.IsPlaced); Assert.IsFalse(BrushSnap.Snap(shelf), "placed by its wall, not the grid");
                 // the wall turns about its first corner: the shelf turns with it, 1.3 m along, 0.2 m off the face
                 plan.points[1] = new Vector3(4f, 0f, 4f);
                 Rebuild(plan);
                 var dir = new Vector3(1f, 0f, 1f).normalized; var inward = new Vector3(-dir.z, 0f, dir.x);
                 Near(dir * 1.3f + inward * 0.2f + Vector3.up * 1.2f, shelf.transform.position, "on the turned wall");
-                Assert.That(Quaternion.Angle(Quaternion.LookRotation(inward) * Quaternion.Inverse(Quaternion.LookRotation(Vector3.forward)) * Quaternion.Euler(0f, 0f, 5f), shelf.transform.rotation), Is.LessThan(0.01f), "turned with it");
+                Assert.That(Quaternion.Angle(Quaternion.LookRotation(inward), shelf.transform.rotation), Is.LessThan(0.01f), "turned with it");
             }
             finally { s.snapToGrid = snap; }
         }
@@ -428,6 +429,86 @@ namespace CsgBrush.Tests
                 plan.points[0] = new Vector3(0f, 0f, -1f); plan.points[1] = new Vector3(4f, 0f, -1f);
                 Rebuild(plan);
                 Near(new Vector3(2f, 1.5f, 0.05f), picture.transform.position, "detached: it stays");
+            }
+            finally { s.snapToGrid = snap; }
+        }
+
+        static void Facing(Vector3 forward, Transform t, string message) =>
+            Assert.That(Quaternion.Angle(Quaternion.LookRotation(forward), t.rotation), Is.LessThan(0.01f), message + ": forward " + (t.rotation * Vector3.forward).ToString("F2"));
+
+        [Test]
+        public void AnAttachedObjectLinesUpWithItsWallAndTurnsWithItsSide()
+        {
+            var s = BrushSettings.instance; bool snap = s.snapToGrid;
+            try
+            {
+                s.snapToGrid = false;
+                var plan = Room(FourByThree);
+                var chest = BrushApi.Create(BrushShape.Box, new Vector3(3.7f, 0.5f, 1.5f), new Vector3(1f, 1f, 0.5f), Quaternion.Euler(0f, 20f, 0f));
+                var a = WallAnchors.Attach(chest.gameObject); // the wall along x = 4, its inside facing -x
+                Rebuild(plan);
+                Facing(Vector3.left, chest.transform, "out of the inside face, into the room");
+                var so = new SerializedObject(a); so.FindProperty(nameof(WallAnchor.face)).intValue = (int)WallFace.Outside; so.ApplyModifiedProperties();
+                Rebuild(plan);
+                Facing(Vector3.right, chest.transform, "on the outside: out of the building");
+                Undo.RecordObject(a, "turn"); a.rotation = Quaternion.Euler(0f, 180f, 0f) * a.rotation; WallAnchor.Changed?.Invoke(a); // Turn around
+                Rebuild(plan);
+                Facing(Vector3.left, chest.transform, "turned around: towards the wall");
+                WallAnchors.NearestWall(plan, new Vector2(2f, 0f), out var south, out _, out _);
+                WallAnchors.SetWall(a, south.index); // the wall along z = 0, still on its outside
+                Rebuild(plan);
+                Facing(Vector3.forward, chest.transform, "on another wall it keeps its turn: towards that wall");
+                chest.transform.position = new Vector3(0.3f, 0.5f, 1.5f); // dragged against the wall along x = 0
+                WallAnchors.Moved(a);
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall);
+                Assert.AreEqual(WallFace.Inside, a.face, "dragged inside the room");
+                Facing(Vector3.left, chest.transform, "dragged to another wall: lined up with it, still turned towards it");
+
+                var drawn = BrushApi.Create(BrushShape.Box, new Vector3(2f, 1.5f, 2.9f), new Vector3(1f, 0.2f, 1f), Quaternion.Euler(90f, 0f, 0f));
+                WallAnchors.Attach(drawn.gameObject, plan, true); // drawn on the wall: its height out of the wall
+                Rebuild(plan);
+                Assert.That(Quaternion.Angle(Quaternion.Euler(90f, 0f, 0f), drawn.transform.rotation), Is.LessThan(0.01f), "a drawn brush keeps its pose");
+            }
+            finally { s.snapToGrid = snap; }
+        }
+
+        [Test]
+        public void AWardrobeStandsItsOffsetFromTheWallAndSlidesAlongItThere()
+        {
+            var s = BrushSettings.instance; bool snap = s.snapToGrid;
+            try
+            {
+                s.snapToGrid = false;
+                var plan = Room(FourByThree);
+                var wardrobe = BrushApi.Create(BrushShape.Box, new Vector3(2f, 1f, 0.3f), new Vector3(2f, 2f, 0.6f), Quaternion.identity);
+                BrushApi.SetPivot(wardrobe, new Vector3(0.5f, 0f, 0f)); // its back, at the bottom
+                var a = WallAnchors.Attach(wardrobe.gameObject);
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall); Assert.That(a.offset, Is.EqualTo(0f).Within(1e-4f), "its back against the face");
+                var so = new SerializedObject(a); so.FindProperty(nameof(WallAnchor.offset)).floatValue = 1f; so.ApplyModifiedProperties(); // typed in the Inspector
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall, "a typed offset keeps it on the wall");
+                Near(new Vector3(2f, 0f, 1f), wardrobe.transform.position, "1 m out from the face");
+                wardrobe.transform.position = new Vector3(2.5f, 0f, 1.05f); // slid along the wall
+                WallAnchors.Moved(a);
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall, "sliding at its offset keeps it");
+                Assert.That(a.distance, Is.EqualTo(2.5f).Within(1e-4f)); Assert.That(a.offset, Is.EqualTo(1.05f).Within(1e-4f));
+                plan.EnsureGraph(); plan.SplitWall(0, new Vector3(3f, 0f, 0f)); // a point splits its wall (z = 0, from the first corner)
+                Rebuild(plan);
+                wardrobe.transform.position = new Vector3(2.4f, 0f, 1.05f);
+                WallAnchors.Moved(a);
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall, "its wall split: still the same wall");
+                wardrobe.transform.position = new Vector3(2.5f, 0f, 2f); // pulled a metre further out
+                WallAnchors.Moved(a);
+                Rebuild(plan);
+                Assert.IsFalse(a.onWall, "pulled away: free");
+                wardrobe.transform.position = new Vector3(2.5f, 0f, 1.1f); // near its old offset, but off the wall
+                WallAnchors.Moved(a);
+                Rebuild(plan);
+                Assert.IsFalse(a.onWall, "a free object takes a wall only against it");
             }
             finally { s.snapToGrid = snap; }
         }
@@ -693,6 +774,39 @@ namespace CsgBrush.Tests
             Assert.AreEqual(ids, (Anchor(door).startId, Anchor(door).endId), "still anchored to the same wall");
             Assert.IsTrue(Anchor(door).onWall, "back on its wall");
             Assert.That(Vector3.Distance(placed, door.transform.position), Is.LessThan(1e-4f), "where it was");
+        }
+
+        [Test]
+        public void AMaterialDroppedOnAPlanGoesToItsWallsOrToThatRoom()
+        {
+            var plan = Room(FourByThree);
+            var red = new Material(Shader.Find("Hidden/InternalErrorShader")) { name = "red" };
+            var blue = new Material(Shader.Find("Hidden/InternalErrorShader")) { name = "blue" };
+            BrushMaterialDrop.Drop(GeneratedNamed(plan, "Wall")[0], red);
+            Assert.AreEqual(red, plan.wallMaterial, "a wall: every wall");
+            BrushMaterialDrop.Drop(Generated(plan, "Floor"), blue);
+            Rebuild(plan);
+            Assert.AreEqual(blue, Generated(plan, "Floor").material, "a floor: that room's floor");
+            foreach (var w in GeneratedNamed(plan, "Wall")) Assert.AreEqual(red, w.material);
+            var box = BrushApi.Create(BrushShape.Box, new Vector3(10f, 0.5f, 0f), Vector3.one, Quaternion.identity);
+            BrushMaterialDrop.Drop(box, blue);
+            Assert.AreEqual(blue, box.material, "any other brush: its own material");
+            Object.DestroyImmediate(red); Object.DestroyImmediate(blue);
+        }
+
+        [Test]
+        public void AMeshInFrontOfABrushTakesADroppedMaterialUnitysWay()
+        {
+            var box = BrushApi.Create(BrushShape.Box, Vector3.zero, Vector3.one, Quaternion.identity);
+            BrushApi.ForceUpdate();
+            Transform mesh = null;
+            foreach (var r in Object.FindObjectsByType<MeshRenderer>()) if (BrushGroup.IsMeshChildName(r.name)) mesh = r.transform;
+            Assert.IsNotNull(mesh, "the brush has a generated mesh");
+            Assert.IsTrue(BrushMaterialDrop.OverBrushes(mesh.gameObject), "the generated mesh: the brushes take it");
+            Assert.IsTrue(BrushMaterialDrop.OverBrushes(null), "nothing picked: the brushes may take it");
+            var prop = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Assert.IsFalse(BrushMaterialDrop.OverBrushes(prop), "a regular mesh: Unity's own drop");
+            Object.DestroyImmediate(prop);
         }
     }
 }

@@ -6,6 +6,13 @@ using CsgBrush.Colliders;
 
 namespace CsgBrush
 {
+    /// <summary>How a brush's pivot is measured.</summary>
+    public enum PivotMode
+    {
+        [Tooltip("0 to 1 of the size: follows the brush when resized.")] Normalized,
+        [Tooltip("Distance from the brush's left, bottom, back corner: stays put when resized.")] Absolute,
+    }
+
     public enum BrushShape
     {
         Box = 0,
@@ -75,8 +82,33 @@ namespace CsgBrush
         [SerializeField, HideInInspector, FormerlySerializedAs("surface")] int legacySurface;
         [SerializeField, HideInInspector, FormerlySerializedAs("noFallDamage")] bool legacyNoFallDamage;
 
-        [Tooltip("Metres, centred on the transform.")]
+        [Tooltip("Metres.")]
         public Vector3 size = new Vector3(2f, 2f, 2f);
+
+        /// <summary>
+        /// Where the transform sits in the shape's box, per axis, measured from its left, bottom, back corner (the back is
+        /// the side away from where the brush faces): a fraction of the size, or metres (see <see cref="pivotMode"/>).
+        /// Curved and spiral stairs, doors and windows keep theirs; a Custom shape's comes from its vertices.
+        /// </summary>
+        public Vector3 pivot = new Vector3(0.5f, 0.5f, 0.5f);
+        /// <summary>How <see cref="pivot"/> is measured.</summary>
+        public PivotMode pivotMode = PivotMode.Normalized;
+
+        /// <summary>Box-like shapes whose geometry follows <see cref="pivot"/>.</summary>
+        public bool HasPivot => shape != BrushShape.Custom && !HasParametricSize && !IsOpening;
+
+        /// <summary>The pivot in metres from the box's left, bottom, back corner for a box of <paramref name="boxSize"/>, kept inside the box.</summary>
+        public Vector3 PivotDistance(Vector3 boxSize)
+        {
+            var d = pivotMode == PivotMode.Normalized ? Vector3.Scale(pivot, boxSize) : pivot;
+            return new Vector3(Mathf.Clamp(d.x, 0f, boxSize.x), Mathf.Clamp(d.y, 0f, boxSize.y), Mathf.Clamp(d.z, 0f, boxSize.z));
+        }
+
+        /// <summary>How far a shape of <paramref name="boxSize"/> sits from the transform in local space: none at the centre.</summary>
+        public Vector3 PivotShiftFor(Vector3 boxSize) => HasPivot ? boxSize * 0.5f - PivotDistance(boxSize) : Vector3.zero;
+
+        /// <summary>How far the shape sits from the transform in local space: none at the centre.</summary>
+        public Vector3 PivotShift => PivotShiftFor(ClampedSize);
 
         [Tooltip("Box and cylinder: keep only the walls.")]
         public bool hollow;
@@ -93,8 +125,10 @@ namespace CsgBrush
         public float innerRadius = 0.5f;
         [Tooltip("Curved and spiral stairs: width of the steps out from the column, metres.")]
         public float stepWidth = 1.5f;
-        [Tooltip("Spiral stairs: thickness of each step slab, metres.")]
+        [Tooltip("Spiral stairs, and stairs without support under the steps: thickness of each step slab, metres.")]
         public float stepThickness = 0.1f;
+        [Tooltip("Linear and curved stairs: the steps stand on solid support down to the floor.")]
+        public bool supportUnderSteps = true;
         [Tooltip("Curved stairs: total angle the steps cover; arch: the angle it spans, up to 180. Degrees.")]
         public float curveAngle = 90f;
         [Tooltip("Curved and spiral stairs.")]
@@ -191,7 +225,7 @@ namespace CsgBrush
         public StairParams Stairs => new StairParams
         {
             innerRadius = innerRadius, stepWidth = stepWidth, stepHeight = stepHeight, stepThickness = stepThickness, curveAngle = curveAngle,
-            numSteps = numSteps, stepsPer360 = stepsPer360, addToFirstStep = addToFirstStep, counterClockwise = counterClockwise, slopedFloor = slopedFloor, slopedCeiling = slopedCeiling,
+            numSteps = numSteps, stepsPer360 = stepsPer360, addToFirstStep = addToFirstStep, counterClockwise = counterClockwise, slopedFloor = slopedFloor, slopedCeiling = slopedCeiling, open = !supportUnderSteps,
         };
 
         /// <summary>True when a hollow (subtractive) child should exist for this brush.</summary>
@@ -255,6 +289,18 @@ namespace CsgBrush
             if (n > 0) return;
             TriggerEntered?.Invoke(other);
             foreach (var l in GetComponents<IBrushTriggerListener>()) l.OnBrushTriggerEnter(this, other);
+            gameObject.SendMessage("OnTriggerEnter", other, SendMessageOptions.DontRequireReceiver); // scripts on the brush, as on any trigger
+        }
+
+        readonly Dictionary<Collider, (int frame, float step)> lastStay = new Dictionary<Collider, (int, float)>();
+
+        /// <summary>Called by the relay on a trigger piece: OnTriggerStay on the brush object, once per physics step whatever the pieces.</summary>
+        public void PieceTriggerStay(Collider other)
+        {
+            var now = (Time.frameCount, Time.fixedTime);
+            if (lastStay.TryGetValue(other, out var last) && last == now) return;
+            lastStay[other] = now;
+            gameObject.SendMessage("OnTriggerStay", other, SendMessageOptions.DontRequireReceiver);
         }
 
         /// <summary>Called by the relay on a trigger piece.</summary>
@@ -263,8 +309,10 @@ namespace CsgBrush
             if (!insidePieces.TryGetValue(other, out int n)) return;
             if (n > 1) { insidePieces[other] = n - 1; return; }
             insidePieces.Remove(other);
+            lastStay.Remove(other);
             TriggerExited?.Invoke(other);
             foreach (var l in GetComponents<IBrushTriggerListener>()) l.OnBrushTriggerExit(this, other);
+            gameObject.SendMessage("OnTriggerExit", other, SendMessageOptions.DontRequireReceiver);
         }
 
         void OnValidate()
@@ -318,7 +366,7 @@ namespace CsgBrush
                 Gizmos.DrawLine(new Vector3(0f, b.min.y, 0f), new Vector3(0f, b.max.y, 0f));
                 return;
             }
-            Gizmos.DrawWireCube(Vector3.zero, shown);
+            Gizmos.DrawWireCube(Vector3.Scale(PivotShift, new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z))), shown);
         }
     }
 }

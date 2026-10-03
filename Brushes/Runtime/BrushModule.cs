@@ -41,6 +41,7 @@ namespace CsgBrush
         public Brush brush;
         void OnTriggerEnter(Collider other) { if (brush != null) brush.PieceTriggerEnter(other); }
         void OnTriggerExit(Collider other) { if (brush != null) brush.PieceTriggerExit(other); }
+        void OnTriggerStay(Collider other) { if (brush != null) brush.PieceTriggerStay(other); }
     }
 
     /// <summary>

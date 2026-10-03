@@ -36,6 +36,8 @@ namespace CsgBrush.Editor
             if (snap != s.snapToGrid) { s.snapToGrid = snap; s.NotifyChanged(); }
             bool cuts = GUILayout.Toggle(s.showCuts, new GUIContent("Cuts", "Show subtract brushes as translucent red volumes, so they can be seen and selected where they have carved everything away"), EditorStyles.miniButton, GUILayout.Width(40), GUILayout.Height(18));
             if (cuts != s.showCuts) { s.showCuts = cuts; s.NotifyChanged(); SceneView.RepaintAll(); }
+            bool sizes = GUILayout.Toggle(s.showDimensions, new GUIContent("Sizes", "Show the dimensions of a brush or wall while it is drawn"), EditorStyles.miniButton, GUILayout.Width(44), GUILayout.Height(18));
+            if (sizes != s.showDimensions) { s.showDimensions = sizes; s.NotifyChanged(); SceneView.RepaintAll(); }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
@@ -76,6 +78,13 @@ namespace CsgBrush.Editor
                 EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndVertical();
+        }
+
+        /// <summary>Linear and curved stairs: solid under the steps, or slabs of a thickness.</summary>
+        static void SupportUnderSteps(BrushSettings s)
+        {
+            s.newSupportUnderSteps = EditorGUILayout.Toggle(new GUIContent("Support under steps", "The steps stand on solid support down to the floor"), s.newSupportUnderSteps);
+            if (!s.newSupportUnderSteps) s.newStepThickness = UnitsField(s, "Step thickness", "0 uses 0.1 m", s.newStepThickness, BrushSettings.DefaultStepThicknessMeters);
         }
 
         static float UnitsField(BrushSettings s, string label, string tooltip, float units, float placeholderMeters)
@@ -120,12 +129,14 @@ namespace CsgBrush.Editor
                     break;
                 case BrushShape.Stairs:
                     s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
+                    SupportUnderSteps(s);
                     break;
                 case BrushShape.CurvedStairs:
                     s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
                     s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
                     s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
                     s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
+                    SupportUnderSteps(s);
                     break;
                 case BrushShape.SpiralStairs:
                     s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
