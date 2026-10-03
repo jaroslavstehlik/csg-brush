@@ -51,7 +51,7 @@ To keep furniture or other objects a set distance from the wall, set **Offset** 
 
 ## Wall Anchor component reference
 
-![The Wall Anchor component in the Inspector.](images/wall-anchor-inspector.png)
+![The Wall Anchor component of a wardrobe, 0.1 m out from the inside face of its wall.](images/wall-anchor-inspector.png)
 
 | **Property** | **Description** |
 | :--- | :--- |

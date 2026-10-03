@@ -28,7 +28,7 @@ Some shapes are drawn differently:
 | **Door**, **Window** | Click once. See [Doors and windows](doors-and-windows.md). |
 | **Floor Plan** | Click the corners of the walls. See [Floor plans](floor-plans.md). |
 
-The settings a new brush starts with come from **Project Settings** > **Brushes**. After you create a brush, change them on the brush itself.
+A new brush starts with the settings shown in the **Brushes** overlay while the Create tool is active; the project keeps them between sessions. After you create a brush, change them on the brush itself. Its static flags come from **Project Settings** > **Brushes** > **New brush static flags**.
 
 You can also create a brush in these ways:
 
@@ -81,6 +81,8 @@ The **Brushes** overlay shows the current preset and grid step.
 ## Set a brush's pivot
 
 The pivot is where the brush's transform sits inside the brush. It's measured from the brush's left, bottom, back corner, where the back is the side away from the direction the brush faces (+Z).
+
+![The Brush Inspector of a 2 × 2 × 1 m box with its pivot at the bottom of its back face, and Grid snap set to Shape.](images/brush-inspector-pivot.png)
 
 **Pivot mode** sets how the **Pivot** values are measured:
 
@@ -139,6 +141,8 @@ To extrude:
 4. In **Faces**, choose whether the selection extrudes as one block or each face on its own.
 5. Click **Apply**.
 
+![A box in edit mode with its side face selected. The Brushes overlay shows Extrude turned on with a distance of 48 units, and the Scene view outlines the extruded box.](images/extrude-preview.png)
+
 Nothing changes until you click **Apply**. The faces stay selected, so **Apply** again extrudes them again. If the extrusion can't be made, the overlay says why instead of enabling **Apply**. You can also hold **Shift** when you start dragging the **Move** gizmo on selected faces: they extrude by the distance you drag. Drag into the brush to cut.
 
 An extrusion can run through other parts of the brush. Your own faces, edges, and vertices survive it, so coplanar faces you keep apart stay apart, and per-face materials stay where they were.
@@ -182,7 +186,7 @@ A trigger brush made of several pieces still raises one enter and one exit per c
 
 A module carries the game-specific values of a surface, such as ice, water, or fall damage. A module is a `BrushModule` component on the brush, or on a parent GameObject, where it applies to every brush below it. Its values go onto each collider piece of the brush, and changing them rebuilds only those pieces. A module can also make a brush a trigger, for example for water.
 
-**Project Settings** > **Brushes** lists the modules every new brush gets. The Quake controller's module, `QuakeBrushSurface`, is part of the project, not of this package.
+To give every new brush a module, turn the module on under **Modules** in the **Brushes** overlay while the Create tool is active. The Quake controller's module, `QuakeBrushSurface`, is part of the project, not of this package.
 
 ## Shape settings
 
