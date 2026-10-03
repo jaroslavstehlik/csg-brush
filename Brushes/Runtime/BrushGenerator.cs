@@ -21,6 +21,8 @@ namespace CsgBrush
             public string name;
             public BrushOperation operation;
             public BrushPolyhedron polyhedron;
+            /// <summary>The brush's material; null for the project's default.</summary>
+            public Material material;
         }
 
         /// <summary>The brushes made last time, in order. Derived: rebuilt from the generator's data.</summary>

@@ -17,7 +17,7 @@ grid, and colliders are made of convex pieces.
   library.
 - Grid snapping of position, size and rotation, in metres or Quake units.
 - Vertex, edge and face editing with move, rotate, scale and extrude.
-- Floor plans: an outline that generates walls, a floor and a ceiling.
+- Floor plans: networks of walls with automatic junctions, and rooms with their own floors, ceilings and materials.
 - Door and window brushes that cut openings of a set size.
 - Wall anchors that keep doors, windows and other objects attached to floor plan walls.
 - One convex collider per brush piece, with trigger, physics material and module support.

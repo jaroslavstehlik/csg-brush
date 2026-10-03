@@ -16,8 +16,9 @@ Edit mode has two selection modes:
 
 | **Mode** | **Shortcut** | **Selects** |
 | :--- | :--- | :--- |
-| **Vertex** | **1** | The corners of the outline. |
-| **Edge** | **2** | The walls. Each wall runs from one corner to the next. |
+| **Vertex** | **1** | The points. |
+| **Edge** | **2** | The walls. Each wall runs between two points. |
+| **Room** | **3** | The rooms. Click inside a room to select it; its floor and ceiling settings appear in the Inspector. |
 
 ![Edge mode with one wall selected. The Move gizmo sits in the middle of the wall.](images/floor-plan-edit-wall.png)
 
@@ -62,9 +63,9 @@ To delete, select points or walls and press **Delete** or **Backspace**, or righ
 
 | **What you delete** | **Result** |
 | :--- | :--- |
-| A point | The two neighbouring corners are joined by one wall. A room stays closed while it has at least three corners. |
-| A wall of a closed room | The room opens at that wall. |
-| A wall in the middle of an open line | The line splits into two Floor Plans with the same settings. |
+| A point between two walls | The two walls become one wall between the neighbouring points. |
+| A point where three or more walls meet | The point and all its walls are removed. |
+| A wall | The wall is removed, along with any point no other wall uses. A room opens where one of its walls is removed. |
 
 You can't delete the last wall of a Floor Plan. To remove the whole Floor Plan, leave edit mode and delete the GameObject.
 

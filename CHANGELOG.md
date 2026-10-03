@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Floor plans are wall networks: a point can join any number of walls, so interior walls are drawn in the same plan.
+  Walls that end on or cross another wall are joined there automatically, with no gaps (T and X junctions get a fill;
+  two walls meet in a mitre). Every enclosed area is a room with its own floor and ceiling.
+- Outside walls keep the plan's Side and Wall Thickness; walls between rooms and free-standing walls are centred on
+  their line with Interior Wall Thickness. Any wall can have its own thickness (edit mode, Wall mode, Inspector).
+- Room mode (3) in floor plan edit mode: select rooms to turn their floor and ceiling on or off and give them their own
+  materials. Plans also have wall, floor and ceiling materials. Room settings follow their room when walls move, and
+  both halves keep them when a room is split.
+- The draw tool joins new walls to points and walls it is clicked on (splitting a wall there) and ends the stroke;
+  Escape ends a stroke, Enter leaves the tool. Deleting a point joins its two walls; deleting walls never splits the
+  plan into several objects any more. Plans saved as an outline are converted on load.
+- Wall anchors: deleting a wall no longer moves its doors and windows onto a neighbouring wall (they stay where they
+  were, free), and undoing the deletion puts them back on their wall. Automatic placement never changes an anchor's
+  saved values; only moving it, Pick Wall and placing it do, and those are undoable.
+
 ## 0.3.0 (2026-10-01)
 
 - Convex collider meshes ask for pre-baked collision data, so player builds no longer warn about it and keep loading

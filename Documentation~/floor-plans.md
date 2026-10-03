@@ -1,6 +1,6 @@
 # Floor plans
 
-A **Floor Plan** is an outline on the floor that generates walls. Each segment of the outline becomes one wall brush. All walls share a thickness and height, and they meet at mitred corners.
+A **Floor Plan** is a network of walls drawn on the floor. Points are joined by walls, and a point can join any number of walls, so the outside walls and the interior walls belong to the same plan. Walls that end on or cross another wall are joined there without gaps. Every area the walls enclose is a room, with its own floor and ceiling.
 
 ![A closed floor plan with six walls. The outline is drawn in amber on the floor.](images/floor-plan-room.png)
 
@@ -19,7 +19,9 @@ To draw a floor plan:
 
     ![Drawing a floor plan. A dotted line and its length show the next wall.](images/floor-plan-draw.png)
 
-4. To close the room, click the first corner. To leave the outline open, press **Enter**, press **Esc**, or double-click.
+4. To close the room, click the first corner. Clicking an existing point or wall joins the new wall to it and ends the stroke.
+5. To add an interior wall, click a point on a wall (the wall is split there), then click where the interior wall ends, on another wall or anywhere on the floor.
+6. Press **Esc** or double-click to end a stroke, and **Enter** or **Esc** again to stop drawing.
 
 You can also create a Floor Plan from the menu: **GameObject** > **Brush** > **Floor Plan** creates one at the Scene view pivot.
 
@@ -27,7 +29,8 @@ While you draw:
 
 * Corners snap to the grid and to 45-degree angles from the previous corner.
 * Hold **Shift** to place a corner on any grid point.
-* Press **Backspace** to remove the last corner.
+* Points and walls under the pointer are highlighted with a larger white marker. Clicking them joins the new wall to the plan.
+* Press **Backspace** to remove the last wall of the stroke.
 
 To continue drawing an existing Floor Plan, select it and click **Draw** in the Inspector.
 
@@ -37,27 +40,40 @@ To continue drawing an existing Floor Plan, select it and click **Draw** in the 
 
 | **Property** | **Description** |
 | :--- | :--- |
-| **Closed** | Joins the last corner to the first, which makes a room. |
-| **Wall Thickness** | The thickness of every wall, in metres. This value doesn't snap to the grid. |
+| **Wall Thickness** | The thickness of outside walls, in metres. This value doesn't snap to the grid. |
+| **Interior Wall Thickness** | The thickness of walls between rooms and of free-standing walls, in metres. |
 | **Wall Height** | The height of every wall, in metres. |
-| **Side** | Where the walls stand relative to the drawn line:<br/>&#8226; **Outside**: The walls stand outside the outline, so the line is the inner face of the room. This is the default.<br/>&#8226; **Centered**: The walls are centred on the line.<br/>&#8226; **Inside**: The walls stand inside the outline. |
-| **Floor** | Generates a floor slab under a closed room. Enabled by default. |
-| **Floor Thickness** | The thickness of the floor, in metres, measured down from the bottom of the walls. |
-| **Ceiling** | Generates a ceiling slab on top of a closed room. Disabled by default. |
-| **Ceiling Thickness** | The thickness of the ceiling, in metres, measured up from the top of the walls. |
-| **Points** | The number of corners. This value is read-only. |
+| **Side** | Where outside walls stand relative to the drawn line. Interior and free-standing walls are always centred on it.<br/>&#8226; **Outside**: Outside walls stand outside the line, so the line is the inner face of the rooms. This is the default.<br/>&#8226; **Centered**: Outside walls are centred on the line.<br/>&#8226; **Inside**: Outside walls stand inside the line. |
+| **Wall Material** | The material of every wall. When empty, walls use the project's default material. |
+| **Floor** | Rooms get a floor slab unless a room is set otherwise. Enabled by default. |
+| **Floor Thickness** | The thickness of the floors, in metres, measured down from the bottom of the walls. |
+| **Floor Material** | The material of floors without one of their own. |
+| **Ceiling** | Rooms get a ceiling slab unless a room is set otherwise. Disabled by default. |
+| **Ceiling Thickness** | The thickness of the ceilings, in metres, measured up from the top of the walls. |
+| **Ceiling Material** | The material of ceilings without one of their own. |
+| **Plan** | The number of points, walls and rooms. This value is read-only. |
 | **Edit** | Enters [floor plan edit mode](floor-plan-edit-mode.md). |
-| **Draw** | Continues drawing the outline from its last corner. |
+| **Draw** | Draws more walls. |
+
+A single wall can have its own thickness: in edit mode, select it in Wall mode and set **Thickness** in the Inspector. **0** uses the plan's outside or interior thickness.
 
 The walls, floor, and ceiling take the layer, tag, and static flags of the Floor Plan GameObject.
 
-## Floor and ceiling
+## Floors and ceilings
 
-A closed Floor Plan can generate a floor and a ceiling. Each one is a slab that covers the room and the walls around it, so the room is sealed whatever the **Side** setting is. The slabs follow the outline, including concave shapes such as an L-shaped room, and update when you edit the Floor Plan.
+Every room gets a floor and a ceiling slab, according to the plan's **Floor** and **Ceiling** settings. A room's slabs reach under its outside walls and to the middle of its interior walls, so the rooms are sealed whatever the **Side** setting is. The slabs follow the room's shape, including concave shapes such as an L-shaped room, and update when you edit the Floor Plan.
+
+To give a room its own floor, ceiling or materials:
+
+1. Select the Floor Plan and click **Edit** in the Inspector.
+2. Press **3** for Room mode, and click the room. Shift-click to select more rooms.
+3. In the Inspector, under **Selected rooms**, set **Floor**, **Floor material**, **Ceiling** and **Ceiling material**.
+
+**Use Plan Defaults** returns the selected rooms to the plan's settings. A room keeps its settings while you move walls, and when you split it with a new wall, both halves keep them.
 
 ![An L-shaped floor plan with a ceiling, a door, and a window.](images/floor-plan-floor-ceiling.png)
 
-An open Floor Plan has no inside, so it doesn't generate a floor or a ceiling.
+Walls that don't enclose anything, such as a single free-standing wall, have no room and so no floor or ceiling.
 
 > [!NOTE]
 > A ceiling hides the room from above in the Scene view. To work inside the room, disable **Ceiling** while you edit, or look in from the side.

@@ -86,7 +86,7 @@ namespace CsgBrush.Tests
             BrushGenerators.Update(plan); BrushApi.ForceUpdate(); Physics.SyncTransforms();
             Assert.IsTrue(Solid(new Vector3(2f, 1.5f, 0.4f)), "inside: the wall stands in the room");
             Assert.IsFalse(Solid(new Vector3(2f, 1.5f, -0.05f)), "and nothing outside the line");
-            plan.points.RemoveAt(3); plan.closed = false; // an open line of two walls
+            plan.RemovePointAt(3); // the point and its two walls go: an open line of two walls
             BrushGenerators.Update(plan);
             Assert.AreEqual(2, plan.generated.Count, "an open outline: one wall per segment");
             Assert.AreEqual(2, BrushGenerators.Container(plan, false).childCount, "the extra wall is gone");
@@ -118,7 +118,7 @@ namespace CsgBrush.Tests
         {
             var plan = Room(FourByThree);
             FloorPlanEditState.ClearSelection();
-            var sel = FloorPlanEditState.Sel(plan); var screen = Screen(plan); int walls = FloorPlanEditState.Segments(plan);
+            var sel = FloorPlanEditState.Sel(plan); var screen = Screen(plan); var walls = FloorPlanEditState.WallEnds(plan);
             var aroundFirstWall = Rect.MinMaxRect(-50f, -50f, 450f, 50f); // points 0 and 1
             FloorPlanEditState.SelectInRect(sel, screen, walls, aroundFirstWall, BrushEditMode.Vertex, true, false);
             CollectionAssert.AreEquivalent(new[] { 0, 1 }, sel.vertices);
@@ -187,49 +187,43 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void DeletingSelectedPointsKeepsAtLeastAWall()
+        public void DeletingAPointJoinsItsTwoWallsAndKeepsAtLeastOne()
         {
             var plan = Room(FourByThree);
             Selection.activeGameObject = plan.gameObject;
             FloorPlanEditState.ClearSelection();
             FloorPlanEditState.Sel(plan).vertices.Add(3);
             FloorPlanEditState.DeleteSelectedPoints();
-            Assert.AreEqual(3, plan.points.Count); Assert.IsTrue(plan.closed, "a triangle is still a room");
+            Assert.AreEqual(3, plan.points.Count); Assert.AreEqual(3, plan.walls.Count, "its two walls became one");
+            Assert.AreEqual(1, FloorPlanEditState.RoomsOf(plan).Count, "a triangle is still a room");
             FloorPlanEditState.Sel(plan).vertices.UnionWith(new[] { 0, 1, 2 });
             FloorPlanEditState.DeleteSelectedPoints();
-            Assert.AreEqual(3, plan.points.Count, "not down to one point");
+            Assert.AreEqual(3, plan.points.Count, "not every wall");
             FloorPlanEditState.Sel(plan).vertices.Clear(); FloorPlanEditState.Sel(plan).vertices.Add(2);
             FloorPlanEditState.DeleteSelectedPoints();
-            Assert.AreEqual(2, plan.points.Count); Assert.IsFalse(plan.closed, "two points: one open wall");
+            Assert.AreEqual(2, plan.points.Count); Assert.AreEqual(1, plan.walls.Count, "the walls it joined already meet: one wall");
+            Assert.AreEqual(0, FloorPlanEditState.RoomsOf(plan).Count);
         }
 
         [Test]
-        public void DeletingAWallOpensTheRoomThereAndAMiddleWallSplitsThePlan()
+        public void DeletingAWallOpensTheRoomAndAMiddleWallLeavesTwoRuns()
         {
             var plan = Room(FourByThree);
-            var made = FloorPlanEditState.DeleteWalls(plan, new[] { 1 }); // the wall along x = 4
-            Assert.AreEqual(0, made.Count);
-            Assert.IsFalse(plan.closed, "open where the wall was");
-            CollectionAssert.AreEqual(new[] { FourByThree[2], FourByThree[3], FourByThree[0], FourByThree[1] }, plan.points, "from one end of the gap round to the other");
+            Assert.IsTrue(FloorPlanEditState.DeleteWalls(plan, new[] { 1 })); // the wall along x = 4
+            Assert.AreEqual(0, FloorPlanEditState.RoomsOf(plan).Count, "open where the wall was");
+            Assert.AreEqual(4, plan.points.Count, "every point still has a wall");
             BrushGenerators.Update(plan); BrushApi.ForceUpdate(); Physics.SyncTransforms();
-            Assert.AreEqual(3, plan.generated.Count);
+            Assert.AreEqual(3, plan.generated.Count, "three walls, no floor");
             Assert.IsFalse(Solid(new Vector3(4.1f, 1.5f, 1.5f)), "the wall is gone");
 
-            // an open line of three walls, the middle one removed: two plans of one wall each
-            Undo.IncrementCurrentGroup(); // its own undo step, as a separate key press is
-            made = FloorPlanEditState.DeleteWalls(plan, new[] { 1 });
-            Assert.AreEqual(1, made.Count, "a second plan for the far piece");
-            CollectionAssert.AreEqual(new[] { FourByThree[2], FourByThree[3] }, plan.points);
-            CollectionAssert.AreEqual(new[] { FourByThree[0], FourByThree[1] }, made[0].points);
-            Assert.AreEqual(plan.wallThickness, made[0].wallThickness); Assert.AreEqual(plan.transform.parent, made[0].transform.parent);
-            BrushGenerators.Update(made[0]);
-            Assert.AreEqual(1, made[0].generated.Count, "with its own wall");
+            Undo.IncrementCurrentGroup();
+            Assert.IsTrue(FloorPlanEditState.DeleteWalls(plan, new[] { 2 })); // the middle of the chain p2-p3-p0-p1: two runs, one plan
+            Assert.AreEqual(2, plan.walls.Count); Assert.AreEqual(4, plan.points.Count);
+            BrushGenerators.Update(plan);
+            Assert.AreEqual(2, plan.generated.Count, "both runs are walls of the same plan");
             Undo.PerformUndo();
-            Assert.IsTrue(made[0] == null, "undo removes the new plan");
-            Assert.AreEqual(4, plan.points.Count, "and gives the line back"); Assert.IsFalse(plan.closed);
-
-            Assert.AreEqual(0, FloorPlanEditState.DeleteWalls(plan, new[] { 0, 1, 2 }).Count);
-            Assert.AreEqual(4, plan.points.Count, "not every wall");
+            Assert.AreEqual(3, plan.walls.Count, "undo gives the wall back");
+            Assert.IsFalse(FloorPlanEditState.DeleteWalls(plan, new[] { 0, 1, 2 }), "not every wall");
         }
 
         // ------------------------------------------------------------------ doors and windows
@@ -281,11 +275,14 @@ namespace CsgBrush.Tests
             var door = WallAnchors.Place(plan, BrushShape.Door, 0, 3f);
             Rebuild(plan);
             var ids = new List<int>(plan.pointIds);
-            plan.InsertPoint(1, new Vector3(2f, 0f, 0f)); // a + on the door's wall
+            int added = plan.SplitWall(0, new Vector3(2f, 0f, 0f)); // a + on the door's wall
             Rebuild(plan);
-            Assert.AreEqual(ids[0], plan.pointIds[0]); Assert.AreEqual(ids[1], plan.pointIds[2], "the other points keep their ids");
+            CollectionAssert.AreEqual(ids, plan.pointIds.GetRange(0, ids.Count), "the other points keep their ids");
             Assert.That(door.transform.position.x, Is.EqualTo(3f).Within(1e-4f), "the door stays where it was");
-            Assert.AreEqual(plan.pointIds[1], Anchor(door).startId, "on the piece it is on"); Assert.That(Anchor(door).distance, Is.EqualTo(1f).Within(1e-4f));
+            var pieces = new List<FloorPlan.Wall>(); plan.Walls(pieces);
+            Assert.IsTrue(WallAnchors.Resolve(Anchor(door), pieces, out var piece, out float along));
+            Assert.AreEqual(added, piece.startId, "on the piece it is on"); Assert.That(along, Is.EqualTo(1f).Within(1e-4f));
+            Assert.AreEqual(ids[0], Anchor(door).startId, "its saved wall is untouched, so undo needs nothing of it");
 
             Undo.IncrementCurrentGroup();
             FloorPlanEditState.DeleteWalls(plan, new[] { 1 }); // the door's wall
@@ -437,7 +434,7 @@ namespace CsgBrush.Tests
 
         // ------------------------------------------------------------------ floor and ceiling
 
-        static Brush Generated(FloorPlan plan, string name) => plan.generated.Find(b => b != null && b.name == name);
+        static Brush Generated(FloorPlan plan, string name) => plan.generated.Find(b => b != null && b.name.StartsWith(name));
 
         [Test]
         public void AClosedRoomGetsAFloorUnderItsWallsAndACeilingOnTop()
@@ -459,7 +456,7 @@ namespace CsgBrush.Tests
             BrushGenerators.Update(plan); BrushApi.ForceUpdate(); Physics.SyncTransforms();
             Assert.IsTrue(Solid(new Vector3(5.5f, -0.1f, 2.5f)));
 
-            plan.closed = false; // an open line has no inside
+            plan.walls.RemoveAt(3); // an open line has no inside
             BrushGenerators.Update(plan);
             Assert.IsNull(Generated(plan, "Floor")); Assert.IsNull(Generated(plan, "Ceiling"));
         }
@@ -473,6 +470,229 @@ namespace CsgBrush.Tests
             Assert.IsTrue(Solid(new Vector3(1.5f, -0.1f, 5f)), "in the arm");
             Assert.IsTrue(Solid(new Vector3(5f, -0.1f, 1f)));
             Assert.IsFalse(Solid(new Vector3(5f, -0.1f, 5.5f)), "not in the missing corner");
+        }
+
+        // ------------------------------------------------------------------ wall networks
+
+        static List<Brush> GeneratedNamed(FloorPlan plan, string prefix) => plan.generated.FindAll(b => b != null && b.name.StartsWith(prefix));
+
+        static void AssertSound(FloorPlan plan)
+        {
+            foreach (var b in plan.generated) { Assert.IsNotNull(b); Assert.IsTrue(b.polyhedron.IsSound(out var why), b.name + ": " + why); }
+        }
+
+        [Test]
+        public void AnInteriorWallJoinsTheOutsideWallsWithoutGaps()
+        {
+            var plan = Room(FourByThree);
+            // a wall across the room from x = 2 on the front wall to x = 2 on the back wall, drawn by splitting both
+            int front = plan.SplitWall(0, new Vector3(2f, 0f, 0f));
+            int back = plan.SplitWall(3, new Vector3(2f, 0f, 3f)); // wall 3 is the back wall (4,3) to (0,3) after the first split
+            plan.AddWall(front, back);
+            Rebuild(plan);
+            AssertSound(plan);
+            Assert.AreEqual(2, FloorPlanEditState.RoomsOf(plan).Count, "two rooms");
+            Assert.AreEqual(2, GeneratedNamed(plan, "Floor").Count, "a floor each");
+            Assert.IsTrue(Solid(new Vector3(2.04f, 1.5f, 1.5f)), "the interior wall, centred on its line");
+            Assert.IsFalse(Solid(new Vector3(2.08f, 1.5f, 1.5f)), "0.1 m thick by default");
+            Assert.IsTrue(Solid(new Vector3(2.04f, 1.5f, 0.02f)), "it reaches the outside wall");
+            Assert.IsTrue(Solid(new Vector3(2.04f, 1.5f, -0.1f)), "and the outside wall runs on behind it");
+            Assert.IsTrue(Solid(new Vector3(2.04f, 1.5f, 2.98f)), "the other end too");
+            var walls = new List<FloorPlan.Wall>(); plan.Walls(walls);
+            Assert.IsFalse(walls.Find(w => w.startId == front && w.endId == back).exterior, "a wall between rooms is an interior wall");
+            Assert.IsTrue(walls.Find(w => w.endId == front).exterior, "the outside wall it splits is still an outside wall");
+        }
+
+        [Test]
+        public void WallsEndingOnOrCrossingOtherWallsJoinByThemselves()
+        {
+            var plan = Room(FourByThree);
+            // drawn loose: its ends lie on the outside walls but are points of their own
+            int a = plan.AddPoint(new Vector3(2f, 0f, 0f)), b = plan.AddPoint(new Vector3(2f, 0f, 3f));
+            plan.AddWall(a, b);
+            // and one crossing it, from wall to wall, with no point where they cross
+            int c = plan.AddPoint(new Vector3(0f, 0f, 1.5f)), d = plan.AddPoint(new Vector3(4f, 0f, 1.5f));
+            plan.AddWall(c, d);
+            Rebuild(plan);
+            AssertSound(plan);
+            Assert.AreEqual(4, FloorPlanEditState.RoomsOf(plan).Count, "four rooms");
+            Assert.IsTrue(Solid(new Vector3(2.04f, 1.5f, 1.54f)), "the crossing is solid");
+            Assert.IsTrue(Solid(new Vector3(2.04f, 1.5f, 0.02f)), "the joints with the outside walls are closed");
+            Assert.IsTrue(Solid(new Vector3(0.02f, 1.5f, 1.54f)));
+            Assert.IsFalse(Solid(new Vector3(1f, 1.5f, 0.75f)), "the rooms stay empty");
+        }
+
+        [Test]
+        public void AWallCanHaveItsOwnThickness()
+        {
+            var plan = Room(FourByThree);
+            int front = plan.SplitWall(0, new Vector3(2f, 0f, 0f));
+            int back = plan.SplitWall(3, new Vector3(2f, 0f, 3f));
+            int inner = plan.AddWall(front, back);
+            var link = plan.walls[inner]; link.thickness = 0.3f; plan.walls[inner] = link;
+            plan.interiorWallThickness = 0.05f; plan.wallThickness = 0.25f;
+            Rebuild(plan);
+            Assert.IsTrue(Solid(new Vector3(2.13f, 1.5f, 1.5f)), "0.3 m: its own thickness");
+            Assert.IsTrue(Solid(new Vector3(2f, 1.5f, -0.23f)), "outside walls take the plan's outside thickness");
+        }
+
+        [Test]
+        public void RoomsKeepTheirMaterialsWhileWallsMoveAndPassThemOnWhenSplit()
+        {
+            var plan = Room(FourByThree);
+            var wood = new Material(Shader.Find("Hidden/InternalErrorShader")) { name = "wood" };
+            var rooms = new List<FloorPlan.Room>(); plan.Rooms(rooms);
+            var settings = plan.SettingsOf(rooms[0]);
+            settings.floorMaterial = wood; settings.ceiling = true;
+            Rebuild(plan);
+            Assert.AreEqual(wood, Generated(plan, "Floor").material);
+            Assert.IsNotNull(Generated(plan, "Ceiling"), "this room has a ceiling, the plan's default has none");
+
+            plan.points[2] = new Vector3(5f, 0f, 3.5f); // a wall moves: the room is still the room
+            Rebuild(plan);
+            Assert.AreEqual(wood, Generated(plan, "Floor").material);
+
+            int front = plan.SplitWall(0, new Vector3(2f, 0f, 0f));
+            int back = plan.SplitWall(3, new Vector3(2f, 0f, 3f));
+            plan.AddWall(front, back);
+            Rebuild(plan);
+            var floors = GeneratedNamed(plan, "Floor");
+            Assert.AreEqual(2, floors.Count);
+            foreach (var f in floors) Assert.AreEqual(wood, f.material, "both halves keep the room's floor");
+            Object.DestroyImmediate(wood);
+        }
+
+        [Test]
+        public void AnOutlineFromBeforeWallNetworksBecomesWalls()
+        {
+            var go = new GameObject("Old plan"); var plan = go.AddComponent<FloorPlan>();
+            plan.points = new List<Vector3>(FourByThree); plan.closed = true; plan.walls.Clear();
+            plan.EnsureGraph();
+            Assert.AreEqual(4, plan.walls.Count, "one wall per side, closing the loop");
+            Assert.IsFalse(plan.closed, "converted once");
+            Assert.AreEqual(plan.pointIds[3], plan.walls[3].start); Assert.AreEqual(plan.pointIds[0], plan.walls[3].end);
+        }
+
+        [Test]
+        public void AnyWallNetworkBuildsSoundBrushes()
+        {
+            // students: points anywhere on a small grid, walls between any of them, repeated, crossing, overlapping, zero length
+            var random = new System.Random(1234);
+            for (int round = 0; round < 40; round++)
+            {
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                var go = new GameObject("Fuzz"); var plan = go.AddComponent<FloorPlan>();
+                var ids = new List<int>();
+                int count = 3 + random.Next(8);
+                for (int i = 0; i < count; i++) ids.Add(plan.AddPoint(new Vector3(random.Next(6), 0f, random.Next(6))));
+                int walls = 2 + random.Next(12);
+                for (int i = 0; i < walls; i++)
+                {
+                    int w = plan.AddWall(ids[random.Next(ids.Count)], ids[random.Next(ids.Count)]);
+                    if (w >= 0 && random.Next(4) == 0) { var l = plan.walls[w]; l.thickness = 0.05f + (float)random.NextDouble() * 0.5f; plan.walls[w] = l; }
+                }
+                plan.ceiling = random.Next(2) == 0;
+                plan.side = (FloorPlan.Side)random.Next(3);
+                Assert.DoesNotThrow(() => BrushGenerators.Update(plan, true), "round " + round);
+                foreach (var b in plan.generated) Assert.IsTrue(b.polyhedron.IsSound(out var why), "round " + round + " " + b.name + ": " + why);
+                Assert.DoesNotThrow(() => BrushApi.ForceUpdate(), "round " + round);
+            }
+        }
+
+        [Test]
+        public void ARoomsSettingsStayWithThatRoomOnly()
+        {
+            var plan = Room(FourByThree);
+            int front = plan.SplitWall(0, new Vector3(2f, 0f, 0f));
+            int back = plan.SplitWall(3, new Vector3(2f, 0f, 3f));
+            plan.AddWall(front, back);
+            Rebuild(plan);
+            var rooms = new List<FloorPlan.Room>(); plan.Rooms(rooms);
+            Assert.AreEqual(2, rooms.Count);
+            plan.SettingsOf(rooms[0]).ceiling = true; // two rooms share the dividing wall's two points
+            plan.Rooms(rooms);
+            Assert.IsTrue(rooms[0].ceiling); Assert.IsFalse(rooms[1].ceiling, "the room next door keeps the plan's default");
+            Rebuild(plan);
+            Assert.AreEqual(1, GeneratedNamed(plan, "Ceiling").Count);
+        }
+
+        [Test]
+        public void UndoingAWallsDeletionPutsItsDoorBack()
+        {
+            var plan = Room(FourByThree);
+            int front = plan.SplitWall(0, new Vector3(2f, 0f, 0f));
+            int back = plan.SplitWall(3, new Vector3(2f, 0f, 3f));
+            int inner = plan.AddWall(front, back);
+            Rebuild(plan);
+            Undo.IncrementCurrentGroup();
+            var door = WallAnchors.Place(plan, BrushShape.Door, inner, 1.5f);
+            Rebuild(plan);
+            var placed = door.transform.position;
+            Assert.IsFalse(Solid(new Vector3(2f, 1f, 1.5f)), "the doorway is open");
+            Assert.IsTrue(Solid(new Vector3(2f, 2.6f, 1.5f)), "the wall above it stands");
+            Undo.IncrementCurrentGroup();
+            Assert.IsTrue(FloorPlanEditState.DeleteWalls(plan, new[] { inner }));
+            Rebuild(plan);
+            Assert.IsTrue(door != null, "the door is still there");
+            Assert.IsFalse(Anchor(door).onWall);
+            Undo.PerformUndo();
+            BrushGenerators.Flush(); BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.IsTrue(door != null, "undo keeps the door");
+            Assert.AreEqual(2, FloorPlanEditState.RoomsOf(plan).Count, "two rooms again");
+            Assert.IsTrue(Anchor(door).onWall, "back on its wall");
+            Assert.That(Vector3.Distance(placed, door.transform.position), Is.LessThan(1e-4f), "where it was");
+            Assert.IsFalse(Solid(new Vector3(2f, 1f, 1.5f)), "the doorway is open again");
+            Assert.IsTrue(Solid(new Vector3(2f, 2.6f, 1.5f)), "in the wall that came back");
+        }
+
+        [Test]
+        public void UndoingTheDeletionOfALooselyJoinedWallPutsItsDoorBack()
+        {
+            var plan = Room(FourByThree);
+            // drawn loose: its ends only touch the outside walls, as points of their own
+            int a = plan.AddPoint(new Vector3(2f, 0f, 0f)), b = plan.AddPoint(new Vector3(2f, 0f, 3f));
+            int inner = plan.AddWall(a, b);
+            Rebuild(plan);
+            Undo.IncrementCurrentGroup();
+            var door = WallAnchors.Place(plan, BrushShape.Door, inner, 1.5f);
+            Rebuild(plan);
+            var placed = door.transform.position; var ids = (Anchor(door).startId, Anchor(door).endId);
+            Undo.IncrementCurrentGroup();
+            Assert.IsTrue(FloorPlanEditState.DeleteWalls(plan, new[] { inner }));
+            Rebuild(plan);
+            Assert.IsTrue(door != null);
+            Assert.IsFalse(Anchor(door).onWall, "its wall is gone: free, not moved onto another wall");
+            Assert.That(Vector3.Distance(placed, door.transform.position), Is.LessThan(1e-4f), "and left where it was");
+            Undo.PerformUndo();
+            BrushGenerators.Flush(); BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.AreEqual(ids, (Anchor(door).startId, Anchor(door).endId), "still anchored to the same wall");
+            Assert.IsTrue(Anchor(door).onWall, "back on its wall");
+            Assert.That(Vector3.Distance(placed, door.transform.position), Is.LessThan(1e-4f), "where it was");
+            Assert.IsFalse(Solid(new Vector3(2f, 1f, 1.5f)), "the doorway is open again");
+        }
+
+        [Test]
+        public void UndoingTheDeletionOfAHalfJoinedWallPutsItsDoorBack()
+        {
+            var plan = Room(FourByThree);
+            // one end clicked onto the front wall (a shared point), the other only touching the back wall
+            int a = plan.SplitWall(0, new Vector3(2f, 0f, 0f)), b = plan.AddPoint(new Vector3(2f, 0f, 3f));
+            int inner = plan.AddWall(a, b);
+            Rebuild(plan);
+            Undo.IncrementCurrentGroup();
+            var door = WallAnchors.Place(plan, BrushShape.Door, inner, 1.5f);
+            Rebuild(plan);
+            var placed = door.transform.position; var ids = (Anchor(door).startId, Anchor(door).endId);
+            Undo.IncrementCurrentGroup();
+            Assert.IsTrue(FloorPlanEditState.DeleteWalls(plan, new[] { inner }));
+            Rebuild(plan);
+            Assert.IsFalse(Anchor(door).onWall, "its wall is gone: free, not moved onto a wall of its first point");
+            Assert.That(Vector3.Distance(placed, door.transform.position), Is.LessThan(1e-4f), "and left where it was");
+            Undo.PerformUndo();
+            BrushGenerators.Flush(); BrushApi.ForceUpdate(); Physics.SyncTransforms();
+            Assert.AreEqual(ids, (Anchor(door).startId, Anchor(door).endId), "still anchored to the same wall");
+            Assert.IsTrue(Anchor(door).onWall, "back on its wall");
+            Assert.That(Vector3.Distance(placed, door.transform.position), Is.LessThan(1e-4f), "where it was");
         }
     }
 }

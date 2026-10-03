@@ -106,6 +106,7 @@ namespace CsgBrush.Editor
             if (brush.generatedBy != g) { brush.generatedBy = g; changed = true; }
             if (brush.shape != BrushShape.Custom) { brush.shape = BrushShape.Custom; changed = true; }
             if (brush.operation != spec.operation) { brush.operation = spec.operation; changed = true; }
+            if (brush.material != spec.material) { brush.material = spec.material; changed = true; }
             if (brush.polyhedron == null || !brush.polyhedron.IsValid || brush.polyhedron.ContentHash() != spec.polyhedron.ContentHash()) { brush.polyhedron = spec.polyhedron; changed = true; }
             if (changed) BrushSync.Ensure(brush);
         }

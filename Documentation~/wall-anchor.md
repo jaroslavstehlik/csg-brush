@@ -36,7 +36,7 @@ You can also move an anchored object with the **Move** tool. It slides along its
 | :--- | :--- |
 | The wall moves or turns | The object moves with the wall and keeps its pose relative to the wall face. |
 | The wall gets thicker, or the Floor Plan **Side** changes | The object stays against the wall face. A door or window stays cut all the way through. |
-| A corner is added in the wall | The object stays where it was, on the part of the wall it's on. |
+| A corner is added in the wall, or another wall joins it | The object stays where it was, on the part of the wall it's on. |
 | The wall is deleted | The object stays where it was and is no longer attached. |
 
 ## Wall Anchor component reference

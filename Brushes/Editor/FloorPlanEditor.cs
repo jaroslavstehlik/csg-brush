@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.EditorTools;
 using UnityEngine;
@@ -53,14 +54,46 @@ namespace CsgBrush.Editor
 
         public static void DrawOutline(FloorPlan plan)
         {
-            int n = plan.points.Count;
-            if (n < 2) return;
-            var pts = new Vector3[plan.closed && n > 2 ? n + 1 : n];
-            for (int i = 0; i < n; i++) pts[i] = World(plan, plan.points[i]);
-            if (pts.Length > n) pts[n] = pts[0];
+            plan.EnsureGraph();
             Handles.color = Line;
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
-            Handles.DrawAAPolyLine(3f, pts);
+            for (int w = 0; w < plan.walls.Count; w++)
+            {
+                plan.WallPoints(w, out int a, out int b);
+                Handles.DrawAAPolyLine(3f, World(plan, plan.points[a]), World(plan, plan.points[b]));
+            }
+        }
+
+        /// <summary>The point nearest the mouse within 12 pixels, or -1.</summary>
+        public static int PointUnderMouse(FloorPlan plan, Vector2 mouse)
+        {
+            int best = -1; float bestD = 12f;
+            for (int i = 0; i < plan.points.Count; i++) { float d = (HandleUtility.WorldToGUIPoint(World(plan, plan.points[i])) - mouse).magnitude; if (d < bestD) { bestD = d; best = i; } }
+            return best;
+        }
+
+        /// <summary>The wall nearest the mouse within 10 pixels, or -1, with the spot on it (local, on the grid along the wall when snapping).</summary>
+        public static int WallUnderMouse(FloorPlan plan, Vector2 mouse, out Vector3 local)
+        {
+            local = default;
+            int best = -1; float bestD = 10f;
+            for (int w = 0; w < plan.walls.Count; w++)
+            {
+                plan.WallPoints(w, out int a, out int b);
+                float d = HandleUtility.DistancePointLine(mouse, HandleUtility.WorldToGUIPoint(World(plan, plan.points[a])), HandleUtility.WorldToGUIPoint(World(plan, plan.points[b])));
+                if (d < bestD) { bestD = d; best = w; }
+            }
+            if (best < 0 || !MouseOnFloor(plan, mouse, out var world)) return -1;
+            plan.WallPoints(best, out int ia, out int ib);
+            Vector3 pa = plan.points[ia], pb = plan.points[ib], ab = pb - pa;
+            float len = ab.magnitude;
+            var m = plan.transform.InverseTransformPoint(world); m.y = 0f;
+            float t = Mathf.Clamp(Vector3.Dot(m - pa, ab) / len, 0f, len);
+            float g = Grid;
+            if (g > 0f) t = Mathf.Round(t / g) * g;
+            t = Mathf.Clamp(t, 0f, len);
+            local = pa + ab / len * t;
+            return best;
         }
     }
 
@@ -75,7 +108,8 @@ namespace CsgBrush.Editor
         {
             var plan = (FloorPlan)target;
             DrawDefaultInspector();
-            EditorGUILayout.LabelField("Points", plan.points.Count.ToString());
+            plan.EnsureGraph();
+            EditorGUILayout.LabelField("Plan", plan.points.Count + " points, " + plan.walls.Count + " walls, " + FloorPlanEditState.RoomsOf(plan).Count + " rooms");
             EditorGUILayout.BeginHorizontal();
             bool editing = FloorPlanEditContext.IsActive;
             if (GUILayout.Toggle(editing, new GUIContent("Edit", "Move, Rotate and Scale act on the selected points or walls (1, 2)"), EditorStyles.miniButton) != editing)
@@ -89,6 +123,70 @@ namespace CsgBrush.Editor
                 else { FloorPlanEditContext.Exit(); ToolManager.SetActiveTool<FloorPlanDrawTool>(); }
             }
             EditorGUILayout.EndHorizontal();
+            if (editing && targets.Length == 1) DrawSelection(plan);
+        }
+
+        /// <summary>Edit mode: the thickness of the selected walls, or the floor and ceiling of the selected rooms.</summary>
+        static void DrawSelection(FloorPlan plan)
+        {
+            var sel = FloorPlanEditState.Sel(plan);
+            if (FloorPlanEditState.Mode == BrushEditMode.Edge && sel.edges.Count > 0)
+            {
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("Selected walls (" + sel.edges.Count + ")", EditorStyles.boldLabel);
+                float first = -1f; bool mixed = false;
+                foreach (var w in sel.edges) { float t = plan.walls[w].thickness; if (first < 0f) first = t; else if (!Mathf.Approximately(first, t)) mixed = true; }
+                EditorGUI.showMixedValue = mixed;
+                EditorGUI.BeginChangeCheck();
+                float value = EditorGUILayout.FloatField(new GUIContent("Thickness", "Metres; 0 uses the plan's outside or interior thickness."), first);
+                EditorGUI.showMixedValue = false;
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(plan, "Wall thickness");
+                    foreach (var w in sel.edges) { var link = plan.walls[w]; link.thickness = Mathf.Max(0f, value); plan.walls[w] = link; }
+                    BrushGenerators.MarkDirty(plan);
+                }
+            }
+            else if (FloorPlanEditState.Mode == BrushEditMode.Face && sel.rooms.Count > 0)
+            {
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("Selected rooms (" + sel.rooms.Count + ")", EditorStyles.boldLabel);
+                var rooms = new List<FloorPlan.Room>(FloorPlanEditState.RoomsOf(plan));
+                var chosen = new List<FloorPlan.Room>(); foreach (var r in sel.rooms) if (r < rooms.Count) chosen.Add(rooms[r]);
+                if (chosen.Count == 0) return;
+                var shown = chosen[0];
+                bool Mixed<T>(System.Func<FloorPlan.Room, T> get) { foreach (var c in chosen) if (!Equals(get(c), get(shown))) return true; return false; }
+                EditorGUI.BeginChangeCheck();
+                EditorGUI.showMixedValue = Mixed(r => r.floor);
+                bool floor = EditorGUILayout.Toggle(new GUIContent("Floor", "A floor slab under the room."), shown.floor);
+                EditorGUI.showMixedValue = Mixed(r => r.floorMaterial);
+                var floorMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Floor material", "Empty uses the project's default material."), shown.floorMaterial, typeof(Material), false);
+                EditorGUI.showMixedValue = Mixed(r => r.ceiling);
+                bool ceiling = EditorGUILayout.Toggle(new GUIContent("Ceiling", "A ceiling slab over the room."), shown.ceiling);
+                EditorGUI.showMixedValue = Mixed(r => r.ceilingMaterial);
+                var ceilingMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Ceiling material", "Empty uses the project's default material."), shown.ceilingMaterial, typeof(Material), false);
+                EditorGUI.showMixedValue = false;
+                if (EditorGUI.EndChangeCheck())
+                {
+                    Undo.RecordObject(plan, "Room settings");
+                    foreach (var room in chosen)
+                    {
+                        var s = plan.SettingsOf(room);
+                        if (floor != shown.floor) s.floor = floor;
+                        if (floorMaterial != shown.floorMaterial) s.floorMaterial = floorMaterial;
+                        if (ceiling != shown.ceiling) s.ceiling = ceiling;
+                        if (ceilingMaterial != shown.ceilingMaterial) s.ceilingMaterial = ceilingMaterial;
+                    }
+                    BrushGenerators.MarkDirty(plan);
+                }
+                if (GUILayout.Button(new GUIContent("Use Plan Defaults", "The selected rooms take the plan's floor and ceiling settings.")))
+                {
+                    Undo.RecordObject(plan, "Room settings");
+                    foreach (var room in chosen) if (room.settings >= 0 && room.settings < plan.rooms.Count) plan.rooms[room.settings] = null;
+                    plan.rooms.RemoveAll(r => r == null);
+                    BrushGenerators.MarkDirty(plan);
+                }
+            }
         }
 
         void OnSceneGUI()
@@ -100,15 +198,27 @@ namespace CsgBrush.Editor
     }
 
     /// <summary>
-    /// Draw walls: click on the floor to add a point, snapped to the grid and to 45 degree steps (Shift: any grid point).
-    /// Clicking the first point closes the room; Backspace removes the last point; Enter, Escape or a double click finishes.
+    /// Draw walls: click on the floor to add a point and a wall to it, snapped to the grid and to 45 degree steps (Shift: any
+    /// grid point). A click on a point or a wall joins the new wall to it (splitting the wall there); a stroke that joins
+    /// one ends, ready for the next. Backspace takes back the last wall; Escape or a double click ends the stroke, Enter or
+    /// a second Escape leaves the tool.
     /// </summary>
     [EditorTool("Draw Floor Plan", typeof(FloorPlan))]
     public sealed class FloorPlanDrawTool : EditorTool
     {
         public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get("FloorPlan"), "Draw Floor Plan");
 
-        Vector3 m_Hover; bool m_HoverValid;
+        enum Hover { None, Free, Point, Wall }
+        Hover m_Kind; Vector3 m_Hover; int m_HoverPoint = -1, m_HoverWall = -1;
+        /// <summary>The point the next wall starts from (id), or -1 between strokes.</summary>
+        int m_Last = -1;
+        readonly List<int> m_Stroke = new List<int>();
+
+        public override void OnActivated()
+        {
+            m_Last = -1; m_Stroke.Clear();
+            if (target is FloorPlan plan) { plan.EnsureGraph(); if (plan.walls.Count == 0 && plan.points.Count == 1) { m_Last = plan.pointIds[0]; m_Stroke.Add(m_Last); } }
+        }
 
         public override void OnToolGUI(EditorWindow window)
         {
@@ -117,53 +227,84 @@ namespace CsgBrush.Editor
             var e = Event.current;
             int id = GUIUtility.GetControlID(FocusType.Passive);
             if (e.type == EventType.Layout) HandleUtility.AddDefaultControl(id);
-            var pts = plan.points;
-            if (e.type == EventType.MouseMove || e.type == EventType.MouseDown || e.type == EventType.Repaint)
+            if (m_Last >= 0 && plan.PointIndex(m_Last) < 0) { m_Last = -1; m_Stroke.Clear(); } // undone
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDown || e.type == EventType.Repaint) FindHover(plan, e);
+            if (e.type == EventType.MouseMove) SceneView.RepaintAll();
+            if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && HandleUtility.nearestControl == id && m_Kind != Hover.None)
             {
-                m_HoverValid = FloorPlanTools.MouseOnFloor(plan, e.mousePosition, out var floor);
-                if (m_HoverValid)
-                {
-                    m_Hover = FloorPlanTools.SnapLocal(plan, floor);
-                    if (pts.Count > 0) m_Hover = FloorPlanTools.Constrain(pts[pts.Count - 1], m_Hover, e.shift);
-                }
-                if (e.type == EventType.MouseMove) SceneView.RepaintAll();
-            }
-            // the first point closes the room when the mouse is near it on screen, whatever the snapping would give
-            bool nearFirst = pts.Count > 2 && !plan.closed && (HandleUtility.WorldToGUIPoint(FloorPlanTools.World(plan, pts[0])) - e.mousePosition).sqrMagnitude < 12f * 12f;
-            if (nearFirst) { m_Hover = pts[0]; m_HoverValid = true; }
-            if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && HandleUtility.nearestControl == id && m_HoverValid)
-            {
-                if (e.clickCount == 2) { Finish(); e.Use(); return; }
-                Undo.RecordObject(plan, "Draw floor plan");
-                if (nearFirst) { plan.closed = true; BrushGenerators.MarkDirty(plan); e.Use(); Finish(); return; }
-                if (pts.Count == 0 || (pts[pts.Count - 1] - m_Hover).sqrMagnitude > 1e-8f) plan.AddPoint(m_Hover);
-                if (plan.closed) plan.closed = false; // drawing on continues the outline
-                BrushGenerators.MarkDirty(plan);
                 e.Use();
+                if (e.clickCount == 2) { EndStroke(); return; }
+                Undo.RecordObject(plan, "Draw floor plan");
+                int point; bool joined = m_Kind != Hover.Free;
+                if (m_Kind == Hover.Point) point = plan.pointIds[m_HoverPoint];
+                else if (m_Kind == Hover.Wall) point = plan.SplitWall(m_HoverWall, m_Hover);
+                else point = plan.AddPoint(m_Hover);
+                bool started = m_Last >= 0;
+                if (started && point != m_Last) plan.AddWall(m_Last, point);
+                BrushGenerators.MarkDirty(plan);
+                if (joined && started && point != m_Last) EndStroke(); // joined the plan: this stroke is done
+                else { m_Last = point; m_Stroke.Add(point); }
             }
             if (e.type == EventType.KeyDown)
             {
-                if (e.keyCode == KeyCode.Backspace && pts.Count > 0) { Undo.RecordObject(plan, "Remove floor plan point"); plan.RemovePointAt(pts.Count - 1); BrushGenerators.MarkDirty(plan); e.Use(); }
-                else if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter || e.keyCode == KeyCode.Escape) { Finish(); e.Use(); }
-            }
-            if (e.type == EventType.Repaint)
-            {
-                FloorPlanTools.DrawOutline(plan);
-                if (m_HoverValid)
+                if (e.keyCode == KeyCode.Backspace && m_Stroke.Count >= 2)
                 {
-                    var hover = FloorPlanTools.World(plan, m_Hover);
-                    Handles.color = nearFirst ? Color.white : FloorPlanTools.Line;
-                    Handles.DotHandleCap(-1, hover, Quaternion.identity, HandleUtility.GetHandleSize(hover) * (nearFirst ? 0.1f : 0.06f), EventType.Repaint);
-                    if (pts.Count > 0)
-                    {
-                        var last = FloorPlanTools.World(plan, pts[pts.Count - 1]);
-                        Handles.color = FloorPlanTools.Preview;
-                        Handles.DrawDottedLine(last, hover, 4f);
-                        float length = new Vector2(m_Hover.x - pts[pts.Count - 1].x, m_Hover.z - pts[pts.Count - 1].z).magnitude;
-                        Handles.Label((last + hover) * 0.5f, BrushSettings.instance.FormatUnits(length), EditorStyles.whiteMiniLabel);
-                    }
+                    Undo.RecordObject(plan, "Remove floor plan wall");
+                    int last = m_Stroke[m_Stroke.Count - 1], prev = m_Stroke[m_Stroke.Count - 2];
+                    plan.walls.RemoveAll(w => (w.start == prev && w.end == last) || (w.start == last && w.end == prev));
+                    plan.RemoveLonePoints();
+                    m_Stroke.RemoveAt(m_Stroke.Count - 1); m_Last = prev;
+                    BrushGenerators.MarkDirty(plan); e.Use();
                 }
+                else if (e.keyCode == KeyCode.Escape) { if (m_Last >= 0) EndStroke(); else Finish(); e.Use(); }
+                else if (e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) { Finish(); e.Use(); }
             }
+            if (e.type == EventType.Repaint) DrawPreview(plan);
+        }
+
+        void EndStroke()
+        {
+            var plan = target as FloorPlan;
+            // a lone start point (clicked, then ended) is not kept
+            if (plan != null && m_Stroke.Count == 1) { int lone = m_Stroke[0]; if (!plan.walls.Exists(w => w.start == lone || w.end == lone)) { Undo.RecordObject(plan, "Draw floor plan"); plan.RemoveLonePoints(); } }
+            m_Last = -1; m_Stroke.Clear(); SceneView.RepaintAll();
+        }
+
+        void FindHover(FloorPlan plan, Event e)
+        {
+            m_Kind = Hover.None; m_HoverPoint = m_HoverWall = -1;
+            int point = FloorPlanTools.PointUnderMouse(plan, e.mousePosition);
+            if (point >= 0) { m_Kind = Hover.Point; m_HoverPoint = point; m_Hover = plan.points[point]; return; }
+            int wall = FloorPlanTools.WallUnderMouse(plan, e.mousePosition, out var onWall);
+            if (wall >= 0)
+            {
+                plan.WallPoints(wall, out int a, out int b);
+                if ((onWall - plan.points[a]).sqrMagnitude < 1e-8f) { m_Kind = Hover.Point; m_HoverPoint = a; m_Hover = plan.points[a]; return; }
+                if ((onWall - plan.points[b]).sqrMagnitude < 1e-8f) { m_Kind = Hover.Point; m_HoverPoint = b; m_Hover = plan.points[b]; return; }
+                m_Kind = Hover.Wall; m_HoverWall = wall; m_Hover = onWall; return;
+            }
+            if (!FloorPlanTools.MouseOnFloor(plan, e.mousePosition, out var floor)) return;
+            m_Kind = Hover.Free;
+            m_Hover = FloorPlanTools.SnapLocal(plan, floor);
+            int last = m_Last >= 0 ? plan.PointIndex(m_Last) : -1;
+            if (last >= 0) m_Hover = FloorPlanTools.Constrain(plan.points[last], m_Hover, e.shift);
+        }
+
+        void DrawPreview(FloorPlan plan)
+        {
+            FloorPlanTools.DrawOutline(plan);
+            if (m_Kind == Hover.None) return;
+            var hover = FloorPlanTools.World(plan, m_Hover);
+            bool joining = m_Kind != Hover.Free;
+            Handles.color = joining ? Color.white : FloorPlanTools.Line;
+            Handles.DotHandleCap(-1, hover, Quaternion.identity, HandleUtility.GetHandleSize(hover) * (joining ? 0.09f : 0.06f), EventType.Repaint);
+            int last = m_Last >= 0 ? plan.PointIndex(m_Last) : -1;
+            if (last < 0) return;
+            var from = FloorPlanTools.World(plan, plan.points[last]);
+            Handles.color = FloorPlanTools.Preview;
+            Handles.DrawDottedLine(from, hover, 4f);
+            float length = new Vector2(m_Hover.x - plan.points[last].x, m_Hover.z - plan.points[last].z).magnitude;
+            Handles.Label((from + hover) * 0.5f, BrushSettings.instance.FormatUnits(length), EditorStyles.whiteMiniLabel);
         }
 
         void Finish() => ToolManager.RestorePreviousPersistentTool();
@@ -191,7 +332,7 @@ namespace CsgBrush.Editor
             if (parent != null) Undo.SetTransformParent(go.transform, parent, "Create floor plan");
             go.transform.position = position;
             var plan = Undo.AddComponent<FloorPlan>(go);
-            if (firstPoint) plan.AddPoint(Vector3.zero);
+            if (firstPoint) plan.AddPoint(Vector3.zero); // the draw tool starts its first wall here
             Selection.activeGameObject = go;
             EditorApplication.delayCall += () => { if (Selection.activeGameObject == go) ToolManager.SetActiveTool<FloorPlanDrawTool>(); };
             return plan;

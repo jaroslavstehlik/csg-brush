@@ -178,10 +178,10 @@ namespace CsgBrush.Editor
                 }
                 if (a.startId == WallAnchor.Unplaced) { s_Moved.Remove(a); Reanchor(plan, a, opening, true); }
                 else if (s_Moved.Remove(a)) Reanchor(plan, a, opening, false);
-                if (!Resolve(a, s_Walls, out var wall, out float distance)) { a.onWall = false; continue; }
+                // the anchor's saved values are only changed by the user (move, Pick Wall), never here: an undo of a plan edit
+                // must find the object's wall again from the same values
+                if (!Resolve(a, s_Walls, out var wall, out float distance, Local(plan, child))) { a.onWall = false; continue; }
                 a.onWall = true;
-                if (a.startId != wall.startId || a.endId != wall.endId || !Mathf.Approximately(a.distance, distance)) { a.startId = wall.startId; a.endId = wall.endId; a.distance = distance; EditorUtility.SetDirty(a); }
-                if (!Mathf.Approximately(a.wallLength, wall.Length)) { a.wallLength = wall.Length; EditorUtility.SetDirty(a); }
                 Vector3 position; Quaternion rotation;
                 if (opening)
                 {
@@ -201,30 +201,67 @@ namespace CsgBrush.Editor
         /// The wall an anchor is on, and how far along: the wall between its two ends; a wall split by new points (the piece
         /// it is on); or, when one end is gone, the wall that kept the other. False when its wall is gone.
         /// </summary>
-        public static bool Resolve(WallAnchor a, List<FloorPlan.Wall> walls, out FloorPlan.Wall wall, out float distance)
+        /// <summary>An object's place on its plan's floor.</summary>
+        public static Vector2 Local(FloorPlan plan, Transform t) { var l = plan.transform.InverseTransformPoint(t.position); return new Vector2(l.x, l.z); }
+
+        /// <summary>Does a point lie on a wall (within its thickness and a little more)?</summary>
+        static bool OnWall(FloorPlan.Wall w, Vector2 p, float reach)
+        {
+            float t = Vector2.Dot(p - w.a, w.direction);
+            if (t < -CatchMeters || t > w.Length + CatchMeters) return false;
+            float across = Vector2.Dot(p - w.a, w.outward);
+            return across > w.inner - reach && across < w.outer + reach;
+        }
+
+        public static bool Resolve(WallAnchor a, List<FloorPlan.Wall> walls, out FloorPlan.Wall wall, out float distance, Vector2? at = null)
         {
             wall = default; distance = a.distance;
             if (a.startId < 0) return false;
-            int from = -1, to = -1;
-            for (int i = 0; i < walls.Count; i++)
+            Vector2? ps = null, pe = null;
+            foreach (var w in walls)
             {
-                if (walls[i].startId == a.startId && walls[i].endId == a.endId) { wall = walls[i]; return true; }
-                if (walls[i].startId == a.startId) from = i;
-                if (walls[i].endId == a.endId) to = i;
+                if (w.startId == a.startId && w.endId == a.endId) { wall = w; return true; }
+                if (w.startId == a.endId && w.endId == a.startId) { wall = w; distance = w.Length - a.distance; return true; } // the same wall, the other way
+                if (w.startId == a.startId) ps = w.a; else if (w.endId == a.startId) ps = w.b;
+                if (w.startId == a.endId) pe = w.a; else if (w.endId == a.endId) pe = w.b;
             }
-            if (from >= 0 && to >= 0)
+            if (ps.HasValue && pe.HasValue && (pe.Value - ps.Value).sqrMagnitude > 1e-8f)
             {
-                // split: walk from the first corner to the last, the object on the piece its distance reaches
-                float before = 0f;
-                for (int k = 0, i = from; k < walls.Count; k++, i = (i + 1) % walls.Count)
+                // split by new points: walk the straight run from its first point to its last, the object on the piece its distance reaches
+                var dir = (pe.Value - ps.Value).normalized;
+                int current = a.startId; float before = 0f;
+                var used = new HashSet<int>();
+                for (int step = 0; step < walls.Count; step++)
                 {
-                    float len = walls[i].Length;
-                    if (a.distance <= before + len || i == to) { wall = walls[i]; distance = a.distance - before; return true; }
-                    before += len;
+                    int next = -1; bool forward = true;
+                    for (int i = 0; i < walls.Count && next < 0; i++)
+                    {
+                        if (used.Contains(i)) continue;
+                        var w = walls[i];
+                        if (w.startId == current && Vector2.Dot(w.direction, dir) > 0.999f) { next = i; forward = true; }
+                        else if (w.endId == current && Vector2.Dot(-w.direction, dir) > 0.999f) { next = i; forward = false; }
+                    }
+                    if (next < 0) break;
+                    used.Add(next);
+                    var piece = walls[next]; float len = piece.Length;
+                    int far = forward ? piece.endId : piece.startId;
+                    if (a.distance <= before + len || far == a.endId)
+                    {
+                        wall = piece; float along = a.distance - before;
+                        distance = forward ? along : len - along;
+                        return true;
+                    }
+                    before += len; current = far;
                 }
             }
-            if (from >= 0) { wall = walls[from]; return true; } // the far corner went: keep the distance from the first
-            if (to >= 0) { wall = walls[to]; distance = walls[to].Length - (a.wallLength - a.distance); return true; } // the first corner went: keep it from the far one
+            if (ps.HasValue && pe.HasValue) return false; // both points are there but no wall joins them: the wall was deleted
+            // one of its points is gone (a point between two straight walls was deleted, say): a wall from the other point,
+            // only one the object stands on, keeping the distance from that point
+            bool Fits(FloorPlan.Wall w) => !at.HasValue || OnWall(w, at.Value, CatchMeters + Mathf.Abs(a.offset)); // a shelf stands off the face by its offset
+            foreach (var w in walls) if (w.startId == a.startId && Fits(w)) { wall = w; return true; }
+            foreach (var w in walls) if (w.endId == a.startId && Fits(w)) { wall = w; distance = w.Length - a.distance; return true; }
+            foreach (var w in walls) if (w.endId == a.endId && Fits(w)) { wall = w; distance = w.Length - (a.wallLength - a.distance); return true; }
+            foreach (var w in walls) if (w.startId == a.endId && Fits(w)) { wall = w; distance = a.wallLength - a.distance; return true; }
             return false;
         }
 
@@ -379,7 +416,8 @@ namespace CsgBrush.Editor
         /// <summary>The index of the wall an anchor is on now, or -1.</summary>
         public static int WallIndex(WallAnchor a, List<FloorPlan.Wall> walls)
         {
-            if (!Resolve(a, walls, out var wall, out _)) return -1;
+            var plan = a.Plan;
+            if (!Resolve(a, walls, out var wall, out _, plan != null ? Local(plan, a.transform) : (Vector2?)null)) return -1;
             return wall.index;
         }
 
