@@ -59,7 +59,9 @@ namespace CsgBrush.Tests
             BrushApi.ForceUpdate();
             Assert.AreEqual("(0.0, 45.0, 0.0)", b.transform.rotation.eulerAngles.ToString("F1"), "rotation snapped to 15 degree steps");
             Assert.AreEqual(Vector3.one, b.transform.localScale, "scale is never used on brushes");
-            AssertOnGrid(b.transform.position, "pivot of a non axis-aligned brush");
+            var m = b.transform.localToWorldMatrix; var min = Vector3.positiveInfinity;
+            foreach (var v in BrushGeometry.Polyhedron(b).vertices) min = Vector3.Min(min, m.MultiplyPoint3x4(v));
+            AssertOnGrid(min, "the bounds of a non axis-aligned brush (its outermost vertices)");
         }
 
         [Test]

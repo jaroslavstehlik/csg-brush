@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Extrude is in the Brushes overlay: the Extrude toggle shows the distance and faces settings under it and outlines the
+  extruded shape in the Scene view as you change them; only Apply extrudes. The separate Extrude panel is gone.
+  Shift-dragging faces still extrudes as before.
+- Grid snap per brush: Shape (the default) puts a brush's outermost vertices on the grid at any rotation, so
+  axis-aligned faces lie on grid lines; Pivot puts its pivot on the grid. Set it on the brush, or in the Brushes overlay
+  for new brushes. Rotating a brush never moves it any more: before, a rotated brush snapped a different point than an
+  axis-aligned one, so it jumped by up to half a grid cell at every rotation step. Undo, a new pivot and opening a scene
+  don't move brushes either, and a Custom shape turned off the axes is no longer bent onto the grid.
 - Fixed: a combined mesh could get a face with no texture and odd lighting. A cut far from the origin (or in a brush
   group placed off the grid) leaves slivers too thin for Unity's Normalize, which gave them a zero normal, and that
   zero went to the big triangles sharing their vertices, with the wrong texture projection. Every vertex now has its

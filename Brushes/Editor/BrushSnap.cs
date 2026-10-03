@@ -55,11 +55,59 @@ namespace CsgBrush.Editor
         /// <summary>A brush's snapped size: grid multiples, except a door's or window's, which is its own.</summary>
         public static Vector3 SnapBrushSize(Brush brush, Vector3 size, float grid) => brush.IsOpening ? size : SnapSize(size, grid);
 
-        /// <summary>A brush's snapped position (see <see cref="SnapPosition"/>): faces on grid lines, as in Hammer or TrenchBroom, wherever its pivot is.</summary>
+        /// <summary>
+        /// A brush's snapped position by its <see cref="Brush.gridSnap"/>: Shape puts the lowest corner of its world bounds (its
+        /// outermost vertices) on the grid at any rotation, so axis-aligned faces lie on grid lines as in Hammer or TrenchBroom;
+        /// Pivot puts its pivot on the grid. Curved and spiral stairs snap their axis, which is their pivot.
+        /// </summary>
         public static Vector3 SnapBrushPosition(Brush brush, Vector3 worldPosition, Vector3 size, Quaternion worldRotation, float grid)
         {
-            var shift = worldRotation * brush.PivotShiftFor(size); // pivot to the shape's centre
-            return SnapPosition(worldPosition + shift, size, worldRotation, grid) - shift;
+            if (grid <= 0f) return worldPosition;
+            if (brush.gridSnap == GridSnap.Pivot || brush.HasParametricSize) return Round(worldPosition, grid);
+            var min = ShapeMin(brush, size, worldRotation);
+            return Round(worldPosition + min, grid) - min;
+        }
+
+        /// <summary>The lowest corner of the shape's world bounds relative to its transform, for a size and a rotation.</summary>
+        static Vector3 ShapeMin(Brush brush, Vector3 size, Quaternion worldRotation)
+        {
+            BrushPolyhedron poly;
+            if (brush.shape == BrushShape.Custom) poly = BrushGeometry.Polyhedron(brush);
+            else
+            {
+                var p = BrushGeometry.ShapeParams.From(brush);
+                p.size = Vector3.Max(size, Vector3.one * 0.001f); p.shift = brush.PivotShiftFor(p.size);
+                poly = BrushGeometry.ShapePolyhedron(brush.shape, p);
+            }
+            if (poly == null || poly.vertices == null || poly.vertices.Length == 0) return -WorldExtents(size, worldRotation) * 0.5f;
+            var min = Vector3.positiveInfinity;
+            foreach (var v in poly.vertices) min = Vector3.Min(min, worldRotation * v);
+            return min;
+        }
+
+        // the pose each brush was last left in: its position is snapped again only when it moved or was resized since, so a
+        // rotation (or an undo, or loading the scene) never moves it
+        static readonly Dictionary<Brush, (Vector3 position, Quaternion rotation, Vector3 size)> s_Accepted = new Dictionary<Brush, (Vector3, Quaternion, Vector3)>();
+        static readonly HashSet<Brush> s_Once = new HashSet<Brush>();
+
+        /// <summary>Take the brush's pose as it is: the next snap moves it only if it is moved or resized after this.</summary>
+        public static void Accept(Brush brush)
+        {
+            if (brush == null) return;
+            if (s_Accepted.Count > 2 * Brush.Active.Count + 64) { var dead = new List<Brush>(); foreach (var b in s_Accepted.Keys) if (b == null) dead.Add(b); foreach (var b in dead) s_Accepted.Remove(b); }
+            var t = brush.transform;
+            s_Accepted[brush] = (t.position, t.rotation, brush.size);
+        }
+
+        /// <summary>Snap the brush's position at its next snap whatever happened to it (a new brush).</summary>
+        public static void SnapOnce(Brush brush) { if (brush != null) s_Once.Add(brush); }
+
+        /// <summary>Whether the brush's position is to be snapped: forced, or moved or resized since it was last accepted. A brush seen for the first time (loaded) is accepted where it is.</summary>
+        static bool ShouldSnapPosition(Brush brush, Vector3 size, bool force)
+        {
+            if (force) return true;
+            if (!s_Accepted.TryGetValue(brush, out var last)) return false;
+            return (brush.transform.position - last.position).sqrMagnitude > kEpsilon * kEpsilon || (size - last.size).sqrMagnitude > kEpsilon * kEpsilon;
         }
 
         /// <summary>Snapped world position: the minimum corner lands on the grid for axis-aligned brushes, the pivot otherwise.</summary>
@@ -88,13 +136,14 @@ namespace CsgBrush.Editor
         public static bool Snap(Brush brush)
         {
             var s = BrushSettings.instance;
+            bool force = brush != null && s_Once.Remove(brush);
             if (brush == null || !s.snapToGrid || brush.IsPlaced) return false; // a generator places its own brushes; doors and windows are placed on walls
             float grid = s.GridMeters;
             var t = brush.transform;
             bool changed = false;
 
-            if (brush.shape == BrushShape.Custom) return SnapCustom(brush, grid, s.rotationSnapDegrees);
-            if (brush.HasParametricSize) return SnapPivot(brush, grid, s.rotationSnapDegrees);
+            if (brush.shape == BrushShape.Custom) { changed = SnapCustom(brush, grid, s.rotationSnapDegrees, force); Accept(brush); return changed; }
+            if (brush.HasParametricSize) { changed = SnapPivot(brush, grid, s.rotationSnapDegrees, force); Accept(brush); return changed; }
 
             // The Scale tool resizes the brush: any scale the user applied on top of the parent counter-scale is
             // applied to the size, then the world scale goes back to one.
@@ -113,11 +162,15 @@ namespace CsgBrush.Editor
             var rotation = SnapRotation(t.rotation, s.rotationSnapDegrees);
             if (Quaternion.Angle(rotation, t.rotation) > 1e-3f) { t.rotation = rotation; changed = true; }
 
-            var position = SnapBrushPosition(brush, t.position, size, rotation, grid);
-            if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
+            if (ShouldSnapPosition(brush, size, force)) // a rotation alone never moves the brush
+            {
+                var position = SnapBrushPosition(brush, t.position, size, rotation, grid);
+                if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
+            }
 
             if (changed) BrushSync.NotifyTransformChanged(brush);
             ClearChanged(brush, t);
+            Accept(brush);
             return changed;
         }
 
@@ -137,49 +190,48 @@ namespace CsgBrush.Editor
             return new Vector3(Mathf.Abs(ps.x) > 1e-6f ? 1f / ps.x : 1f, Mathf.Abs(ps.y) > 1e-6f ? 1f / ps.y : 1f, Mathf.Abs(ps.z) > 1e-6f ? 1f / ps.z : 1f);
         }
 
-        /// <summary>
-        /// A hand-edited shape has no size box: its rule is that the pivot and every vertex lie on the world grid.
-        /// Rotation snaps as usual; the Scale tool is applied to the vertices; moving the pivot onto the grid keeps
-        /// the geometry where it is.
-        /// </summary>
         /// <summary>Shapes built around an axis (curved and spiral stairs): the transform is the axis, so the pivot, rotation and scale snap; the parameters stay.</summary>
-        static bool SnapPivot(Brush brush, float grid, float rotationStep)
+        static bool SnapPivot(Brush brush, float grid, float rotationStep, bool force)
         {
             var t = brush.transform;
             bool changed = false;
+            bool snapPosition = ShouldSnapPosition(brush, brush.size, force);
             var rotation = SnapRotation(t.rotation, rotationStep);
             if (Quaternion.Angle(rotation, t.rotation) > 1e-3f) { t.rotation = rotation; changed = true; }
             var desiredScale = CounterScale(t);
             if ((t.localScale - desiredScale).sqrMagnitude > kEpsilon * kEpsilon) { t.localScale = desiredScale; changed = true; }
             var position = Round(t.position, grid);
-            if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
+            if (snapPosition && (position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
             if (changed) BrushSync.NotifyTransformChanged(brush);
             ClearChanged(brush, t);
             return changed;
         }
 
-        static bool SnapCustom(Brush brush, float grid, float rotationStep)
+        /// <summary>
+        /// A hand-edited shape has no size box. Rotation snaps as usual and the Scale tool is applied to the vertices. Moved
+        /// or scaled, it snaps by its <see cref="Brush.gridSnap"/>: Shape puts its bounds on the grid and, while it is
+        /// axis-aligned, every vertex too (a rotated shape is never bent onto the grid); Pivot puts its pivot on the grid
+        /// and leaves the vertices to edit mode, which snaps the ones it moves.
+        /// </summary>
+        static bool SnapCustom(Brush brush, float grid, float rotationStep, bool force)
         {
             var t = brush.transform;
             var poly = brush.polyhedron;
-            bool changed = false;
+            bool valid = poly != null && poly.IsValid;
+            bool changed = false, scaled = false;
             var rotation = SnapRotation(t.rotation, rotationStep);
             if (Quaternion.Angle(rotation, t.rotation) > 1e-3f) { t.rotation = rotation; changed = true; }
             var desiredScale = CounterScale(t);
             if ((t.localScale - desiredScale).sqrMagnitude > kEpsilon * kEpsilon)
             {
                 var user = UserScale(t, desiredScale);
-                if (poly != null && poly.IsValid) for (int i = 0; i < poly.vertices.Length; i++) poly.vertices[i] = Vector3.Scale(poly.vertices[i], user);
-                t.localScale = desiredScale; changed = true;
+                if (valid) for (int i = 0; i < poly.vertices.Length; i++) poly.vertices[i] = Vector3.Scale(poly.vertices[i], user);
+                t.localScale = desiredScale; changed = scaled = true;
             }
-            var position = Round(t.position, grid);
-            if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon)
-            {
-                var shift = t.InverseTransformVector(t.position - position); // keep the vertices where they are
-                if (poly != null && poly.IsValid) for (int i = 0; i < poly.vertices.Length; i++) poly.vertices[i] += shift;
-                t.position = position; changed = true;
-            }
-            if (poly != null && poly.IsValid)
+            if (!ShouldSnapPosition(brush, brush.size, force || scaled)) { FinishCustom(brush, t, changed); return changed; } // a rotation alone never moves it
+            var position = SnapBrushPosition(brush, t.position, brush.size, rotation, grid);
+            if ((position - t.position).sqrMagnitude > kEpsilon * kEpsilon) { t.position = position; changed = true; }
+            if (valid && brush.gridSnap == GridSnap.Shape && IsAxisAligned(rotation))
             {
                 bool moved = false;
                 for (int i = 0; i < poly.vertices.Length; i++)
@@ -195,9 +247,14 @@ namespace CsgBrush.Editor
                     changed = true;
                 }
             }
+            FinishCustom(brush, t, changed);
+            return changed;
+        }
+
+        static void FinishCustom(Brush brush, Transform t, bool changed)
+        {
             if (changed) BrushSync.NotifyTransformChanged(brush);
             ClearChanged(brush, t);
-            return changed;
         }
 
         /// <summary>Snap every brush that is off the grid; used when rotated or scaled parents are reset.</summary>
@@ -210,6 +267,7 @@ namespace CsgBrush.Editor
                 var brush = active[i];
                 if (brush == null || !IsOffGrid(brush)) continue;
                 if (recordUndo) Undo.RecordObjects(new Object[] { brush, brush.transform }, "Snap brushes to grid");
+                SnapOnce(brush); // its parent was reset: put it on the grid wherever it was left
                 if (Snap(brush)) { count++; BrushSync.Ensure(brush); }
             }
             return count;
@@ -248,16 +306,19 @@ namespace CsgBrush.Editor
             if (brush.IsPlaced) { BrushSync.NotifyTransformChanged(brush); t.hasChanged = false; return; } // no snapped preview: placed by its generator, or a door on its wall
             var R = t.rotation; var T = t.position; var lossy = t.lossyScale;
             var Rs = SnapRotation(R, s.rotationSnapDegrees);
+            bool known = s_Accepted.TryGetValue(brush, out var last);
+            bool moved = !known || (T - last.position).sqrMagnitude > kEpsilon * kEpsilon; // a rotation alone is shown in place
             if (brush.HasParametricSize)
             {
-                s_Preview[brush] = (Matrix4x4.TRS(Round(T, grid), Rs, Vector3.one), Vector3.one);
+                s_Preview[brush] = (Matrix4x4.TRS(moved ? Round(T, grid) : T, Rs, Vector3.one), Vector3.one);
                 BrushSync.NotifyTransformChanged(brush);
                 t.hasChanged = false;
                 return;
             }
             var scaledSize = Vector3.Scale(brush.size, new Vector3(Mathf.Abs(lossy.x), Mathf.Abs(lossy.y), Mathf.Abs(lossy.z)));
             var sizeS = SnapBrushSize(brush, scaledSize, grid);
-            var Ts = SnapBrushPosition(brush, T, sizeS, Rs, grid);
+            bool resized = known && (sizeS - last.size).sqrMagnitude > kEpsilon * kEpsilon;
+            var Ts = moved || resized ? SnapBrushPosition(brush, T, sizeS, Rs, grid) : T;
             var factor = Divide(sizeS, brush.size);
             Ts += Rs * (brush.PivotShiftFor(sizeS) - Vector3.Scale(factor, brush.PivotShift)); // the geometry is scaled about the transform; a distance pivot does not scale with it
             s_Preview[brush] = (Matrix4x4.TRS(Ts, Rs, Vector3.one), factor);
@@ -336,8 +397,8 @@ namespace CsgBrush.Editor
             {
                 if (Quaternion.Angle(SnapRotation(t.rotation, s.rotationSnapDegrees), t.rotation) > 1e-3f) return true;
                 if ((t.lossyScale - Vector3.one).sqrMagnitude > 1e-4f) return true;
-                if ((Round(t.position, grid) - t.position).sqrMagnitude > kEpsilon * kEpsilon) return true;
-                if (brush.HasParametricSize) return false;
+                if ((SnapBrushPosition(brush, t.position, brush.size, t.rotation, grid) - t.position).sqrMagnitude > kEpsilon * kEpsilon) return true;
+                if (brush.HasParametricSize || brush.gridSnap != GridSnap.Shape || !IsAxisAligned(t.rotation)) return false;
                 var poly = brush.polyhedron;
                 if (poly == null || !poly.IsValid) return false;
                 foreach (var v in poly.vertices) { var w = t.TransformPoint(v); if ((Round(w, grid) - w).sqrMagnitude > kEpsilon * kEpsilon) return true; }

@@ -65,7 +65,7 @@ namespace CsgBrush.Editor
                 if (wantEditing != editing) { if (wantEditing) BrushEditContext.Enter(); else BrushEditContext.Exit(); }
             }
             EditorGUILayout.EndHorizontal();
-            if (editing) DrawExtrude(s);
+            if (editing) BrushExtrude.DrawPanel();
 
             // lint: parents that rotate or scale brushes off the grid
             var parents = BrushSnap.TransformedParents();
@@ -103,7 +103,10 @@ namespace CsgBrush.Editor
             EditorGUILayout.LabelField(tool.Title, EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
             if (!BrushCreateTool.IsOpening(shape)) // a door or window is always a cut
+            {
                 s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
+                s.newGridSnap = (GridSnap)EditorGUILayout.EnumPopup(new GUIContent("Grid snap", "What goes onto the grid: the outermost vertices, or the pivot"), s.newGridSnap);
+            }
             var moduleTypes = BrushApi.ModuleTypes();
             if (moduleTypes.Count > 0)
             {
@@ -171,26 +174,6 @@ namespace CsgBrush.Editor
             if (EditorGUI.EndChangeCheck()) { s.NotifyChanged(); SceneView.RepaintAll(); }
             EditorGUIUtility.labelWidth = labelWidth;
             EditorGUILayout.Space(2);
-        }
-
-        /// <summary>The edit actions: Extrude applies the Extrude panel's distance and mode to the selected faces.</summary>
-        static void DrawExtrude(BrushSettings s)
-        {
-            int faces = 0;
-            foreach (var b in BrushEditState.SelectedBrushes()) faces += BrushEditState.Sel(b).faces.Count;
-            EditorGUILayout.BeginHorizontal();
-            using (new EditorGUI.DisabledScope(faces == 0 || BrushEditState.Mode != BrushEditMode.Face))
-            {
-                if (GUILayout.Button(new GUIContent("Extrude", faces > 0 ? "Extrude " + faces + (faces == 1 ? " face" : " faces") + " with the settings in the Extrude panel" : "Select faces first"), EditorStyles.miniButton))
-                    BrushExtrudeOverlay.ExtrudeSelection();
-            }
-            using (new EditorGUI.DisabledScope(BrushEditState.Mode != BrushEditMode.Face || BrushExtrudeOverlay.BridgeCandidate() == null))
-            {
-                if (GUILayout.Button(new GUIContent("Bridge", "Connect the two selected faces of one brush with a block between them"), EditorStyles.miniButton))
-                    BrushExtrudeOverlay.BridgeSelection();
-            }
-            GUILayout.FlexibleSpace();
-            EditorGUILayout.EndHorizontal();
         }
 
         [Shortcut("Brushes/Grid smaller", typeof(SceneView), KeyCode.LeftBracket)]

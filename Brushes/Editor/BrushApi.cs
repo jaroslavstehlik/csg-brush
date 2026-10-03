@@ -21,6 +21,8 @@ namespace CsgBrush.Editor
             var brush = Undo.AddComponent<Brush>(go);
             brush.shape = shape;
             brush.size = sizeMeters;
+            brush.gridSnap = BrushSettings.instance.newGridSnap;
+            BrushSnap.SnapOnce(brush); // a new brush lands on the grid; a loaded one is accepted where it is
             if (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
                 var d = BrushGeometry.ShapeParams.Default(sizeMeters);
@@ -276,6 +278,7 @@ namespace CsgBrush.Editor
                 brush.polyhedron = poly;
             }
             t.position = world;
+            BrushSnap.Accept(brush); // the transform moved, the shape did not: nothing to snap
             foreach (var (c, position, rotation) in children) c.SetPositionAndRotation(position, rotation);
             BrushSync.NotifyTransformChanged(brush);
             BrushSync.Ensure(brush);

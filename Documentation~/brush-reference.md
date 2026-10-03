@@ -44,12 +44,22 @@ The **Scale** tool also resizes the brush. When you release it, the scale goes i
 
 ### Grid snapping
 
-With **Snap to grid** on in the **Brushes** overlay (the default), every brush stays on the world grid after each edit:
+With **Snap to grid** on in the **Brushes** overlay (the default), brushes stay on the world grid:
 
-* The brush's faces lie on grid lines.
-* Its size is a multiple of the grid step.
+* A brush's size is a multiple of the grid step.
 * Its rotation snaps to fixed angles.
 * It has no scale.
+
+When you move or resize a brush, its **Grid snap** setting decides what goes onto the grid:
+
+| **Grid snap** | **What goes onto the grid** | **Use it for** |
+| :--- | :--- | :--- |
+| **Shape** | The brush's outermost vertices: the corner of its bounds. An axis-aligned brush has its faces on grid lines, so brushes meet cleanly. This is the default. | The classic brush workflow, and collision geometry. |
+| **Pivot** | The brush's pivot. The shape follows, wherever it ends up. | The ProBuilder workflow, such as detail brushes placed around a point. |
+
+Either way, rotating a brush never moves it: it turns about its pivot, and only the angle snaps. The next time you move it, it snaps again. An undo, setting the pivot, and opening a scene don't move brushes either. Vertices you move in [edit mode](#edit-a-brushs-shape) snap to the grid in both modes; a Custom shape in **Shape** mode also puts its vertices on the grid while it's axis-aligned.
+
+Set **Grid snap** in the Brush Inspector. New brushes get the setting in the **Brushes** overlay while a Create tool is active.
 
 Press **[** and **]** to change the grid step. Doors, windows, and brushes on a [wall anchor](wall-anchor.md) don't snap, because their wall places them.
 
@@ -121,14 +131,15 @@ The first edit turns the brush into a **Custom** shape. **Reset to Box** (or to 
 
 ### Extrude
 
-The **Extrude** panel opens with edit mode. To extrude:
+To extrude:
 
 1. Select one or more faces.
-2. In the **Extrude** panel, set the distance. A negative distance cuts a pocket into the brush.
-3. Choose whether the selection extrudes as one block or each face on its own.
-4. Click **Extrude** in the **Brushes** overlay.
+2. In the **Brushes** overlay, turn on **Extrude**. The extrude settings appear under it, and the Scene view outlines the extruded shape.
+3. Set the **Distance**. A negative distance cuts a pocket into the brush. The outline follows as you change it.
+4. In **Faces**, choose whether the selection extrudes as one block or each face on its own.
+5. Click **Apply**.
 
-The faces stay selected, ready for the next extrusion. You can also hold **Shift** when you start dragging the **Move** gizmo on selected faces: they extrude by the distance you drag. Drag into the brush to cut.
+Nothing changes until you click **Apply**. The faces stay selected, so **Apply** again extrudes them again. If the extrusion can't be made, the overlay says why instead of enabling **Apply**. You can also hold **Shift** when you start dragging the **Move** gizmo on selected faces: they extrude by the distance you drag. Drag into the brush to cut.
 
 An extrusion can run through other parts of the brush. Your own faces, edges, and vertices survive it, so coplanar faces you keep apart stay apart, and per-face materials stay where they were.
 
@@ -136,7 +147,7 @@ An extrusion can run through other parts of the brush. Your own faces, edges, an
 
 **Bridge** connects two selected faces of one brush with a block between them, the way a corridor joins two rooms. The faces need the same number of corners. The new walls stay selected.
 
-If an extrusion or bridge wouldn't make a sound shape, for example because it would end exactly where the brush touches itself, or a cut would remove everything, the brush stays as it was and the panel says why. Try another distance.
+If an extrusion or bridge wouldn't make a sound shape, for example because it would end exactly where the brush touches itself, or a cut would remove everything, the brush stays as it was and the **Brushes** overlay says why. Try another distance.
 
 ## Materials
 

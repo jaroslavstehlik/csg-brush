@@ -397,7 +397,8 @@ namespace CsgBrush.Editor
             {
                 var brush = active[i];
                 if (brush == null) continue;
-                BrushSnap.Snap(brush); // a redo re-applies the recorded pose; keep the grid rule
+                BrushSnap.Accept(brush); // an undo or redo puts back a pose that was accepted once: it never moves the brush
+                BrushSnap.Snap(brush);
                 BrushSync.Ensure(brush);
             }
         }

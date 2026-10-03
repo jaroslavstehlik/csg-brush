@@ -39,6 +39,7 @@ namespace CsgBrush.Editor
         public bool newSlopedFloor = false;
         public bool newSlopedCeiling = false;
         [Tooltip("Linear and curved stairs: the steps stand on solid support down to the floor.")] public bool newSupportUnderSteps = true;
+        [Tooltip("What of a new brush goes onto the grid: its outermost vertices (Shape), or its pivot.")] public GridSnap newGridSnap = GridSnap.Shape;
         [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
         [Range(1f, 180f)] public float newArchAngle = 180f;
         [Tooltip("Units; 0 uses 1 m.")] public float newDoorWidth = 0f;

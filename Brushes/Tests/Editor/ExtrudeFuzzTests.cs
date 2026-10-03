@@ -167,11 +167,11 @@ namespace CsgBrush.Tests
             int top = 0; for (int f = 0; f < poly.faces.Length; f++) if (Vector3.Dot(poly.Plane(f), Vector3.up) > 0.9f) top = f;
             BrushEditState.Sel(brush).faces = new HashSet<int> { top };
             Undo.IncrementCurrentGroup();
-            BrushExtrudeOverlay.Extrude(1f, true);
+            BrushExtrude.Extrude(1f, true);
             Assert.IsNull(brush.problem, "after first extrude: " + brush.problem);
             Assert.AreEqual(1, BrushEditState.Sel(brush).faces.Count, "the moved face stays selected");
             Undo.IncrementCurrentGroup();
-            BrushExtrudeOverlay.Extrude(1f, true);
+            BrushExtrude.Extrude(1f, true);
             BrushApi.ForceUpdate();
             Assert.IsNull(brush.problem, "after second extrude: " + brush.problem);
             Assert.AreEqual(14, brush.polyhedron.faces.Length);
@@ -255,9 +255,9 @@ namespace CsgBrush.Tests
             Selection.activeGameObject = brush.gameObject;
             BrushEditState.Mode = BrushEditMode.Face;
             BrushEditState.Sel(brush).faces = new HashSet<int> { rightInner, leftInner };
-            Assert.AreEqual(brush, BrushExtrudeOverlay.BridgeCandidate());
+            Assert.AreEqual(brush, BrushExtrude.BridgeCandidate());
             Undo.IncrementCurrentGroup();
-            BrushExtrudeOverlay.BridgeSelection();
+            BrushExtrude.BridgeSelection();
             Assert.IsNull(brush.problem, brush.problem);
             Assert.AreEqual(36f, brush.polyhedron.Volume(), 1e-3f);
             Assert.AreEqual(3, BrushEditState.Sel(brush).faces.Count, "the bridge's walls are selected");
@@ -312,6 +312,33 @@ namespace CsgBrush.Tests
             Undo.PerformUndo(); BrushApi.ForceUpdate();
             Assert.IsNull(brush.problem, "restored brush is sound: " + brush.problem);
             Assert.AreEqual(before, BrushCsg.MeshObject(model, false).GetComponent<MeshFilter>().sharedMesh.vertexCount, "mesh back to the box");
+        }
+
+        [Test]
+        public void ThePreviewShowsTheExtrusionAndOnlyApplyMakesIt()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var s = BrushSettings.instance; bool snap = s.snapToGrid; float distance = s.extrudeDistance; bool individual = s.extrudeIndividual;
+            try
+            {
+                s.snapToGrid = false; s.extrudeIndividual = false;
+                var brush = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
+                BrushApi.ForceUpdate();
+                Selection.activeGameObject = brush.gameObject;
+                BrushEditState.Mode = BrushEditMode.Face;
+                var shape = BrushEditState.ShapeOf(brush);
+                int top = 0; for (int f = 0; f < shape.faces.Length; f++) if (Vector3.Dot(shape.Plane(f), Vector3.up) > 0.9f) top = f;
+                BrushEditState.Sel(brush).faces = new HashSet<int> { top };
+                s.extrudeDistance = s.ToUnits(1.5f);
+                Assert.AreEqual(2.5f, BrushExtrude.PreviewShape(brush).Bounds().max.y, 1e-4f, "the preview: the top 1.5 m higher");
+                Assert.AreEqual(BrushShape.Box, brush.shape, "the brush itself is untouched");
+                s.extrudeDistance = s.ToUnits(0.5f);
+                Assert.AreEqual(1.5f, BrushExtrude.PreviewShape(brush).Bounds().max.y, 1e-4f, "a new distance: a new preview");
+                Assert.AreEqual(BrushShape.Box, brush.shape, "still untouched");
+                BrushExtrude.Apply();
+                Assert.AreEqual(1.5f, BrushGeometry.Polyhedron(brush).Bounds().max.y, 1e-4f, "Apply makes what the preview showed");
+            }
+            finally { s.snapToGrid = snap; s.extrudeDistance = distance; s.extrudeIndividual = individual; }
         }
     }
 }

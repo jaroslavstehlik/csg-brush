@@ -157,6 +157,8 @@ namespace CsgBrush.Editor
             }
             else DrawSize(settings, shape);
             DrawPivot(settings);
+            bool snaps = true; foreach (var t in targets) if (((Brush)t).IsOpening || ((Brush)t).IsGenerated) snaps = false; // placed by their wall or plan
+            if (snaps) EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(Brush.gridSnap)), new GUIContent("Grid snap", "What goes onto the grid when the brush is moved or resized: its outermost vertices (Shape), or its pivot. A rotation never moves it."));
 
             if (shape != BrushShape.Custom && BrushApi.CanConvertToCustom(shape))
             {

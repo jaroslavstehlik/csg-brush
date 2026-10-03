@@ -6,6 +6,13 @@ using CsgBrush.Colliders;
 
 namespace CsgBrush
 {
+    /// <summary>What of a brush goes onto the grid when it is moved or resized (a rotation never moves it).</summary>
+    public enum GridSnap
+    {
+        [Tooltip("The brush's outermost vertices go onto grid lines, so brushes meet cleanly: the classic brush workflow.")] Shape,
+        [Tooltip("The brush's pivot goes onto the grid and the shape follows: the ProBuilder workflow.")] Pivot,
+    }
+
     /// <summary>How a brush's pivot is measured.</summary>
     public enum PivotMode
     {
@@ -93,6 +100,8 @@ namespace CsgBrush
         public Vector3 pivot = new Vector3(0.5f, 0.5f, 0.5f);
         /// <summary>How <see cref="pivot"/> is measured.</summary>
         public PivotMode pivotMode = PivotMode.Normalized;
+        [Tooltip("What goes onto the grid when the brush is moved or resized: its outermost vertices, or its pivot. A rotation never moves it.")]
+        public GridSnap gridSnap = GridSnap.Shape;
 
         /// <summary>Box-like shapes whose geometry follows <see cref="pivot"/>.</summary>
         public bool HasPivot => shape != BrushShape.Custom && !HasParametricSize && !IsOpening;
