@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-03)
 
 - Extrude is in the Brushes overlay: the Extrude toggle shows the distance and faces settings under it and outlines the
   extruded shape in the Scene view as you change them; only Apply extrudes. The separate Extrude panel is gone.
