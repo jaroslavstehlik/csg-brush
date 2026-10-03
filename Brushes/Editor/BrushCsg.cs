@@ -169,6 +169,9 @@ namespace CsgBrush.Editor
             Rebuild(model, brushes);
         }
 
+        /// <summary>Changes when the same brushes make a different mesh (a fix in how it is made), so meshes saved by a build are made again.</summary>
+        const int MeshFormat = 2; // 2: every vertex has its face's normal, never a sliver's zero one
+
         /// <summary>A material's identity that survives editor sessions (its asset GUID), for the content keys.</summary>
         static int MaterialKey(Material material)
         {
@@ -437,7 +440,7 @@ namespace CsgBrush.Editor
             }
             unchecked
             {
-                int meshKey = 17;
+                int meshKey = 17 * 31 + MeshFormat;
                 for (int i = 0; i < job.pieceKeys.Count; i++) { var pr = job.records[job.pieceRecord[i]]; meshKey = meshKey * 31 + job.pieceKeys[i].GetHashCode(); var mat = pr.brush.material; if (mat == null) mat = DefaultMaterial(); meshKey = meshKey * 31 + MaterialKey(mat); meshKey = meshKey * 31 + pr.layer; meshKey = meshKey * 31 + StaticFlags(pr.brush);
                     foreach (int c in job.pieceCutters[i]) { var cm = job.records[c].brush.material; meshKey = meshKey * 31 + MaterialKey(cm != null ? cm : DefaultMaterial()); } } // static flags: which mesh its triangles go to; carved faces take the cutter's material
                 job.meshKey = meshKey;
@@ -827,7 +830,7 @@ namespace CsgBrush.Editor
         /// <summary>
         /// Manifold shares vertices between faces; Unity wants a vertex per face corner for flat normals and planar
         /// UVs. Triangles are split by the static flags of their brush (one mesh child each), grouped by material (one
-        /// submesh each), vertices by (position, source brush, face). A face made by a cut takes the flags of the brush it
+        /// submesh each), vertices by (position, source brush, face), every one with its face's normal. A face made by a cut takes the flags of the brush it
         /// was cut into, so a doorway's sides light like the wall around them.
         /// </summary>
         static void Convert(Island island, Material fallback, int defaultFlags, Matrix4x4 worldToModel)
@@ -852,14 +855,32 @@ namespace CsgBrush.Editor
             }
             var partOf = new Dictionary<int, Part>();
             int triCount = data.triangles != null ? data.triangles.Length / 3 : 0;
+            // each face's normal: the sum of its triangles' cross products (weighted by area), so a sliver too thin to have a
+            // direction of its own (far from the origin, a cut leaves many) takes its face's; and a number per face, for the
+            // vertices it shares
+            var faces = new Dictionary<(int source, int face), int>(); var faceNormals = new List<Vector3>();
+            var faceOf = new int[triCount];
+            for (int tri = 0; tri < triCount; tri++)
+            {
+                var key = (data.triangleSource[tri], data.triangleFace[tri]);
+                if (!faces.TryGetValue(key, out int fi)) { fi = faceNormals.Count; faces[key] = fi; faceNormals.Add(Vector3.zero); }
+                faceOf[tri] = fi;
+                var a = data.vertices[data.triangles[tri * 3]]; var b = data.vertices[data.triangles[tri * 3 + 1]]; var c = data.vertices[data.triangles[tri * 3 + 2]];
+                faceNormals[fi] += Vector3.Cross(b - a, c - a);
+            }
             for (int tri = 0; tri < triCount; tri++)
             {
                 int source = data.triangleSource[tri], face = data.triangleFace[tri];
                 island.sources.TryGetValue(source, out var brush);
                 var a = data.vertices[data.triangles[tri * 3]]; var b = data.vertices[data.triangles[tri * 3 + 1]]; var c = data.vertices[data.triangles[tri * 3 + 2]];
-                var n = Vector3.Cross(b - a, c - a);
-                if (n.sqrMagnitude < 1e-16f) continue;
-                n.Normalize();
+                var own = Vector3.Cross(b - a, c - a);
+                float ownLength = own.magnitude;
+                if (ownLength < 1e-8f) continue; // no area at all
+                // divided, not Normalize(): that gives zero under 1e-5, and the zero would go to every triangle sharing the vertex
+                var sum = faceNormals[faceOf[tri]]; float sumLength = sum.magnitude;
+                bool byFace = face >= 0 && sumLength > 1e-12f;
+                var n = byFace ? sum / sumLength : own / ownLength;
+                if (byFace && ownLength > 1e-4f && Vector3.Dot(own / ownLength, n) < 0.99f) { n = own / ownLength; byFace = false; } // a well-shaped triangle off its face's plane: its own
                 int flags = brush != null ? StaticFlags(brush) : defaultFlags;
                 if (brush != null && brush.operation == BrushOperation.Subtract)
                 {
@@ -873,7 +894,7 @@ namespace CsgBrush.Editor
                 // planar UVs on the dominant axis plane, one texture per metre
                 float ax = Mathf.Abs(n.x), ay = Mathf.Abs(n.y), az = Mathf.Abs(n.z);
                 Vector2 UV(Vector3 p) => ax >= ay && ax >= az ? new Vector2(p.z, p.y) : ay >= az ? new Vector2(p.x, p.z) : new Vector2(p.x, p.y);
-                int fkey = (source << 12) ^ face;
+                int fkey = byFace ? faceOf[tri] : -1 - tri; // a triangle with its own normal has its own vertices
                 foreach (var p in new[] { a, b, c })
                 {
                     var key = (p, fkey, mi);

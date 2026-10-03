@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed: a combined mesh could get a face with no texture and odd lighting. A cut far from the origin (or in a brush
+  group placed off the grid) leaves slivers too thin for Unity's Normalize, which gave them a zero normal, and that
+  zero went to the big triangles sharing their vertices, with the wrong texture projection. Every vertex now has its
+  face's normal. Meshes saved by Build are made again once.
 - Floor plans are wall networks: a point can join any number of walls, so interior walls are drawn in the same plan.
   Walls that end on or cross another wall are joined there automatically, with no gaps (T and X junctions get a fill;
   two walls meet in a mitre). Every enclosed area is a room with its own floor and ceiling.

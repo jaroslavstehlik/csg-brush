@@ -134,6 +134,87 @@ namespace CsgBrush.Tests
             Object.DestroyImmediate(red);
         }
 
+        static Vector3 V(float x, float y, float z) => new Vector3(x, y, z);
+
+        static Transform s_Parent;
+
+        static void Make(string name, BrushOperation operation, Vector3 position, Quaternion rotation, Vector3 size, Vector3[] vertices = null, int[][] faces = null)
+        {
+            var brush = BrushApi.Create(BrushShape.Box, position, size, rotation, s_Parent, name);
+            if (vertices != null)
+                BrushApi.SetPolyhedron(brush, new BrushPolyhedron { vertices = vertices, faces = System.Array.ConvertAll(faces, f => new BrushPolyhedron.Face { indices = f }) });
+            if (operation != BrushOperation.Add) BrushApi.SetOperation(brush, operation);
+        }
+
+        /// <summary>Every vertex has its triangle's face normal (unit length) and that face's planar UV.</summary>
+        static void AssertFacesNormalsAndUVs(Transform meshObject)
+        {
+            var mesh = meshObject.GetComponent<MeshFilter>().sharedMesh;
+            var v = mesh.vertices; var normals = mesh.normals; var uv = mesh.uv; var tris = mesh.triangles;
+            int checkedTriangles = 0;
+            for (int k = 0; k < tris.Length; k += 3)
+            {
+                var a = v[tris[k]]; var b = v[tris[k + 1]]; var c = v[tris[k + 2]];
+                var n = Vector3.Cross(b - a, c - a);
+                if (n.magnitude < 0.02f) continue; // a well-shaped triangle (area over 0.01 m2): its own normal is exact
+                n.Normalize(); checkedTriangles++;
+                float ax = Mathf.Abs(n.x), ay = Mathf.Abs(n.y), az = Mathf.Abs(n.z);
+                System.Func<Vector3, Vector2> project = p => ax >= ay && ax >= az ? new Vector2(p.z, p.y) : ay >= az ? new Vector2(p.x, p.z) : new Vector2(p.x, p.y);
+                for (int j = 0; j < 3; j++)
+                {
+                    int i = tris[k + j];
+                    Assert.That(Vector3.Dot(normals[i], n), Is.GreaterThan(0.999f), "vertex " + i + " has its face's normal: " + normals[i].ToString("F3") + " on a face of " + n.ToString("F3"));
+                    Assert.That(Vector2.Distance(uv[i], project(v[i])), Is.LessThan(1e-3f), "vertex " + i + " has its face's planar UV");
+                }
+            }
+            Assert.Greater(checkedTriangles, 20);
+        }
+
+        /// <summary>
+        /// Every vertex of a combined mesh has its face's normal and the face's planar UVs: thin slivers left by the union
+        /// must not lend their own (imprecise) normal or projection to the vertices they share with the rest of the face.
+        /// </summary>
+        [Test]
+        public void CombinedBrushesKeepTheirFacesNormalsAndUVs()
+        {
+            BrushSettings.instance.snapToGrid = false;
+            BrushApi.Create(BrushShape.Box, new Vector3(0f, 1.5f, 0f), new Vector3(8f, 3f, 0.4f), Quaternion.identity, null, "Wall");
+            var rng = new System.Random(7);
+            for (int i = 0; i < 6; i++) // boxes half in the wall, at odd angles and places: unions full of slivers
+            {
+                var at = new Vector3((float)rng.NextDouble() * 6f - 3f, (float)rng.NextDouble() * 2f + 0.5f, (float)rng.NextDouble() * 0.6f - 0.3f);
+                var size = new Vector3(0.5f + (float)rng.NextDouble() * 1.5f, 0.3f + (float)rng.NextDouble(), 0.5f + (float)rng.NextDouble());
+                BrushApi.Create(BrushShape.Box, at, size, Quaternion.Euler(0f, (float)rng.NextDouble() * 60f - 30f, 0f), null, "Box " + i);
+            }
+            BrushApi.ForceUpdate();
+            AssertFacesNormalsAndUVs(BrushCsg.MeshObject(Group(), 0, Default, false));
+        }
+
+        /// <summary>
+        /// A corner of a students' level far from the origin: the cuts leave slivers too thin for Unity's Normalize (it
+        /// returns zero under 1e-5), and a sliver must not give its zero normal and wrong projection to the big triangles
+        /// of its face.
+        /// </summary>
+        [Test]
+        public void SliversFarFromTheOriginDoNotSpoilTheirFace()
+        {
+            BrushSettings.instance.snapToGrid = false;
+            var group = new GameObject("Group").AddComponent<BrushGroup>();
+            group.transform.position = new Vector3(184.47f, 2f, -147.73f); // off the grid: the brushes' coordinates in it are odd
+            s_Parent = group.transform;
+            Make("A", BrushOperation.Add, V(184.5f, 2f, -147.5f), new Quaternion(0f, 0f, 0f, 1f), V(5.00000238f, 4f, 3.00000143f));
+            Make("A (2)", BrushOperation.Add, V(182.5f, 2f, -141f), new Quaternion(0f, 0f, 0f, 1f), V(5f, 4f, 6f));
+            Make("A (3)", BrushOperation.Add, V(186.5f, 4f, -141f), new Quaternion(0f, 0f, 0f, 1f), V(5f, 4f, 6f));
+            Make("A (4)", BrushOperation.Subtract, V(187f, 3f, -141f), new Quaternion(0f, 0f, 0f, 1f), V(8f, 4f, 11f), new[] { V(-5f, 1f, -6f), V(3f, -1f, -6f), V(0f, -1f, 5f), V(-5f, -1f, 5f), V(-5f, 3f, -6f), V(-3f, 3f, -6f), V(-3f, 3f, 5f), V(-5f, 3f, 5f) }, new[] { new[] { 0, 1, 2 }, new[] { 0, 2, 3 }, new[] { 7, 6, 5, 4 }, new[] { 4, 5, 1, 0 }, new[] { 6, 7, 3, 2 }, new[] { 0, 3, 7 }, new[] { 0, 7, 4 }, new[] { 2, 1, 5 }, new[] { 2, 5, 6 } });
+            Make("A (1)", BrushOperation.Add, V(184f, -0.5f, -147.5f), new Quaternion(0f, 0f, 0f, 1f), V(24f, 1f, 19f));
+            Make("B", BrushOperation.Add, V(180f, 2f, -148f), new Quaternion(0f, 0f, 0f, 1f), V(6f, 6f, 2f), new[] { V(-2f, -2f, -1f), V(2f, -2f, -1f), V(2f, -2f, 1f), V(-4f, -2f, 1f), V(-2f, 2f, -1f), V(2f, 2f, -1f), V(2f, 4f, 1f), V(-4f, 4f, 1f) }, new[] { new[] { 1, 2, 3, 0 }, new[] { 7, 6, 5, 4 }, new[] { 4, 5, 1, 0 }, new[] { 6, 7, 3, 2 }, new[] { 3, 7, 4, 0 }, new[] { 5, 6, 2, 1 } });
+            Make("C", BrushOperation.Add, V(178f, 2f, -145f), new Quaternion(0f, -8.742278E-08f, 0f, -1f), V(4.000001f, 5f, 4.00000048f), new[] { V(-1.99999964f, -2f, -2.00000024f), V(2.00000024f, -2f, -1.99999964f), V(1.99999964f, -2f, 2.00000024f), V(-2.00000024f, -2f, 1.99999964f), V(-1.99999964f, 3f, -2.00000024f), V(2.00000024f, 3f, -1.99999964f), V(1.99999964f, 1f, 2.00000024f), V(-2.00000024f, 1f, 1.99999964f) }, new[] { new[] { 1, 2, 3, 0 }, new[] { 7, 6, 5, 4 }, new[] { 4, 5, 1, 0 }, new[] { 6, 7, 3, 2 }, new[] { 3, 7, 4, 0 }, new[] { 5, 6, 2, 1 } });
+            Make("D", BrushOperation.Subtract, V(182f, 2f, -146f), new Quaternion(0f, 0.258819133f, 0f, -0.9659258f), V(5.46410227f, 5f, 5.19615173f), new[] { V(-3.73205137f, -3f, -2.46410084f), V(-0.133975029f, -3f, -2.232051f), V(-0.36602515f, -2f, 1.36602557f), V(-3.96410155f, -2f, 1.13397539f), V(-1.50000048f, 1f, -2.59807587f), V(1.23205042f, 2f, -1.86602581f), V(1.50000048f, 2f, 2.59807587f), V(-1.23205042f, 2f, 1.86602581f) }, new[] { new[] { 2, 3, 0 }, new[] { 2, 0, 1 }, new[] { 4, 7, 6 }, new[] { 4, 6, 5 }, new[] { 5, 1, 0 }, new[] { 5, 0, 4 }, new[] { 7, 3, 2 }, new[] { 7, 2, 6 }, new[] { 7, 4, 0 }, new[] { 7, 0, 3 }, new[] { 6, 2, 1 }, new[] { 6, 1, 5 } });
+            s_Parent = null;
+            BrushApi.ForceUpdate();
+            AssertFacesNormalsAndUVs(BrushCsg.MeshObject(group, 0, Default, false));
+        }
+
         [Test]
         public void ACuttersNewMaterialGoesOnTheFacesItCarved()
         {
