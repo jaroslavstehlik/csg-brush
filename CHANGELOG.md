@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 (2026-10-16)
+
+- Fixed: clicking a scene object in front of the level selected the brush behind it instead. A click selects a brush
+  only when the level is the nearest thing under the mouse, so meshes, colliders and other objects can be clicked as
+  usual, and brushes too.
+
 ## 0.4.0 (2026-10-03)
 
 - Extrude is in the Brushes overlay: the Extrude toggle shows the distance and faces settings under it and outlines the

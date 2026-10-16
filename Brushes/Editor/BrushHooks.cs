@@ -158,7 +158,8 @@ namespace CsgBrush.Editor
         /// <summary>
         /// Outside edit mode: clicking a brush's surface selects the brush. Unity's own picking would hit the generated
         /// mesh, which belongs to the model and cannot tell which brush was meant, so brushes are picked here by
-        /// their own geometry (subtractive ones only while cuts are shown).
+        /// their own geometry (subtractive ones only while cuts are shown). Only when the level is what the click hits:
+        /// a scene object in front of it is left to Unity's picking.
         /// Also draws the concave feedback for selected Custom shapes with the normal tools.
         /// </summary>
         static void OnSceneGUI(SceneView view)
@@ -178,13 +179,42 @@ namespace CsgBrush.Editor
             if (e.type != EventType.MouseUp || e.button != 0 || !s_MouseDownValid) return;
             s_MouseDownValid = false;
             if (GUIUtility.hotControl != 0 || (e.mousePosition - s_MouseDown).sqrMagnitude > 16f) return; // a drag or a gizmo
-            var hit = PickBrush(e.mousePosition);
+            var hit = PickBrushSurface(e.mousePosition, out var hitPoint, out _);
             if (hit == null) return; // let Unity handle empty space and other objects
+            if (OtherObjectInFront(e.mousePosition, hit, hitPoint)) return; // Unity selects it as usual
             var picked = BrushGenerators.SelectionTarget(hit);
             if (e.shift) { var list = new List<Object>(Selection.objects); if (!list.Contains(picked)) list.Add(picked); Selection.objects = list.ToArray(); }
             else if (e.control || e.command) { var list = new List<Object>(Selection.objects); if (!list.Remove(picked)) list.Add(picked); Selection.objects = list.ToArray(); }
             else Selection.activeGameObject = picked;
             e.Use();
+        }
+
+        /// <summary>
+        /// Does a scene object other than the level cover the brush under the mouse? Unity's own picking finds the
+        /// frontmost object by depth: when that is a group's generated mesh (or a brush), the level is in front and the
+        /// brush is meant. Cuts are drawn over the scene, not into its depth, so a cut wins only when it is nearer than
+        /// the other object's bounds.
+        /// </summary>
+        static bool OtherObjectInFront(Vector2 mouse, Brush hit, Vector3 hitPoint)
+        {
+            var front = HandleUtility.PickGameObject(mouse, false);
+            if (front == null || IsLevelObject(front)) return false;
+            if (hit.operation != BrushOperation.Subtract) return true;
+            var ray = HandleUtility.GUIPointToWorldRay(mouse);
+            float brushDistance = (hitPoint - ray.origin).magnitude;
+            bool any = false; var bounds = default(Bounds);
+            foreach (var r in front.GetComponentsInChildren<Renderer>()) { if (any) bounds.Encapsulate(r.bounds); else { bounds = r.bounds; any = true; } }
+            return !any || !bounds.IntersectRay(ray, out float objectDistance) || objectDistance <= brushDistance;
+        }
+
+        /// <summary>A brush, a generated piece of one, or a group's generated mesh or colliders: what clicking the level hits.</summary>
+        static bool IsLevelObject(GameObject go)
+        {
+            var t = go.transform;
+            if (t.TryGetComponent<Brush>(out _)) return true;
+            if (t.parent != null && Brush.IsGeneratedChildName(t.name) && t.parent.TryGetComponent<Brush>(out _)) return true;
+            // a group's mesh child, its collider container or a collider piece in it; other children are scene objects
+            return BrushSync.IsGenerated(t) || (t.parent != null && BrushSync.IsGenerated(t.parent));
         }
 
         /// <summary>
