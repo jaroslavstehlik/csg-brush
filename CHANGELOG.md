@@ -2,7 +2,9 @@
 
 ## 0.5.0 (unreleased)
 
-- Shape handles: a selected brush shows dots that change its shape directly, alongside the Move, Rotate or Scale tool,
+- Shape handles: the sides of a selected brush that face the camera, and its points (an apex, a radius, a step), change
+  its shape directly. A side lights up under the pointer and is grabbed anywhere on it, and a plain click still
+  selects. Unity's own tool handles always take the drag first. Shape handles were first drawn as dots, alongside the Move, Rotate or Scale tool,
   and it stays the shape it is. Every shape has them: a box's sides, a wedge's start, end, height and width, a
   cylinder's or cone's top, bottom and radius, a sphere's poles, a stair's step height, an arch's thickness, and curved
   and spiral stairs' radius, width, height and angle. Shift drags both sides. Sizes follow the grid. One drag is one

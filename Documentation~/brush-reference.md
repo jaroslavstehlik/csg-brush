@@ -44,24 +44,26 @@ The **Scale** tool also resizes the brush. When you release it, the scale goes i
 
 ### Shape handles
 
-A selected brush shows small dots on its shape: drag one to change that part of the shape directly. The dots stay with whichever tool is active, so you can move or rotate the brush and change its shape without switching tools. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
+A selected brush's shape can be changed directly in the Scene view: drag one of its sides, or one of its points, such as a cone's apex or a cylinder's radius. The handles stay with whichever tool is active, so you can move or rotate the brush and change its shape without switching tools. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
 
-| **Shape** | **Handles** |
-| :--- | :--- |
-| Box | One on each side: drag a side out or in. The opposite side stays where it is. |
-| Wedge | The low end (start), the high end, the height on the high edge, the bottom, and each side. |
-| Cylinder | The top, the bottom, and the radius on the rim. A round cylinder stays round; an oval one changes the diameter you drag. |
-| Cone | The apex, the bottom, and the radius on the base. |
-| Sphere | One on each pole: the diameter about its centre. A round sphere stays round. |
-| Linear stairs | Each side, the start, the end, the height on the top step, and the first step's top for the step height. |
-| Arch | Each foot (the width), the top, the front and back, and the inner crown for the thickness. |
-| Curved stairs | The column's radius, the steps' width, the height, and the end of the stairs for the angle they cover. |
-| Spiral stairs | The column's radius, the steps' width, and the height: more height is more steps. |
-| Door, window | Each side, the top, and the bottom. |
+Only the sides turned towards you are handles. A side shows a faint outline, and lights up when the pointer is on it; drag it anywhere to move it out or in, and the opposite side stays where it is. A plain click on a side still selects, as usual: a side only starts moving after a short drag. Where a part of the shape is a point, such as an apex, a radius on a rim, or the top of the first step, it's a dot instead.
 
-While you drag, the dot shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo. With several brushes selected, dragging a handle changes the same handle on all of them.
+| **Shape** | **Sides** | **Points** |
+| :--- | :--- | :--- |
+| Box | Every side. | |
+| Wedge | The high end, the bottom, and the two triangular sides. | The low end (start) and the height on the high edge. |
+| Cylinder | The top and the bottom. | The radius on the rim. A round cylinder stays round; an oval one changes the diameter you drag. |
+| Cone | The bottom. | The apex, and the radius on the base. |
+| Sphere | | One on each pole: the diameter about its centre. A round sphere stays round. |
+| Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. | The first step's top: the step height. |
+| Arch | The front and the back. | The feet (the width), the crown (the height), and the inner crown (the thickness). |
+| Curved stairs | | The column's radius, the steps' width, the height, and the end of the stairs (the angle they cover). |
+| Spiral stairs | | The column's radius, the steps' width, and the height: more height is more steps. |
+| Door, window | The sides, the top, and the bottom. | |
 
-To show or hide the dots, use **Shape** in the **Brushes** overlay, or press **B** in the Scene view. A dot that would sit on the Move or Rotate gizmo moves aside onto its face, so both stay easy to grab.
+Unity's own Move, Rotate, and Scale handles always come first: where one of them is under the pointer, it takes the drag. While you drag, the handle shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo. With several brushes selected, dragging a handle changes the same handle on all of them.
+
+To show or hide the handles, use **Shape** in the **Brushes** overlay, or press **B** in the Scene view.
 
 ### Grid snapping
 

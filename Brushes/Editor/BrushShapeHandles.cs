@@ -6,22 +6,32 @@ using UnityEngine;
 namespace CsgBrush.Editor
 {
     /// <summary>
-    /// Shape handles: dots on a selected procedural brush that change its shape directly in the Scene view, alongside
-    /// whichever tool is active (Move, Rotate, Scale), as Godot does for its CSG shapes. Drag a box's side and it
-    /// extends while the opposite side stays; drag a cylinder's rim and its radius changes; drag a stair's first step and
-    /// its step height changes. The brush stays the shape it is (unlike the Edit Brush mode, which makes it Custom).
-    /// Shift drags both sides at once. Values follow the brush's snapping. Each drag is one undo step; with several
-    /// brushes selected, the same handle changes all of them.
+    /// Shape handles: a selected procedural brush's flat sides and its points (an apex, a radius, a step) change its
+    /// shape directly in the Scene view, alongside whichever tool is active (Move, Rotate, Scale), as Godot does for its
+    /// CSG shapes and TrenchBroom for its brushes. Drag a box's side and it extends while the opposite side stays; drag a
+    /// cylinder's rim and its radius changes; drag a stair's first step and its step height changes. The brush stays the
+    /// shape it is (unlike the Edit Brush mode, which makes it Custom).
+    ///
+    /// Only sides turned towards the camera are shown; a side lights up under the pointer and is grabbed anywhere on it.
+    /// Unity's own tool handles always win: ours take a press only where none of theirs is under the pointer, and a side
+    /// starts resizing only after a short drag, so a plain click still selects. Shift drags both sides at once. Values
+    /// follow the brush's snapping. Each drag is one undo step; with several brushes selected, the same handle changes all
+    /// of them.
     /// </summary>
     [InitializeOnLoad]
     public static class BrushShapeHandles
     {
-        /// <summary>One handle: where it sits (brush local space), the way it drags, and what a drag does.</summary>
+        /// <summary>
+        /// One handle: where it sits (brush local space), the way it drags, and what a drag does. A side has
+        /// <see cref="faces"/> (convex polygons, local space) and drags along its outward normal; a point has none.
+        /// </summary>
         public struct Handle
         {
             public string id;
             public Vector3 local;
             public Vector3 direction;
+            public Vector3[][] faces;
+            public bool IsFace => faces != null && faces.Length > 0;
             /// <summary>Apply a drag of <c>distance</c> metres along the direction to a brush, from its state at the drag's start.</summary>
             public System.Action<Brush, State, float, bool, bool> apply;
             /// <summary>What the handle shows while dragged.</summary>
@@ -68,8 +78,13 @@ namespace CsgBrush.Editor
             if (b == null || b.IsGenerated || b.shape == BrushShape.Custom) return list;
             Vector3 size = b.ClampedSize, shift = b.PivotShift;
             Vector3 min = shift - size * 0.5f, max = shift + size * 0.5f, c = shift;
-            void Face(string id, Vector3 local, int axis, int side) =>
-                list.Add(new Handle { id = id, local = local, direction = Axis(axis) * side, apply = (br, st, d, sym, snap) => ResizeBox(br, st, axis, side, d, sym, snap), label = br => Length(br.size[axis]) });
+            // a side of the box (or part of one): drags its plane along its outward normal
+            void Side(string id, Vector3 local, int axis, int side, params Vector3[][] polygons) =>
+                list.Add(new Handle { id = id, local = local, direction = Axis(axis) * side, faces = polygons, apply = (br, st, d, sym, snap) => ResizeBox(br, st, axis, side, d, sym, snap), label = br => Length(br.size[axis]) });
+            // the whole side of the box on this axis and side
+            void Face(string id, Vector3 local, int axis, int side) => Side(id, local, axis, side, BoxSide(min, max, axis, side));
+            // an edge or corner of the shape that resizes the box: a point
+            void Point(string id, Vector3 local, int axis, int side) => Side(id, local, axis, side);
             void Round(string id, Vector3 local, int axis, int side) =>
                 list.Add(new Handle { id = id, local = local, direction = Axis(axis) * side, apply = (br, st, d, sym, snap) => ResizeRound(br, st, axis, side, d, snap), label = br => "⌀ " + Length(br.size[axis]) });
             switch (b.shape)
@@ -83,17 +98,22 @@ namespace CsgBrush.Editor
                     break;
                 case BrushShape.Wedge: // a ramp rising towards +z
                     Face("+z", new Vector3(c.x, c.y, max.z), 2, 1);                                   // the high end
-                    Face("-z", new Vector3(c.x, min.y, min.z), 2, -1);                                // the low end (start)
-                    Face("+y", new Vector3(c.x, max.y, max.z), 1, 1);                                 // height, on the high edge
+                    Point("-z", new Vector3(c.x, min.y, min.z), 2, -1);                               // the low end (start): an edge
+                    Point("+y", new Vector3(c.x, max.y, max.z), 1, 1);                                // height, on the high edge
                     Face("-y", new Vector3(c.x, min.y, c.z), 1, -1);
                     float wy = min.y + size.y / 3f, wz = max.z - size.z / 3f;                          // the side caps' middles
-                    Face("+x", new Vector3(max.x, wy, wz), 0, 1); Face("-x", new Vector3(min.x, wy, wz), 0, -1);
+                    for (int sx = -1; sx <= 1; sx += 2)
+                    {
+                        float x = sx > 0 ? max.x : min.x;
+                        Side(sx > 0 ? "+x" : "-x", new Vector3(x, wy, wz), 0, sx, new[] { new Vector3(x, min.y, min.z), new Vector3(x, min.y, max.z), new Vector3(x, max.y, max.z) });
+                    }
                     break;
                 case BrushShape.Cylinder:
                 case BrushShape.Cone:
                     bool cone = b.shape == BrushShape.Cone;
-                    Face("+y", new Vector3(c.x, max.y, c.z), 1, 1);                                   // top cap, or the apex
-                    Face("-y", new Vector3(c.x, min.y, c.z), 1, -1);
+                    if (cone) Point("+y", new Vector3(c.x, max.y, c.z), 1, 1);                       // the apex
+                    else Side("+y", new Vector3(c.x, max.y, c.z), 1, 1, Disc(c, size, max.y));       // the top cap
+                    Side("-y", new Vector3(c.x, min.y, c.z), 1, -1, Disc(c, size, min.y));
                     float ry = cone ? min.y : c.y;                                                     // a cone's radius is its base's
                     Round("+x", new Vector3(max.x, ry, c.z), 0, 1); Round("-x", new Vector3(min.x, ry, c.z), 0, -1);
                     Round("+z", new Vector3(c.x, ry, max.z), 2, 1); Round("-z", new Vector3(c.x, ry, min.z), 2, -1);
@@ -108,11 +128,18 @@ namespace CsgBrush.Editor
                 case BrushShape.Stairs: // climbing towards +z
                     int steps = BrushPolyhedron.StepCount(size.y, b.stepHeight);
                     float rise = size.y / steps, run = size.z / steps;
-                    Face("+z", new Vector3(c.x, c.y, max.z), 2, 1);
-                    Face("-z", new Vector3(c.x, min.y + rise * 0.5f, min.z), 2, -1);
-                    Face("+y", new Vector3(c.x, max.y, max.z - run * 0.5f), 1, 1);
+                    Face("+z", new Vector3(c.x, c.y, max.z), 2, 1);                                   // the back wall
+                    Side("-z", new Vector3(c.x, min.y + rise * 0.5f, min.z), 2, -1, Rect(min.x, max.x, min.y, min.y + rise, min.z, 2)); // the first riser
+                    Side("+y", new Vector3(c.x, max.y, max.z - run * 0.5f), 1, 1, Rect(min.x, max.x, max.z - run, max.z, max.y, 1)); // the top tread
                     Face("-y", new Vector3(c.x, min.y, c.z), 1, -1);
-                    Face("+x", new Vector3(max.x, c.y, c.z), 0, 1); Face("-x", new Vector3(min.x, c.y, c.z), 0, -1);
+                    for (int sx = -1; sx <= 1; sx += 2)                                               // the stepped sides, a column per step
+                    {
+                        float x = sx > 0 ? max.x : min.x;
+                        var columns = new Vector3[steps][];
+                        for (int k = 0; k < steps; k++)
+                            columns[k] = Rect(min.z + run * k, min.z + run * (k + 1), min.y, min.y + rise * (k + 1), x, 0);
+                        Side(sx > 0 ? "+x" : "-x", new Vector3(x, c.y, c.z), 0, sx, columns);
+                    }
                     list.Add(new Handle
                     {
                         id = "step", local = new Vector3(c.x - size.x * 0.25f, min.y + rise, min.z + run * 0.5f), direction = Vector3.up,
@@ -121,9 +148,10 @@ namespace CsgBrush.Editor
                     });
                     break;
                 case BrushShape.Arch: // the ring between an outer ellipse and one a thickness in, on the box's floor
-                    Face("+x", new Vector3(max.x, min.y, c.z), 0, 1); Face("-x", new Vector3(min.x, min.y, c.z), 0, -1);
-                    Face("+y", new Vector3(c.x, max.y, c.z), 1, 1);
-                    Face("+z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, max.z), 2, 1); Face("-z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, min.z), 2, -1);
+                    Point("+x", new Vector3(max.x, min.y, c.z), 0, 1); Point("-x", new Vector3(min.x, min.y, c.z), 0, -1); // the feet
+                    Point("+y", new Vector3(c.x, max.y, c.z), 1, 1);                                  // the crown
+                    Side("+z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, max.z), 2, 1, Ring(b, min, max, max.z));
+                    Side("-z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, min.z), 2, -1, Ring(b, min, max, min.z));
                     list.Add(new Handle
                     {
                         id = "thickness", local = new Vector3(c.x, max.y - b.wallThickness, c.z), direction = Vector3.down,
@@ -193,6 +221,59 @@ namespace CsgBrush.Editor
         }
 
         static Vector3 Axis(int axis) => axis == 0 ? Vector3.right : axis == 1 ? Vector3.up : Vector3.forward;
+
+        /// <summary>The side of the box [min, max] on <paramref name="axis"/> and <paramref name="side"/>, as one rectangle.</summary>
+        static Vector3[] BoxSide(Vector3 min, Vector3 max, int axis, int side)
+        {
+            float at = side > 0 ? max[axis] : min[axis];
+            int u = (axis + 1) % 3, v = (axis + 2) % 3;
+            Vector3 P(float a, float b) { var p = Vector3.zero; p[axis] = at; p[u] = a; p[v] = b; return p; }
+            return new[] { P(min[u], min[v]), P(max[u], min[v]), P(max[u], max[v]), P(min[u], max[v]) };
+        }
+
+        /// <summary>A rectangle in the plane where <paramref name="axis"/> is <paramref name="at"/>, spanning the other two axes in order.</summary>
+        static Vector3[] Rect(float a0, float a1, float b0, float b1, float at, int axis)
+        {
+            Vector3 P(float a, float b)
+            {
+                if (axis == 0) return new Vector3(at, b, a);      // across z (a) and y (b)
+                if (axis == 1) return new Vector3(a, at, b);      // across x (a) and z (b)
+                return new Vector3(a, b, at);                     // across x (a) and y (b)
+            }
+            return new[] { P(a0, b0), P(a1, b0), P(a1, b1), P(a0, b1) };
+        }
+
+        /// <summary>A cylinder's or cone's cap at height <paramref name="y"/>: an ellipse of the box's width and depth.</summary>
+        static Vector3[] Disc(Vector3 centre, Vector3 size, float y)
+        {
+            const int n = 32;
+            var points = new Vector3[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i * Mathf.PI * 2f / n;
+                points[i] = new Vector3(centre.x + Mathf.Cos(t) * size.x * 0.5f, y, centre.z + Mathf.Sin(t) * size.z * 0.5f);
+            }
+            return points;
+        }
+
+        /// <summary>An arch's front or back at depth <paramref name="z"/>: one quad per segment of its ring.</summary>
+        static Vector3[][] Ring(Brush b, Vector3 min, Vector3 max, float z)
+        {
+            int n = Mathf.Max(1, b.sides);
+            float a = Mathf.Max(0.001f, (max.x - min.x) * 0.5f), h = Mathf.Max(0.001f, max.y - min.y);
+            float t = Mathf.Clamp(b.wallThickness, 0.001f, Mathf.Min(a, h) - 0.0005f);
+            float angle = Mathf.Clamp(b.curveAngle, 1f, 180f) * Mathf.Deg2Rad, start = Mathf.PI * 0.5f + angle * 0.5f, step = -angle / n;
+            float cx = (min.x + max.x) * 0.5f;
+            var quads = new Vector3[n][];
+            for (int k = 0; k < n; k++)
+            {
+                float u0 = start + k * step, u1 = start + (k + 1) * step;
+                Vector3 O(float u) => new Vector3(cx + a * Mathf.Cos(u), min.y + h * Mathf.Sin(u), z);
+                Vector3 I(float u) => new Vector3(cx + (a - t) * Mathf.Cos(u), min.y + (h - t) * Mathf.Sin(u), z);
+                quads[k] = new[] { I(u0), O(u0), O(u1), I(u1) };
+            }
+            return quads;
+        }
 
         // ---- what a drag does
 
@@ -287,11 +368,24 @@ namespace CsgBrush.Editor
 
         // ---- the Scene view
 
+        /// <summary>
+        /// A handle's control reports this distance (pixels) when the pointer is on it: inside Unity's pick range, but
+        /// farther than any of Unity's own handles under the pointer, which report about zero, so theirs always win.
+        /// </summary>
+        const float YieldDistance = 4f;
+        /// <summary>A side starts resizing only after the pointer moves this far (pixels): a plain click still selects.</summary>
+        const float DragThreshold = 4f;
+        /// <summary>A side seen nearly edge-on is hidden: dragging it would be imprecise.</summary>
+        const float MinFacing = 0.15f;
+
         static readonly int s_Hash = "BrushShapeHandle".GetHashCode();
         static readonly Dictionary<Brush, State> s_Start = new Dictionary<Brush, State>();
-        static int s_ActiveControl, s_UndoGroup;
-        static string s_ActiveId;
-        static Vector3 s_StartWorld;
+        static int s_HotControl, s_UndoGroup;
+        static bool s_Dragging;
+        static string s_HotId;
+        static Brush s_HotBrush;
+        static Vector2 s_DownMouse;
+        static Vector3 s_StartWorld, s_StartDirection;
 
         static bool Showing()
         {
@@ -299,51 +393,138 @@ namespace CsgBrush.Editor
             return s.shapeHandles && !BrushEditContext.IsActive && !FloorPlanEditContext.IsActive && BrushCreateTool.Active == null && Tools.current != Tool.View;
         }
 
+        /// <summary>Is a side with this world normal and middle turned towards the camera (seen from its front, not edge-on)?</summary>
+        public static bool FacesCamera(Vector3 worldNormal, Vector3 worldMiddle, Camera camera)
+        {
+            Vector3 toCamera = camera.orthographic ? -camera.transform.forward : (camera.transform.position - worldMiddle).normalized;
+            return Vector3.Dot(worldNormal.normalized, toCamera) > MinFacing;
+        }
+
         static void OnSceneGUI(SceneView view)
         {
-            if (!Showing()) { s_Start.Clear(); return; }
+            if (!Showing()) { if (s_HotControl != 0) Release(); return; }
             var brushes = new List<Brush>();
             foreach (var go in Selection.gameObjects)
                 if (go != null && go.TryGetComponent<Brush>(out var b) && !b.IsGenerated && b.shape != BrushShape.Custom) brushes.Add(b);
             if (brushes.Count == 0 || brushes.Count > 32) return;
-            Vector3 gizmo = Tools.handlePosition;
-            bool gizmoShown = Tools.current == Tool.Move || Tools.current == Tool.Rotate || Tools.current == Tool.Scale || Tools.current == Tool.Transform;
             var e = Event.current;
             foreach (var b in brushes)
             {
                 var toWorld = b.transform.localToWorldMatrix;
                 foreach (var h in HandlesOf(b))
                 {
+                    int id = GUIUtility.GetControlID(s_Hash, FocusType.Passive); // one per handle, shown or not, so ids stay stable
                     Vector3 world = toWorld.MultiplyPoint3x4(h.local);
                     Vector3 dir = toWorld.MultiplyVector(h.direction).normalized;
-                    float size = HandleUtility.GetHandleSize(world) * 0.06f;
-                    // where it would sit on the transform gizmo, move it aside along the face; it still drags the same way
-                    if (gizmoShown && (HandleUtility.WorldToGUIPoint(world) - HandleUtility.WorldToGUIPoint(gizmo)).sqrMagnitude < 24f * 24f)
-                        world += Aside(toWorld, h.direction) * HandleUtility.GetHandleSize(world) * 0.45f;
-                    int id = GUIUtility.GetControlID(s_Hash, FocusType.Passive);
-                    bool hot = GUIUtility.hotControl == id;
-                    Handles.color = hot || HandleUtility.nearestControl == id ? Handles.selectedColor : AxisColor(h.direction);
-                    EditorGUI.BeginChangeCheck();
-                    Vector3 moved = Handles.Slider(id, world, dir, size, Handles.DotHandleCap, 0f);
-                    if (GUIUtility.hotControl == id && s_ActiveControl != id) Begin(id, h.id, world, brushes);
-                    if (EditorGUI.EndChangeCheck() && s_ActiveControl == id)
+                    bool shown = !h.IsFace || FacesCamera(dir, world, view.camera) || GUIUtility.hotControl == id;
+                    if (!shown) continue;
+                    Vector3[][] polygons = h.IsFace ? System.Array.ConvertAll(h.faces, f => System.Array.ConvertAll(f, p => toWorld.MultiplyPoint3x4(p))) : null;
+                    float dot = HandleUtility.GetHandleSize(world) * 0.05f;
+                    switch (e.GetTypeForControl(id))
                     {
-                        float distance = Vector3.Dot(moved - s_StartWorld, dir);
-                        foreach (var other in brushes)
-                            if (s_Start.TryGetValue(other, out var start)) Apply(other, start, s_ActiveId, distance, e.shift);
+                        case EventType.Layout:
+                        case EventType.MouseMove:
+                            if (Under(e.mousePosition, world, dot, polygons)) HandleUtility.AddControl(id, YieldDistance);
+                            break;
+                        case EventType.MouseDown:
+                            if (HandleUtility.nearestControl == id && e.button == 0 && !e.alt)
+                            {
+                                GUIUtility.hotControl = id;
+                                s_HotControl = id; s_HotId = h.id; s_HotBrush = b; s_Dragging = false;
+                                s_DownMouse = e.mousePosition; s_StartWorld = world; s_StartDirection = dir;
+                                if (!h.IsFace) Begin(brushes); // a point drags at once
+                                e.Use();
+                            }
+                            break;
+                        case EventType.MouseDrag:
+                            if (GUIUtility.hotControl == id)
+                            {
+                                if (!s_Dragging && h.IsFace && (e.mousePosition - s_DownMouse).sqrMagnitude < DragThreshold * DragThreshold) { e.Use(); break; }
+                                if (!s_Dragging) Begin(brushes);
+                                float distance = HandleUtility.CalcLineTranslation(s_DownMouse, e.mousePosition, s_StartWorld, s_StartDirection);
+                                foreach (var other in brushes)
+                                    if (s_Start.TryGetValue(other, out var start)) Apply(other, start, s_HotId, distance, e.shift);
+                                e.Use();
+                            }
+                            break;
+                        case EventType.MouseUp:
+                            if (GUIUtility.hotControl == id && e.button == 0)
+                            {
+                                bool click = !s_Dragging;
+                                Release();
+                                if (click) Click(e);
+                                e.Use();
+                            }
+                            break;
+                        case EventType.Repaint:
+                            Draw(id, h, world, dir, dot, polygons, b);
+                            break;
                     }
-                    if (s_ActiveControl == id && h.label != null)
-                        Handles.Label(world + dir * size * 3f, h.label(b), EditorStyles.boldLabel);
                 }
             }
-            if (s_ActiveControl != 0 && GUIUtility.hotControl != s_ActiveControl) End();
         }
 
-        static void Begin(int control, string handleId, Vector3 world, List<Brush> brushes)
+        /// <summary>Is the pointer on this handle: inside one of its polygons, or on its dot?</summary>
+        static bool Under(Vector2 mouse, Vector3 world, float dot, Vector3[][] polygons)
         {
-            s_ActiveControl = control;
-            s_ActiveId = handleId;
-            s_StartWorld = world;
+            if (polygons == null)
+                return (HandleUtility.WorldToGUIPoint(world) - mouse).magnitude <= Mathf.Max(6f, dot / Mathf.Max(1e-5f, HandleUtility.GetHandleSize(world)) * 80f);
+            foreach (var polygon in polygons)
+                if (Inside(mouse, polygon)) return true;
+            return false;
+        }
+
+        /// <summary>Point in a convex polygon projected to the screen: the same side of every edge.</summary>
+        static bool Inside(Vector2 mouse, Vector3[] polygon)
+        {
+            int sign = 0;
+            for (int i = 0; i < polygon.Length; i++)
+            {
+                Vector2 a = HandleUtility.WorldToGUIPoint(polygon[i]), b = HandleUtility.WorldToGUIPoint(polygon[(i + 1) % polygon.Length]);
+                float cross = (b.x - a.x) * (mouse.y - a.y) - (b.y - a.y) * (mouse.x - a.x);
+                if (Mathf.Abs(cross) < 1e-6f) continue;
+                int s = cross > 0f ? 1 : -1;
+                if (sign == 0) sign = s;
+                else if (s != sign) return false;
+            }
+            return sign != 0;
+        }
+
+        static void Draw(int id, Handle h, Vector3 world, Vector3 dir, float dot, Vector3[][] polygons, Brush b)
+        {
+            bool hot = GUIUtility.hotControl == id, hover = !hot && GUIUtility.hotControl == 0 && HandleUtility.nearestControl == id;
+            Color colour = AxisColor(h.direction);
+            if (polygons != null)
+            {
+                // a side: a faint outline until the pointer is on it, then the whole side lights up
+                bool lit = hover || hot;
+                var fill = colour; fill.a = hot ? 0.35f : 0.22f;
+                var line = colour; line.a = lit ? 0.9f : 0.25f;
+                foreach (var polygon in polygons)
+                {
+                    if (lit)
+                    {
+                        Handles.color = fill;
+                        Handles.DrawAAConvexPolygon(polygon);
+                    }
+                    Handles.color = line;
+                    var loop = new Vector3[polygon.Length + 1];
+                    polygon.CopyTo(loop, 0); loop[polygon.Length] = polygon[0];
+                    Handles.DrawAAPolyLine(lit ? 2f : 1f, loop);
+                }
+            }
+            else
+            {
+                Handles.color = hot || hover ? Handles.selectedColor : colour;
+                Handles.DotHandleCap(id, world, Quaternion.identity, dot, EventType.Repaint);
+            }
+            if (hot && s_Dragging && h.label != null && b == s_HotBrush)
+                Handles.Label(world + dir * HandleUtility.GetHandleSize(world) * 0.2f, h.label(b), EditorStyles.boldLabel);
+        }
+
+        static void Begin(List<Brush> brushes)
+        {
+            s_Dragging = true;
             s_Start.Clear();
             foreach (var b in brushes) s_Start[b] = State.Of(b);
             Undo.IncrementCurrentGroup();
@@ -351,19 +532,27 @@ namespace CsgBrush.Editor
             s_UndoGroup = Undo.GetCurrentGroup();
         }
 
-        static void End()
+        static void Release()
         {
-            Undo.CollapseUndoOperations(s_UndoGroup);
-            s_ActiveControl = 0;
-            s_ActiveId = null;
+            if (s_Dragging) Undo.CollapseUndoOperations(s_UndoGroup);
+            if (GUIUtility.hotControl == s_HotControl) GUIUtility.hotControl = 0;
+            s_HotControl = 0; s_HotId = null; s_HotBrush = null; s_Dragging = false;
             s_Start.Clear();
         }
 
-        /// <summary>A direction across the handle's face, to move it aside from the transform gizmo.</summary>
-        static Vector3 Aside(Matrix4x4 toWorld, Vector3 localDirection)
+        /// <summary>A press on a side that never became a drag is a click: select what is under the pointer, as Unity would.</summary>
+        static void Click(Event e)
         {
-            Vector3 across = Mathf.Abs(localDirection.x) < 0.5f ? Vector3.right : Vector3.forward;
-            return toWorld.MultiplyVector(across).normalized;
+            Brush brush = BrushHooks.PickBrushSurface(e.mousePosition, out _, out _);
+            GameObject picked = brush != null ? brush.gameObject : HandleUtility.PickGameObject(e.mousePosition, false);
+            if (e.shift || EditorGUI.actionKey)
+            {
+                if (picked == null) return;
+                var selection = new List<Object>(Selection.objects);
+                if (!selection.Remove(picked)) selection.Add(picked);
+                Selection.objects = selection.ToArray();
+            }
+            else Selection.activeGameObject = picked;
         }
 
         static Color AxisColor(Vector3 localDirection)

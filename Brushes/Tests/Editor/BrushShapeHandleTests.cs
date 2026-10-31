@@ -169,6 +169,41 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void SidesAreFacesAndPointsArePoints()
+        {
+            bool Face(Brush b, string id) => BrushShapeHandles.HandlesOf(b).Find(h => h.id == id).IsFace;
+            Brush box = Make(BrushShape.Box, new Vector3(2f, 2f, 2f), Vector3.zero);
+            foreach (var h in BrushShapeHandles.HandlesOf(box)) Assert.IsTrue(h.IsFace, "a box's handles are its sides: " + h.id);
+            Brush cone = Make(BrushShape.Cone, new Vector3(2f, 2f, 2f), new Vector3(5f, 0f, 0f));
+            Assert.IsFalse(Face(cone, "+y"), "a cone's apex is a point");
+            Assert.IsTrue(Face(cone, "-y"), "its base is a side");
+            Assert.IsFalse(Face(cone, "+x"), "its radius is a point on the rim");
+            Brush wedge = Make(BrushShape.Wedge, new Vector3(2f, 2f, 2f), new Vector3(10f, 0f, 0f));
+            Assert.IsFalse(Face(wedge, "-z"), "a wedge's low end is an edge");
+            Assert.IsTrue(Face(wedge, "+z"), "its high end is a side");
+            Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 2f, 4f), new Vector3(15f, 0f, 0f));
+            Assert.IsFalse(Face(stairs, "step"), "the step height is a point");
+            Assert.IsTrue(Face(stairs, "+x"), "a stair's side is its stepped side");
+        }
+
+        [Test]
+        public void OnlySidesTurnedTowardsTheCameraAreShown()
+        {
+            var camera = new GameObject("Camera").AddComponent<Camera>();
+            camera.transform.position = new Vector3(5f, 5f, 5f);
+            camera.transform.LookAt(Vector3.zero);
+            Brush box = Make(BrushShape.Box, new Vector3(2f, 2f, 2f), Vector3.zero);
+            var shown = new System.Collections.Generic.List<string>();
+            foreach (var h in BrushShapeHandles.HandlesOf(box))
+                if (BrushShapeHandles.FacesCamera(box.transform.TransformDirection(h.direction), box.transform.TransformPoint(h.local), camera)) shown.Add(h.id);
+            shown.Sort();
+            Assert.AreEqual("+x,+y,+z", string.Join(",", shown), "seen from above, right and front");
+            camera.transform.position = new Vector3(10f, 0.1f, 0f);
+            camera.transform.LookAt(Vector3.zero);
+            Assert.IsFalse(BrushShapeHandles.FacesCamera(Vector3.up, new Vector3(0f, 1f, 0f), camera), "the top seen edge-on is hidden");
+        }
+
+        [Test]
         public void EveryShapeHasHandlesExceptCustom()
         {
             foreach (BrushShape shape in System.Enum.GetValues(typeof(BrushShape)))
