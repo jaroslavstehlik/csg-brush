@@ -2,13 +2,15 @@
 
 ## 0.5.0 (unreleased)
 
-- Shape handles: the sides of a selected brush that face the camera, and its points (an apex, a radius, a step), change
-  its shape directly. A side lights up under the pointer and is grabbed anywhere on it, and a plain click still
-  selects. Unity's own tool handles always take the drag first. Shape handles were first drawn as dots, alongside the Move, Rotate or Scale tool,
-  and it stays the shape it is. Every shape has them: a box's sides, a wedge's start, end, height and width, a
-  cylinder's or cone's top, bottom and radius, a sphere's poles, a stair's step height, an arch's thickness, and curved
-  and spiral stairs' radius, width, height and angle. Shift drags both sides. Sizes follow the grid. One drag is one
-  undo step, and it changes all selected brushes. Toggle them with **Shape** in the Brushes overlay or **B**.
+- Shape handles change a selected brush's shape directly, alongside the Move, Rotate or Scale tool, and the brush stays
+  the shape it is:
+  - Sides turned towards the camera are handles: a side lights up under the pointer and is grabbed anywhere on it.
+    A plain click still selects.
+  - Real points stay dots: a cone's apex, a radius on a rim, a stair's step height, an arch's thickness, and curved and
+    spiral stairs' column, width, height and angle.
+  - Unity's own tool handles always take the drag first.
+  - Shift drags both sides. Sizes follow the grid. One drag is one undo step, and it changes all selected brushes.
+  - Toggle them with **Shape** in the Brushes overlay or **B**.
 - Build levels from scripts (new manual page):
   - `BrushApi.CreateBox(min, max)` places a box exactly between two corners.
   - `BrushApi.Create` takes `snap`. The new **Grid snap** value **Off** keeps a brush exactly where it was placed.
