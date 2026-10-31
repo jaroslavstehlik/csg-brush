@@ -54,7 +54,7 @@ Only the sides turned towards you are handles. A side shows a faint outline, and
 | Wedge | The diagonal face, the high end, the bottom, and the two triangular sides. Pushing the diagonal face makes the ramp longer and taller at the same steepness; its length snaps and its height follows. | The low end (start) and the high top edge (height). | |
 | Cylinder | The top and the bottom, and the round side: the radius. Only the part of the round side facing you lights up; drag it out or in, away from the axis. A round cylinder stays round; an oval one keeps its proportions. | | |
 | Cone | The bottom, and the sloped side: the radius of the base. | | The apex. |
-| Sphere | | | One on each pole: the diameter about its centre. A round sphere stays round. |
+| Sphere | The surface: the radius. Only the part facing you lights up; drag it out or in, away from the centre. A round sphere stays round; a stretched one keeps its proportions. | | |
 | Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. | The first step's front edge: the step height. | |
 | Arch | The front and the back. | The feet (the width), the crown (the height), and the inner crown (the thickness). | |
 | Curved stairs | | | The column's radius, the steps' width, the height, and the end of the stairs (the angle they cover). |

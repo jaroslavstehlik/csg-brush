@@ -6,10 +6,10 @@
   the shape it is:
   - Sides turned towards the camera are handles: a side lights up under the pointer and is grabbed anywhere on it.
     A plain click still selects. A wedge's diagonal face grows or shrinks the ramp at the same steepness;
-    a cylinder's round side and a cone's sloped side change the radius, dragged away from the axis.
+    a cylinder's round side, a cone's sloped side and a sphere's surface change the radius, dragged away from the
+    axis or centre.
   - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, a stair's first step (the step height), an arch's feet, crown and inner crown.
-  - Real points stay dots: a cone's apex, a sphere's poles, and curved and spiral stairs' column, width, height and
-    angle.
+  - Real points stay dots: a cone's apex, and curved and spiral stairs' column, width, height and angle.
   - Unity's own tool handles always take the drag first.
   - Shift drags both sides. Sizes follow the grid. One drag is one undo step, and it changes all selected brushes.
   - Toggle them with **Shape** in the Brushes overlay or **B**.

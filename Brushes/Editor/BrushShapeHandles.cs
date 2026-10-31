@@ -43,6 +43,8 @@ namespace CsgBrush.Editor
             /// turned towards the camera are shown and grabbed. Null for a flat side, whose normal is <see cref="direction"/>.
             /// </summary>
             public Vector3[] faceNormals;
+            /// <summary>A radial side drags away from <see cref="local"/> in every direction (a sphere), not only across the axis.</summary>
+            public bool fromCentre;
             /// <summary>Apply a drag of <c>distance</c> metres along the direction to a brush, from its state at the drag's start.</summary>
             public System.Action<Brush, State, float, bool, bool> apply;
             /// <summary>What the handle shows while dragged.</summary>
@@ -99,8 +101,6 @@ namespace CsgBrush.Editor
                 list.Add(new Handle { id = id, local = (a + e) * 0.5f, direction = Axis(axis) * side, edge = new[] { a, e }, apply = (br, st, d, sym, snap) => ResizeBox(br, st, axis, side, d, sym, snap), label = br => Length(br.size[axis]) });
             // a point of the shape that resizes the box
             void Point(string id, Vector3 local, int axis, int side) => Side(id, local, axis, side);
-            void Round(string id, Vector3 local, int axis, int side) =>
-                list.Add(new Handle { id = id, local = local, direction = Axis(axis) * side, apply = (br, st, d, sym, snap) => ResizeRound(br, st, axis, side, d, snap), label = br => "⌀ " + Length(br.size[axis]) });
             switch (b.shape)
             {
                 case BrushShape.Box:
@@ -146,11 +146,15 @@ namespace CsgBrush.Editor
                     });
                     break;
                 case BrushShape.Sphere:
-                    for (int axis = 0; axis < 3; axis++)
+                    // the surface: the radius, grabbed anywhere on the part facing the camera, dragged away from the centre
+                    SphereSurface(c, size, out var patches, out var patchNormals);
+                    list.Add(new Handle
                     {
-                        Vector3 plus = c, minus = c; plus[axis] = max[axis]; minus[axis] = min[axis];
-                        Round("+" + "xyz"[axis], plus, axis, 1); Round("-" + "xyz"[axis], minus, axis, -1);
-                    }
+                        id = "surface", local = c, direction = Vector3.up, faces = patches, faceNormals = patchNormals, radial = true, fromCentre = true,
+                        apply = (br, st, d, sym, snap) => ResizeSphere(br, st, d, snap),
+                        label = br => Mathf.Abs(br.size.x - br.size.y) < 1e-4f && Mathf.Abs(br.size.x - br.size.z) < 1e-4f
+                            ? "\u2300 " + Length(br.size.x) : Length(br.size.x) + " \u00d7 " + Length(br.size.y) + " \u00d7 " + Length(br.size.z),
+                    });
                     break;
                 case BrushShape.Stairs: // climbing towards +z
                     int steps = BrushPolyhedron.StepCount(size.y, b.stepHeight);
@@ -304,6 +308,43 @@ namespace CsgBrush.Editor
             }
         }
 
+        /// <summary>A sphere's surface as patches between lines of latitude and longitude, each with its outward normal.</summary>
+        static void SphereSurface(Vector3 centre, Vector3 size, out Vector3[][] patches, out Vector3[] normals)
+        {
+            const int bands = 12, slices = 24;
+            Vector3 radii = Vector3.Max(size * 0.5f, Vector3.one * 1e-4f);
+            Vector3 At(float latitude, float longitude) => centre + Vector3.Scale(radii,
+                new Vector3(Mathf.Cos(latitude) * Mathf.Cos(longitude), Mathf.Sin(latitude), Mathf.Cos(latitude) * Mathf.Sin(longitude)));
+            var list = new List<Vector3[]>(); var listNormals = new List<Vector3>();
+            for (int i = 0; i < bands; i++)
+            {
+                float la0 = -Mathf.PI * 0.5f + Mathf.PI * i / bands, la1 = -Mathf.PI * 0.5f + Mathf.PI * (i + 1) / bands;
+                for (int j = 0; j < slices; j++)
+                {
+                    float lo0 = Mathf.PI * 2f * j / slices, lo1 = Mathf.PI * 2f * (j + 1) / slices;
+                    Vector3 a = At(la0, lo0), b = At(la0, lo1), c = At(la1, lo1), d = At(la1, lo0);
+                    // at the poles two corners meet: a triangle
+                    list.Add(i == 0 ? new[] { a, c, d } : i == bands - 1 ? new[] { a, b, c } : new[] { a, b, c, d });
+                    Vector3 middle = At((la0 + la1) * 0.5f, (lo0 + lo1) * 0.5f) - centre;
+                    listNormals.Add(new Vector3(middle.x / (radii.x * radii.x), middle.y / (radii.y * radii.y), middle.z / (radii.z * radii.z)).normalized); // an ellipsoid's normal
+                }
+            }
+            patches = list.ToArray();
+            normals = listNormals.ToArray();
+        }
+
+        /// <summary>A sphere's surface dragged out by <paramref name="distance"/>: all three diameters grow alike about its centre.</summary>
+        static void ResizeSphere(Brush b, State start, float distance, bool snap)
+        {
+            Vector3 startSize = Vector3.Max(start.size, Vector3.one * 0.001f);
+            float radius = (startSize.x + startSize.y + startSize.z) / 6f;
+            float scale = Mathf.Max(0.001f, radius + distance) / radius;
+            if (snap) scale = SnapLength(b, startSize.x * scale, true) / startSize.x;
+            Vector3 startShift = b.PivotShiftFor(startSize);
+            Vector3 centre = startShift, half = startSize * scale * 0.5f;
+            Place(b, start, centre - half, centre + half);
+        }
+
         /// <summary>A cylinder's or cone's cap at height <paramref name="y"/>: an ellipse of the box's width and depth.</summary>
         static Vector3[] Disc(Vector3 centre, Vector3 size, float y)
         {
@@ -366,32 +407,6 @@ namespace CsgBrush.Editor
             if (symmetric) { min[axis] -= grow * 0.5f; max[axis] += grow * 0.5f; }
             else if (side > 0) max[axis] += grow;
             else min[axis] -= grow;
-            Place(b, start, min, max);
-        }
-
-        /// <summary>A round shape's diameter on one axis about its centre; round stays round (both horizontal axes, or all three).</summary>
-        static void ResizeRound(Brush b, State start, int axis, int side, float distance, bool snap)
-        {
-            Vector3 startSize = Vector3.Max(start.size, Vector3.one * 0.001f);
-            float diameter = Mathf.Max(0.001f, startSize[axis] + 2f * distance);
-            if (snap) diameter = SnapLength(b, diameter, true);
-            Vector3 startShift = b.PivotShiftFor(startSize);
-            Vector3 min = startShift - startSize * 0.5f, max = startShift + startSize * 0.5f;
-            void Set(int a)
-            {
-                float centre = (min[a] + max[a]) * 0.5f;
-                min[a] = centre - diameter * 0.5f; max[a] = centre + diameter * 0.5f;
-            }
-            Set(axis);
-            if (b.shape == BrushShape.Sphere)
-            {
-                for (int a = 0; a < 3; a++) if (a != axis && Mathf.Abs(startSize[a] - startSize[axis]) < 1e-4f) Set(a);
-            }
-            else if (axis != 1)
-            {
-                int other = axis == 0 ? 2 : 0;
-                if (Mathf.Abs(startSize[other] - startSize[axis]) < 1e-4f) Set(other);
-            }
             Place(b, start, min, max);
         }
 
@@ -545,7 +560,7 @@ namespace CsgBrush.Editor
                                     {
                                         // a round side drags away from the axis, from where it was grabbed
                                         Vector3 local = toWorld.inverse.MultiplyPoint3x4(point);
-                                        Vector3 away = new Vector3(local.x - h.local.x, 0f, local.z - h.local.z);
+                                        Vector3 away = h.fromCentre ? local - h.local : new Vector3(local.x - h.local.x, 0f, local.z - h.local.z);
                                         if (away.sqrMagnitude > 1e-8f) s_StartDirection = toWorld.MultiplyVector(away).normalized;
                                     }
                                 }

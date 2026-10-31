@@ -144,11 +144,16 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ASpheresPoleChangesItsDiameterAboutItsCentre()
+        public void ASpheresSurfaceChangesItsDiameterAboutItsCentre()
         {
             Brush sphere = Make(BrushShape.Sphere, new Vector3(2f, 2f, 2f), Vector3.zero);
-            Drag(sphere, "+y", 0.5f);
+            Vector3 centre = (WorldBox(sphere).min + WorldBox(sphere).max) * 0.5f;
+            Drag(sphere, "surface", 0.5f);
             Assert.AreEqual(new Vector3(3f, 3f, 3f).ToString("F3"), sphere.size.ToString("F3"), "a round sphere stays round");
+            Near(centre, (WorldBox(sphere).min + WorldBox(sphere).max) * 0.5f, "the centre stays");
+            Brush egg = Make(BrushShape.Sphere, new Vector3(2f, 4f, 2f), new Vector3(10f, 0f, 0f));
+            Drag(egg, "surface", 0.5f);
+            Assert.AreEqual(2f, egg.size.y / egg.size.x, 1e-3f, "a stretched one keeps its proportions");
         }
 
         [Test]
@@ -209,7 +214,7 @@ namespace CsgBrush.Tests
             Brush arch = Make(BrushShape.Arch, new Vector3(4f, 3f, 1f), new Vector3(20f, 0f, 0f));
             Assert.IsTrue(Edge(arch, "thickness") && Edge(arch, "+y") && Edge(arch, "+x"), "an arch's crowns and feet are edges");
             Brush sphere = Make(BrushShape.Sphere, new Vector3(2f, 2f, 2f), new Vector3(25f, 0f, 0f));
-            Assert.IsFalse(Edge(sphere, "+y") || Face(sphere, "+y"), "a sphere's poles are points");
+            Assert.IsTrue(Face(sphere, "surface"), "a sphere's radius is its surface");
         }
 
         [Test]
@@ -237,7 +242,7 @@ namespace CsgBrush.Tests
                 Brush b = Make(shape, new Vector3(2f, 2f, 2f), Vector3.zero);
                 int count = BrushShapeHandles.HandlesOf(b).Count;
                 if (shape == BrushShape.Custom) Assert.AreEqual(0, count, "Custom shapes are edited in Edit Brush mode");
-                else Assert.Greater(count, 2, shape.ToString());
+                else Assert.Greater(count, 0, shape.ToString());
             }
         }
     }
