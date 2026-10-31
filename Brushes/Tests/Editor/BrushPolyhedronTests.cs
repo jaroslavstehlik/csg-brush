@@ -285,6 +285,23 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ABoxWhoseHullLeavesASideSplitIsStillABox([Values(0.25f, 0.75f, 1.5f, 3f)] float top)
+        {
+            // A stair step 8 m wide, 0.5 m deep, 41 m out: its hull keeps one side as two faces (7 in all), and counting
+            // faces made it a convex mesh collider, which physics queries treat less exactly than a box.
+            var step = new ConvexPolytope(new[]
+            {
+                new Vector4(0f, -1f, 0f, 0f), new Vector4(0f, 1f, 0f, -top), new Vector4(0f, 0f, -1f, 41f),
+                new Vector4(0f, 0f, 1f, -41.5f), new Vector4(-1f, 0f, 0f, -4f), new Vector4(1f, 0f, 0f, -4f),
+            });
+            Assert.IsTrue(step.IsAxisAlignedBox(out Bounds b), "bounded by axis aligned planes only");
+            Assert.AreEqual(new Vector3(8f, top, 0.5f).ToString("F3"), b.size.ToString("F3"));
+            var wedge = new ConvexPolytope(step.planes);
+            wedge.AddPlane(new Vector3(0f, 1f, 1f), new Vector3(0f, top, 41f));
+            Assert.IsFalse(wedge.IsAxisAlignedBox(out _), "a slanted cut is not a box");
+        }
+
+        [Test]
         public void StairsAreClosedAndDecomposeIntoSteps([Values(0.5f, 0.4f, 0.25f)] float stepHeight)
         {
             // 1.5 m high: 3, 4 (1.5 / 0.4 rounded) or 6 steps, each rising 1.5 / steps and running 3 / steps

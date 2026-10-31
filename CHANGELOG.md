@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: axis aligned box pieces got convex mesh colliders, instead of box colliders, whenever their hull left one
+  side split into two faces (for example stair steps away from the origin). A piece bounded only by axis aligned planes
+  now always gets a box collider. Physics treats a capsule against a convex mesh's edge less exactly than against a
+  box, so a character walking up such steps was pushed off them.
+
 ## 0.4.1 (2026-10-16)
 
 - Fixed: clicking a scene object in front of the level selected the brush behind it instead. A click selects a brush

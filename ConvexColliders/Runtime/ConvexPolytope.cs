@@ -517,12 +517,16 @@ namespace CsgBrush.Colliders
             return b;
         }
 
-        /// <summary>True when the solid is an axis aligned box; then a BoxCollider is the better collider.</summary>
+        /// <summary>
+        /// True when the solid is an axis aligned box; then a BoxCollider is the better collider. A convex solid bounded
+        /// only by axis aligned planes is a box, so the planes decide: counting faces and vertices missed boxes whose hull
+        /// left one side split in two (7 faces), which then got convex mesh colliders.
+        /// </summary>
         public bool IsAxisAlignedBox(out Bounds bounds)
         {
             bounds = default;
             if (!built) Build();
-            if (faces.Count != 6 || vertices.Count != 8) return false;
+            if (vertices.Count < 8 || faces.Count < 6) return false;
             for (int i = 0; i < planes.Count; i++)
             {
                 Vector3 n = planes[i];
@@ -531,7 +535,7 @@ namespace CsgBrush.Colliders
                 if (!axial) return false;
             }
             bounds = GetBounds();
-            return true;
+            return bounds.size.x > Epsilon && bounds.size.y > Epsilon && bounds.size.z > Epsilon;
         }
 
         /// <summary>Keep the part on the inside of the plane.</summary>
