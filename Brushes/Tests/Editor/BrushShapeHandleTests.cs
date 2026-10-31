@@ -98,6 +98,10 @@ namespace CsgBrush.Tests
             Assert.AreEqual(3f, round.size.x, 1e-4f, "diameter grew by twice the drag");
             Assert.AreEqual(3f, round.size.z, 1e-4f, "still round");
             Near(axis, (WorldBox(round).min + WorldBox(round).max) * 0.5f, "the axis stays");
+            Assert.IsTrue(BrushShapeHandles.HandlesOf(round).Exists(h => h.id == "top rim" && h.IsEdge), "the top cap's rim changes the radius too");
+            Drag(round, "top rim", 0.5f);
+            Assert.AreEqual(4f, round.size.x, 1e-4f);
+            Assert.AreEqual(4f, round.size.z, 1e-4f);
             Brush oval = Make(BrushShape.Cylinder, new Vector3(2f, 3f, 4f), new Vector3(10f, 0f, 0f));
             Drag(oval, "rim", 0.5f);
             Assert.AreEqual(4f / 3f * 2f, oval.size.x, 1e-3f, "an oval grows evenly");

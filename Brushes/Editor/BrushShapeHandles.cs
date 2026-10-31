@@ -38,6 +38,8 @@ namespace CsgBrush.Editor
             public bool IsEdge => edge != null && edge.Length > 1;
             /// <summary>A rim drags away from its axis, wherever it is grabbed: <see cref="local"/> is then the axis.</summary>
             public bool radial;
+            /// <summary>For an edge on a face (a cap's rim): the face's outward normal; hidden while that face clearly faces away.</summary>
+            public Vector3 facing;
             /// <summary>Apply a drag of <c>distance</c> metres along the direction to a brush, from its state at the drag's start.</summary>
             public System.Action<Brush, State, float, bool, bool> apply;
             /// <summary>What the handle shows while dragged.</summary>
@@ -131,13 +133,18 @@ namespace CsgBrush.Editor
                     if (cone) Point("+y", new Vector3(c.x, max.y, c.z), 1, 1);                       // the apex
                     else Side("+y", new Vector3(c.x, max.y, c.z), 1, 1, Disc(c, size, max.y));       // the top cap
                     Side("-y", new Vector3(c.x, min.y, c.z), 1, -1, Disc(c, size, min.y));
-                    float ry = cone ? min.y : c.y;                                                     // a cone's radius is its base's
-                    list.Add(new Handle                                                                // the rim: the radius, grabbed anywhere around
+                    // the rims of the caps: the radius, grabbed anywhere around (a cone has only its base's)
+                    foreach (bool top in cone ? new[] { false } : new[] { false, true })
                     {
-                        id = "rim", local = new Vector3(c.x, ry, c.z), direction = Vector3.right, edge = Disc(c, size, ry), closed = true, radial = true,
-                        apply = (br, st, d, sym, snap) => ResizeRim(br, st, d, snap),
-                        label = br => Mathf.Abs(br.size.x - br.size.z) < 1e-4f ? "\u2300 " + Length(br.size.x) : "\u2300 " + Length(br.size.x) + " \u00d7 " + Length(br.size.z),
-                    });
+                        float ry = top ? max.y : min.y;
+                        list.Add(new Handle
+                        {
+                            id = top ? "top rim" : "rim", local = new Vector3(c.x, ry, c.z), direction = Vector3.right, edge = Disc(c, size, ry), closed = true, radial = true,
+                            facing = top ? Vector3.up : Vector3.down,
+                            apply = (br, st, d, sym, snap) => ResizeRim(br, st, d, snap),
+                            label = br => Mathf.Abs(br.size.x - br.size.z) < 1e-4f ? "\u2300 " + Length(br.size.x) : "\u2300 " + Length(br.size.x) + " \u00d7 " + Length(br.size.z),
+                        });
+                    }
                     break;
                 case BrushShape.Sphere:
                     for (int axis = 0; axis < 3; axis++)
@@ -476,7 +483,9 @@ namespace CsgBrush.Editor
                     int id = GUIUtility.GetControlID(s_Hash, FocusType.Passive); // one per handle, shown or not, so ids stay stable
                     Vector3 world = toWorld.MultiplyPoint3x4(h.local);
                     Vector3 dir = toWorld.MultiplyVector(h.direction).normalized;
-                    bool shown = !h.IsFace || FacesCamera(dir, world, view.camera) || GUIUtility.hotControl == id; // points and edges always
+                    bool shown = GUIUtility.hotControl == id
+                        || (h.IsFace ? FacesCamera(dir, world, view.camera)
+                            : h.facing == Vector3.zero || !FacesCamera(-toWorld.MultiplyVector(h.facing), world, view.camera)); // points and edges unless their face is turned away
                     Vector3[] line = h.IsEdge ? System.Array.ConvertAll(h.edge, p => toWorld.MultiplyPoint3x4(p)) : null;
                     if (!shown) continue;
                     Vector3[][] polygons = h.IsFace ? System.Array.ConvertAll(h.faces, f => System.Array.ConvertAll(f, p => toWorld.MultiplyPoint3x4(p))) : null;
@@ -485,8 +494,9 @@ namespace CsgBrush.Editor
                     {
                         case EventType.Layout:
                         case EventType.MouseMove:
+                            // an edge on a face's border wins over the face (a little nearer); Unity's own handles win over both
                             if (line != null ? EdgeDistance(e.mousePosition, line, h.closed, out _) <= 6f : Under(e.mousePosition, world, dot, polygons))
-                                HandleUtility.AddControl(id, YieldDistance);
+                                HandleUtility.AddControl(id, h.IsFace ? YieldDistance : YieldDistance - 1f);
                             break;
                         case EventType.MouseDown:
                             if (HandleUtility.nearestControl == id && e.button == 0 && !e.alt)

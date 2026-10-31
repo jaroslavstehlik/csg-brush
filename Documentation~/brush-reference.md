@@ -46,13 +46,13 @@ The **Scale** tool also resizes the brush. When you release it, the scale goes i
 
 A selected brush's shape can be changed directly in the Scene view: drag one of its sides, or one of its points, such as a cone's apex or a cylinder's radius. The handles stay with whichever tool is active, so you can move or rotate the brush and change its shape without switching tools. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
 
-Only the sides turned towards you are handles. A side shows a faint outline, and lights up when the pointer is on it; drag it anywhere to move it out or in, and the opposite side stays where it is. A plain click on a side still selects, as usual: a side only starts moving after a short drag. Where a part of the shape is an edge, such as a wedge's low end or a cylinder's rim, it's a line you grab anywhere along; where it's a point, such as a cone's apex, it's a dot.
+Only the sides turned towards you are handles. A side shows a faint outline, and lights up when the pointer is on it; drag it anywhere to move it out or in, and the opposite side stays where it is. A plain click on a side still selects, as usual: a side only starts moving after a short drag. Where a part of the shape is an edge, such as a wedge's low end or a cylinder's rim, it's a line you grab anywhere along; where it's a point, such as a cone's apex, it's a dot. Where an edge runs along the border of a side, the edge takes the drag.
 
 | **Shape** | **Sides** | **Edges** | **Points** |
 | :--- | :--- | :--- | :--- |
 | Box | Every side. | | |
 | Wedge | The diagonal face, the high end, the bottom, and the two triangular sides. Pushing the diagonal face makes the ramp longer and taller at the same steepness; its length snaps and its height follows. | The low end (start) and the high top edge (height). | |
-| Cylinder | The top and the bottom. | The rim: the radius. A round cylinder stays round; an oval one keeps its proportions. | |
+| Cylinder | The top and the bottom. | The rims of the top and the bottom: the radius. A round cylinder stays round; an oval one keeps its proportions. A rim on a face turned away from you is hidden. | |
 | Cone | The bottom. | The rim of the base: the radius. | The apex. |
 | Sphere | | | One on each pole: the diameter about its centre. A round sphere stays round. |
 | Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. | The first step's front edge: the step height. | |
