@@ -38,8 +38,11 @@ namespace CsgBrush.Editor
             public bool IsEdge => edge != null && edge.Length > 1;
             /// <summary>A rim drags away from its axis, wherever it is grabbed: <see cref="local"/> is then the axis.</summary>
             public bool radial;
-            /// <summary>For an edge on a face (a cap's rim): the face's outward normal; hidden while that face clearly faces away.</summary>
-            public Vector3 facing;
+            /// <summary>
+            /// For a curved side (a cylinder's or cone's): each polygon's outward normal, local space. Only the polygons
+            /// turned towards the camera are shown and grabbed. Null for a flat side, whose normal is <see cref="direction"/>.
+            /// </summary>
+            public Vector3[] faceNormals;
             /// <summary>Apply a drag of <c>distance</c> metres along the direction to a brush, from its state at the drag's start.</summary>
             public System.Action<Brush, State, float, bool, bool> apply;
             /// <summary>What the handle shows while dragged.</summary>
@@ -133,18 +136,14 @@ namespace CsgBrush.Editor
                     if (cone) Point("+y", new Vector3(c.x, max.y, c.z), 1, 1);                       // the apex
                     else Side("+y", new Vector3(c.x, max.y, c.z), 1, 1, Disc(c, size, max.y));       // the top cap
                     Side("-y", new Vector3(c.x, min.y, c.z), 1, -1, Disc(c, size, min.y));
-                    // the rims of the caps: the radius, grabbed anywhere around (a cone has only its base's)
-                    foreach (bool top in cone ? new[] { false } : new[] { false, true })
+                    // the round side: the radius, grabbed anywhere on the part facing the camera, dragged away from the axis
+                    RoundSide(cone, c, size, min, max, out var sidePolygons, out var sideNormals);
+                    list.Add(new Handle
                     {
-                        float ry = top ? max.y : min.y;
-                        list.Add(new Handle
-                        {
-                            id = top ? "top rim" : "rim", local = new Vector3(c.x, ry, c.z), direction = Vector3.right, edge = Disc(c, size, ry), closed = true, radial = true,
-                            facing = top ? Vector3.up : Vector3.down,
-                            apply = (br, st, d, sym, snap) => ResizeRim(br, st, d, snap),
-                            label = br => Mathf.Abs(br.size.x - br.size.z) < 1e-4f ? "\u2300 " + Length(br.size.x) : "\u2300 " + Length(br.size.x) + " \u00d7 " + Length(br.size.z),
-                        });
-                    }
+                        id = "side", local = c, direction = Vector3.right, faces = sidePolygons, faceNormals = sideNormals, radial = true,
+                        apply = (br, st, d, sym, snap) => ResizeRim(br, st, d, snap),
+                        label = br => Mathf.Abs(br.size.x - br.size.z) < 1e-4f ? "\u2300 " + Length(br.size.x) : "\u2300 " + Length(br.size.x) + " \u00d7 " + Length(br.size.z),
+                    });
                     break;
                 case BrushShape.Sphere:
                     for (int axis = 0; axis < 3; axis++)
@@ -272,6 +271,37 @@ namespace CsgBrush.Editor
                 return new Vector3(a, b, at);                     // across x (a) and y (b)
             }
             return new[] { P(a0, b0), P(a1, b0), P(a1, b1), P(a0, b1) };
+        }
+
+        /// <summary>
+        /// A cylinder's or cone's round side as strips (cylinder) or slices (cone) around its axis, each with its outward
+        /// normal, so the part facing the camera can be told from the rest.
+        /// </summary>
+        static void RoundSide(bool cone, Vector3 centre, Vector3 size, Vector3 min, Vector3 max, out Vector3[][] polygons, out Vector3[] normals)
+        {
+            const int n = 32;
+            float a = size.x * 0.5f, b = size.z * 0.5f;
+            Vector3 Rim(float t, float y) => new Vector3(centre.x + Mathf.Cos(t) * a, y, centre.z + Mathf.Sin(t) * b);
+            var apex = new Vector3(centre.x, max.y, centre.z);
+            polygons = new Vector3[n][];
+            normals = new Vector3[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t0 = i * Mathf.PI * 2f / n, t1 = (i + 1) * Mathf.PI * 2f / n, tm = (t0 + t1) * 0.5f;
+                Vector3 b0 = Rim(t0, min.y), b1 = Rim(t1, min.y);
+                Vector3 outward = new Vector3(Mathf.Cos(tm) / Mathf.Max(a, 1e-4f), 0f, Mathf.Sin(tm) / Mathf.Max(b, 1e-4f)).normalized; // an ellipse's normal
+                if (cone)
+                {
+                    polygons[i] = new[] { b0, b1, apex };
+                    Vector3 n0 = Vector3.Cross(b1 - b0, apex - b0).normalized;
+                    normals[i] = Vector3.Dot(n0, outward) < 0f ? -n0 : n0;
+                }
+                else
+                {
+                    polygons[i] = new[] { b0, b1, Rim(t1, max.y), Rim(t0, max.y) };
+                    normals[i] = outward;
+                }
+            }
         }
 
         /// <summary>A cylinder's or cone's cap at height <paramref name="y"/>: an ellipse of the box's width and depth.</summary>
@@ -483,12 +513,10 @@ namespace CsgBrush.Editor
                     int id = GUIUtility.GetControlID(s_Hash, FocusType.Passive); // one per handle, shown or not, so ids stay stable
                     Vector3 world = toWorld.MultiplyPoint3x4(h.local);
                     Vector3 dir = toWorld.MultiplyVector(h.direction).normalized;
-                    bool shown = GUIUtility.hotControl == id
-                        || (h.IsFace ? FacesCamera(dir, world, view.camera)
-                            : h.facing == Vector3.zero || !FacesCamera(-toWorld.MultiplyVector(h.facing), world, view.camera)); // points and edges unless their face is turned away
                     Vector3[] line = h.IsEdge ? System.Array.ConvertAll(h.edge, p => toWorld.MultiplyPoint3x4(p)) : null;
+                    Vector3[][] polygons = h.IsFace ? Facing(h, toWorld, dir, world, view.camera, GUIUtility.hotControl == id) : null;
+                    bool shown = GUIUtility.hotControl == id || !h.IsFace || polygons.Length > 0; // points and edges always; sides when they face the camera
                     if (!shown) continue;
-                    Vector3[][] polygons = h.IsFace ? System.Array.ConvertAll(h.faces, f => System.Array.ConvertAll(f, p => toWorld.MultiplyPoint3x4(p))) : null;
                     float dot = HandleUtility.GetHandleSize(world) * 0.05f;
                     switch (e.GetTypeForControl(id))
                     {
@@ -506,10 +534,20 @@ namespace CsgBrush.Editor
                                 s_DownMouse = e.mousePosition; s_StartWorld = world; s_StartDirection = dir;
                                 if (line != null)
                                 {
-                                    // grabbed where the pointer is along it; a rim drags away from its axis from there
+                                    // grabbed where the pointer is along it
                                     EdgeDistance(e.mousePosition, line, h.closed, out Vector3 grabbed);
                                     s_StartWorld = grabbed;
-                                    if (h.radial && (grabbed - world).sqrMagnitude > 1e-8f) s_StartDirection = (grabbed - world).normalized;
+                                }
+                                else if (polygons != null && Grabbed(e.mousePosition, polygons, out Vector3 point))
+                                {
+                                    s_StartWorld = point;
+                                    if (h.radial)
+                                    {
+                                        // a round side drags away from the axis, from where it was grabbed
+                                        Vector3 local = toWorld.inverse.MultiplyPoint3x4(point);
+                                        Vector3 away = new Vector3(local.x - h.local.x, 0f, local.z - h.local.z);
+                                        if (away.sqrMagnitude > 1e-8f) s_StartDirection = toWorld.MultiplyVector(away).normalized;
+                                    }
                                 }
                                 if (!h.IsFace) Begin(brushes); // a point or an edge drags at once
                                 e.Use();
@@ -550,6 +588,36 @@ namespace CsgBrush.Editor
                 return (HandleUtility.WorldToGUIPoint(world) - mouse).magnitude <= Mathf.Max(6f, dot / Mathf.Max(1e-5f, HandleUtility.GetHandleSize(world)) * 80f);
             foreach (var polygon in polygons)
                 if (Inside(mouse, polygon)) return true;
+            return false;
+        }
+
+        /// <summary>A side's polygons in world space that face the camera: all or none for a flat side, the near part of a curved one.</summary>
+        static Vector3[][] Facing(Handle h, Matrix4x4 toWorld, Vector3 dir, Vector3 world, Camera camera, bool held)
+        {
+            var result = new List<Vector3[]>(h.faces.Length);
+            for (int i = 0; i < h.faces.Length; i++)
+            {
+                var polygon = System.Array.ConvertAll(h.faces[i], p => toWorld.MultiplyPoint3x4(p));
+                if (h.faceNormals == null) { if (held || FacesCamera(dir, world, camera)) result.Add(polygon); continue; }
+                Vector3 middle = Vector3.zero;
+                foreach (var p in polygon) middle += p;
+                middle /= polygon.Length;
+                if (FacesCamera(toWorld.MultiplyVector(h.faceNormals[i]), middle, camera)) result.Add(polygon);
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>Where the pointer meets the side: the point under it on the polygon it is over.</summary>
+        static bool Grabbed(Vector2 mouse, Vector3[][] polygons, out Vector3 point)
+        {
+            point = default;
+            var ray = HandleUtility.GUIPointToWorldRay(mouse);
+            foreach (var polygon in polygons)
+            {
+                if (polygon.Length < 3 || !Inside(mouse, polygon)) continue;
+                var plane = new Plane(polygon[0], polygon[1], polygon[2]);
+                if (plane.Raycast(ray, out float enter)) { point = ray.GetPoint(enter); return true; }
+            }
             return false;
         }
 

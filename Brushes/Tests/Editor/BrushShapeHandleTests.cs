@@ -94,16 +94,13 @@ namespace CsgBrush.Tests
         {
             Brush round = Make(BrushShape.Cylinder, new Vector3(2f, 3f, 2f), Vector3.zero);
             Vector3 axis = (WorldBox(round).min + WorldBox(round).max) * 0.5f;
-            Drag(round, "rim", 0.5f);
+            Drag(round, "side", 0.5f);
             Assert.AreEqual(3f, round.size.x, 1e-4f, "diameter grew by twice the drag");
             Assert.AreEqual(3f, round.size.z, 1e-4f, "still round");
             Near(axis, (WorldBox(round).min + WorldBox(round).max) * 0.5f, "the axis stays");
-            Assert.IsTrue(BrushShapeHandles.HandlesOf(round).Exists(h => h.id == "top rim" && h.IsEdge), "the top cap's rim changes the radius too");
-            Drag(round, "top rim", 0.5f);
-            Assert.AreEqual(4f, round.size.x, 1e-4f);
-            Assert.AreEqual(4f, round.size.z, 1e-4f);
+            Assert.IsTrue(BrushShapeHandles.HandlesOf(round).Exists(h => h.id == "side" && h.IsFace && h.radial), "the round side is the radius");
             Brush oval = Make(BrushShape.Cylinder, new Vector3(2f, 3f, 4f), new Vector3(10f, 0f, 0f));
-            Drag(oval, "rim", 0.5f);
+            Drag(oval, "side", 0.5f);
             Assert.AreEqual(4f / 3f * 2f, oval.size.x, 1e-3f, "an oval grows evenly");
             Assert.AreEqual(4f / 3f * 4f, oval.size.z, 1e-3f, "keeping its proportions");
         }
@@ -200,7 +197,7 @@ namespace CsgBrush.Tests
             Assert.IsFalse(Face(cone, "+y"), "a cone's apex is a point");
             Assert.IsTrue(Face(cone, "-y"), "its base is a side");
             bool Edge(Brush b, string id) => BrushShapeHandles.HandlesOf(b).Find(h => h.id == id).IsEdge;
-            Assert.IsTrue(Edge(cone, "rim"), "its radius is the rim, a loop");
+            Assert.IsTrue(Face(cone, "side"), "its radius is its sloped side");
             Assert.IsFalse(Edge(cone, "+y"), "and the apex is not an edge");
             Brush wedge = Make(BrushShape.Wedge, new Vector3(2f, 2f, 2f), new Vector3(10f, 0f, 0f));
             Assert.IsTrue(Edge(wedge, "-z"), "a wedge's low end is an edge");
