@@ -32,6 +32,12 @@ namespace CsgBrush.Editor
             public Vector3 direction;
             public Vector3[][] faces;
             public bool IsFace => faces != null && faces.Length > 0;
+            /// <summary>An edge (or a closed loop, such as a rim): a polyline in local space; grabbed anywhere along it.</summary>
+            public Vector3[] edge;
+            public bool closed;
+            public bool IsEdge => edge != null && edge.Length > 1;
+            /// <summary>A rim drags away from its axis, wherever it is grabbed: <see cref="local"/> is then the axis.</summary>
+            public bool radial;
             /// <summary>Apply a drag of <c>distance</c> metres along the direction to a brush, from its state at the drag's start.</summary>
             public System.Action<Brush, State, float, bool, bool> apply;
             /// <summary>What the handle shows while dragged.</summary>
@@ -83,7 +89,10 @@ namespace CsgBrush.Editor
                 list.Add(new Handle { id = id, local = local, direction = Axis(axis) * side, faces = polygons, apply = (br, st, d, sym, snap) => ResizeBox(br, st, axis, side, d, sym, snap), label = br => Length(br.size[axis]) });
             // the whole side of the box on this axis and side
             void Face(string id, Vector3 local, int axis, int side) => Side(id, local, axis, side, BoxSide(min, max, axis, side));
-            // an edge or corner of the shape that resizes the box: a point
+            // an edge of the shape that resizes the box, grabbed anywhere along it
+            void Edge(string id, int axis, int side, Vector3 a, Vector3 e) =>
+                list.Add(new Handle { id = id, local = (a + e) * 0.5f, direction = Axis(axis) * side, edge = new[] { a, e }, apply = (br, st, d, sym, snap) => ResizeBox(br, st, axis, side, d, sym, snap), label = br => Length(br.size[axis]) });
+            // a point of the shape that resizes the box
             void Point(string id, Vector3 local, int axis, int side) => Side(id, local, axis, side);
             void Round(string id, Vector3 local, int axis, int side) =>
                 list.Add(new Handle { id = id, local = local, direction = Axis(axis) * side, apply = (br, st, d, sym, snap) => ResizeRound(br, st, axis, side, d, snap), label = br => "⌀ " + Length(br.size[axis]) });
@@ -98,8 +107,8 @@ namespace CsgBrush.Editor
                     break;
                 case BrushShape.Wedge: // a ramp rising towards +z
                     Face("+z", new Vector3(c.x, c.y, max.z), 2, 1);                                   // the high end
-                    Point("-z", new Vector3(c.x, min.y, min.z), 2, -1);                               // the low end (start): an edge
-                    Point("+y", new Vector3(c.x, max.y, max.z), 1, 1);                                // height, on the high edge
+                    Edge("-z", 2, -1, new Vector3(min.x, min.y, min.z), new Vector3(max.x, min.y, min.z)); // the low end (start)
+                    Edge("+y", 1, 1, new Vector3(min.x, max.y, max.z), new Vector3(max.x, max.y, max.z));  // the high top edge: the height
                     Face("-y", new Vector3(c.x, min.y, c.z), 1, -1);
                     float wy = min.y + size.y / 3f, wz = max.z - size.z / 3f;                          // the side caps' middles
                     for (int sx = -1; sx <= 1; sx += 2)
@@ -115,8 +124,12 @@ namespace CsgBrush.Editor
                     else Side("+y", new Vector3(c.x, max.y, c.z), 1, 1, Disc(c, size, max.y));       // the top cap
                     Side("-y", new Vector3(c.x, min.y, c.z), 1, -1, Disc(c, size, min.y));
                     float ry = cone ? min.y : c.y;                                                     // a cone's radius is its base's
-                    Round("+x", new Vector3(max.x, ry, c.z), 0, 1); Round("-x", new Vector3(min.x, ry, c.z), 0, -1);
-                    Round("+z", new Vector3(c.x, ry, max.z), 2, 1); Round("-z", new Vector3(c.x, ry, min.z), 2, -1);
+                    list.Add(new Handle                                                                // the rim: the radius, grabbed anywhere around
+                    {
+                        id = "rim", local = new Vector3(c.x, ry, c.z), direction = Vector3.right, edge = Disc(c, size, ry), closed = true, radial = true,
+                        apply = (br, st, d, sym, snap) => ResizeRim(br, st, d, snap),
+                        label = br => Mathf.Abs(br.size.x - br.size.z) < 1e-4f ? "\u2300 " + Length(br.size.x) : "\u2300 " + Length(br.size.x) + " \u00d7 " + Length(br.size.z),
+                    });
                     break;
                 case BrushShape.Sphere:
                     for (int axis = 0; axis < 3; axis++)
@@ -142,19 +155,22 @@ namespace CsgBrush.Editor
                     }
                     list.Add(new Handle
                     {
-                        id = "step", local = new Vector3(c.x - size.x * 0.25f, min.y + rise, min.z + run * 0.5f), direction = Vector3.up,
+                        id = "step", local = new Vector3(c.x, min.y + rise, min.z), direction = Vector3.up,       // the first step's front edge
+                        edge = new[] { new Vector3(min.x, min.y + rise, min.z), new Vector3(max.x, min.y + rise, min.z) },
                         apply = (br, st, d, sym, snap) => SetStepHeight(br, st, d, snap),
                         label = br => "step " + Length(br.ClampedSize.y / BrushPolyhedron.StepCount(br.ClampedSize.y, br.stepHeight)) + ", " + BrushPolyhedron.StepCount(br.ClampedSize.y, br.stepHeight) + " steps",
                     });
                     break;
                 case BrushShape.Arch: // the ring between an outer ellipse and one a thickness in, on the box's floor
-                    Point("+x", new Vector3(max.x, min.y, c.z), 0, 1); Point("-x", new Vector3(min.x, min.y, c.z), 0, -1); // the feet
-                    Point("+y", new Vector3(c.x, max.y, c.z), 1, 1);                                  // the crown
+                    Edge("+x", 0, 1, new Vector3(max.x, min.y, min.z), new Vector3(max.x, min.y, max.z));   // the feet: the width
+                    Edge("-x", 0, -1, new Vector3(min.x, min.y, min.z), new Vector3(min.x, min.y, max.z));
+                    Edge("+y", 1, 1, new Vector3(c.x, max.y, min.z), new Vector3(c.x, max.y, max.z));       // the crown: the height
                     Side("+z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, max.z), 2, 1, Ring(b, min, max, max.z));
                     Side("-z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, min.z), 2, -1, Ring(b, min, max, min.z));
                     list.Add(new Handle
                     {
-                        id = "thickness", local = new Vector3(c.x, max.y - b.wallThickness, c.z), direction = Vector3.down,
+                        id = "thickness", local = new Vector3(c.x, max.y - b.wallThickness, c.z), direction = Vector3.down, // the inner crown
+                        edge = new[] { new Vector3(c.x, max.y - b.wallThickness, min.z), new Vector3(c.x, max.y - b.wallThickness, max.z) },
                         apply = (br, st, d, sym, snap) => { br.wallThickness = Mathf.Clamp(SnapLength(br, st.wallThickness + d, snap), 0.01f, Mathf.Min(br.ClampedSize.x * 0.5f, br.ClampedSize.y) - 0.01f); },
                         label = br => "thickness " + Length(br.wallThickness),
                     });
@@ -334,6 +350,24 @@ namespace CsgBrush.Editor
             Place(b, start, min, max);
         }
 
+        /// <summary>A rim dragged out by <paramref name="distance"/>: both diameters grow alike about the axis, so round stays round and an oval keeps its proportions.</summary>
+        static void ResizeRim(Brush b, State start, float distance, bool snap)
+        {
+            Vector3 startSize = Vector3.Max(start.size, Vector3.one * 0.001f);
+            float radius = (startSize.x + startSize.z) * 0.25f;
+            float scale = Mathf.Max(0.001f, radius + distance) / radius;
+            float x = startSize.x * scale;
+            if (snap) { x = SnapLength(b, x, true); scale = x / startSize.x; }
+            Vector3 startShift = b.PivotShiftFor(startSize);
+            Vector3 min = startShift - startSize * 0.5f, max = startShift + startSize * 0.5f;
+            foreach (int a in new[] { 0, 2 })
+            {
+                float centre = (min[a] + max[a]) * 0.5f, half = startSize[a] * scale * 0.5f;
+                min[a] = centre - half; max[a] = centre + half;
+            }
+            Place(b, start, min, max);
+        }
+
         /// <summary>Give the brush the box [min, max] (local to its start pose), keeping its pivot setting: size and position.</summary>
         static void Place(Brush b, State start, Vector3 min, Vector3 max)
         {
@@ -416,7 +450,8 @@ namespace CsgBrush.Editor
                     int id = GUIUtility.GetControlID(s_Hash, FocusType.Passive); // one per handle, shown or not, so ids stay stable
                     Vector3 world = toWorld.MultiplyPoint3x4(h.local);
                     Vector3 dir = toWorld.MultiplyVector(h.direction).normalized;
-                    bool shown = !h.IsFace || FacesCamera(dir, world, view.camera) || GUIUtility.hotControl == id;
+                    bool shown = !h.IsFace || FacesCamera(dir, world, view.camera) || GUIUtility.hotControl == id; // points and edges always
+                    Vector3[] line = h.IsEdge ? System.Array.ConvertAll(h.edge, p => toWorld.MultiplyPoint3x4(p)) : null;
                     if (!shown) continue;
                     Vector3[][] polygons = h.IsFace ? System.Array.ConvertAll(h.faces, f => System.Array.ConvertAll(f, p => toWorld.MultiplyPoint3x4(p))) : null;
                     float dot = HandleUtility.GetHandleSize(world) * 0.05f;
@@ -424,7 +459,8 @@ namespace CsgBrush.Editor
                     {
                         case EventType.Layout:
                         case EventType.MouseMove:
-                            if (Under(e.mousePosition, world, dot, polygons)) HandleUtility.AddControl(id, YieldDistance);
+                            if (line != null ? EdgeDistance(e.mousePosition, line, h.closed, out _) <= 6f : Under(e.mousePosition, world, dot, polygons))
+                                HandleUtility.AddControl(id, YieldDistance);
                             break;
                         case EventType.MouseDown:
                             if (HandleUtility.nearestControl == id && e.button == 0 && !e.alt)
@@ -432,7 +468,14 @@ namespace CsgBrush.Editor
                                 GUIUtility.hotControl = id;
                                 s_HotControl = id; s_HotId = h.id; s_HotBrush = b; s_Dragging = false;
                                 s_DownMouse = e.mousePosition; s_StartWorld = world; s_StartDirection = dir;
-                                if (!h.IsFace) Begin(brushes); // a point drags at once
+                                if (line != null)
+                                {
+                                    // grabbed where the pointer is along it; a rim drags away from its axis from there
+                                    EdgeDistance(e.mousePosition, line, h.closed, out Vector3 grabbed);
+                                    s_StartWorld = grabbed;
+                                    if (h.radial && (grabbed - world).sqrMagnitude > 1e-8f) s_StartDirection = (grabbed - world).normalized;
+                                }
+                                if (!h.IsFace) Begin(brushes); // a point or an edge drags at once
                                 e.Use();
                             }
                             break;
@@ -457,7 +500,7 @@ namespace CsgBrush.Editor
                             }
                             break;
                         case EventType.Repaint:
-                            Draw(id, h, world, dir, dot, polygons, b);
+                            Draw(id, h, world, dir, dot, polygons, line, b);
                             break;
                     }
                 }
@@ -472,6 +515,24 @@ namespace CsgBrush.Editor
             foreach (var polygon in polygons)
                 if (Inside(mouse, polygon)) return true;
             return false;
+        }
+
+        /// <summary>The pointer's distance in pixels to a polyline on the screen, and the nearest point on it in the world.</summary>
+        static float EdgeDistance(Vector2 mouse, Vector3[] line, bool closed, out Vector3 nearest)
+        {
+            float best = float.MaxValue;
+            nearest = line[0];
+            int segments = closed ? line.Length : line.Length - 1;
+            for (int i = 0; i < segments; i++)
+            {
+                Vector3 a = line[i], b = line[(i + 1) % line.Length];
+                Vector2 sa = HandleUtility.WorldToGUIPoint(a), sb = HandleUtility.WorldToGUIPoint(b);
+                Vector2 ab = sb - sa;
+                float t = ab.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector2.Dot(mouse - sa, ab) / ab.sqrMagnitude) : 0f;
+                float d = (sa + ab * t - mouse).magnitude;
+                if (d < best) { best = d; nearest = Vector3.Lerp(a, b, t); }
+            }
+            return best;
         }
 
         /// <summary>Point in a convex polygon projected to the screen: the same side of every edge.</summary>
@@ -490,16 +551,26 @@ namespace CsgBrush.Editor
             return sign != 0;
         }
 
-        static void Draw(int id, Handle h, Vector3 world, Vector3 dir, float dot, Vector3[][] polygons, Brush b)
+        static void Draw(int id, Handle h, Vector3 world, Vector3 dir, float dot, Vector3[][] polygons, Vector3[] line, Brush b)
         {
             bool hot = GUIUtility.hotControl == id, hover = !hot && GUIUtility.hotControl == 0 && HandleUtility.nearestControl == id;
-            Color colour = AxisColor(h.direction);
-            if (polygons != null)
+            Color colour = h.radial ? Handles.xAxisColor : AxisColor(h.direction);
+            if (line != null)
+            {
+                // an edge: a thin line, thick and lit under the pointer
+                var points = line;
+                if (h.closed) { points = new Vector3[line.Length + 1]; line.CopyTo(points, 0); points[line.Length] = line[0]; }
+                var c = hot || hover ? Handles.selectedColor : colour;
+                if (!hot && !hover) c.a = 0.6f;
+                Handles.color = c;
+                Handles.DrawAAPolyLine(hot || hover ? 5f : 2.5f, points);
+            }
+            else if (polygons != null)
             {
                 // a side: a faint outline until the pointer is on it, then the whole side lights up
                 bool lit = hover || hot;
                 var fill = colour; fill.a = hot ? 0.35f : 0.22f;
-                var line = colour; line.a = lit ? 0.9f : 0.25f;
+                var outline = colour; outline.a = lit ? 0.9f : 0.25f;
                 foreach (var polygon in polygons)
                 {
                     if (lit)
@@ -507,7 +578,7 @@ namespace CsgBrush.Editor
                         Handles.color = fill;
                         Handles.DrawAAConvexPolygon(polygon);
                     }
-                    Handles.color = line;
+                    Handles.color = outline;
                     var loop = new Vector3[polygon.Length + 1];
                     polygon.CopyTo(loop, 0); loop[polygon.Length] = polygon[0];
                     Handles.DrawAAPolyLine(lit ? 2f : 1f, loop);

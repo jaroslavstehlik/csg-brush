@@ -90,18 +90,18 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ACylindersRimChangesItsRadiusAndKeepsItRound()
+        public void ACylindersRimChangesItsRadiusAndKeepsItsShape()
         {
             Brush round = Make(BrushShape.Cylinder, new Vector3(2f, 3f, 2f), Vector3.zero);
             Vector3 axis = (WorldBox(round).min + WorldBox(round).max) * 0.5f;
-            Drag(round, "+x", 0.5f);
+            Drag(round, "rim", 0.5f);
             Assert.AreEqual(3f, round.size.x, 1e-4f, "diameter grew by twice the drag");
             Assert.AreEqual(3f, round.size.z, 1e-4f, "still round");
             Near(axis, (WorldBox(round).min + WorldBox(round).max) * 0.5f, "the axis stays");
             Brush oval = Make(BrushShape.Cylinder, new Vector3(2f, 3f, 4f), new Vector3(10f, 0f, 0f));
-            Drag(oval, "+x", 0.5f);
-            Assert.AreEqual(3f, oval.size.x, 1e-4f);
-            Assert.AreEqual(4f, oval.size.z, 1e-4f, "an oval keeps its other diameter");
+            Drag(oval, "rim", 0.5f);
+            Assert.AreEqual(4f / 3f * 2f, oval.size.x, 1e-3f, "an oval grows evenly");
+            Assert.AreEqual(4f / 3f * 4f, oval.size.z, 1e-3f, "keeping its proportions");
         }
 
         [Test]
@@ -177,13 +177,20 @@ namespace CsgBrush.Tests
             Brush cone = Make(BrushShape.Cone, new Vector3(2f, 2f, 2f), new Vector3(5f, 0f, 0f));
             Assert.IsFalse(Face(cone, "+y"), "a cone's apex is a point");
             Assert.IsTrue(Face(cone, "-y"), "its base is a side");
-            Assert.IsFalse(Face(cone, "+x"), "its radius is a point on the rim");
+            bool Edge(Brush b, string id) => BrushShapeHandles.HandlesOf(b).Find(h => h.id == id).IsEdge;
+            Assert.IsTrue(Edge(cone, "rim"), "its radius is the rim, a loop");
+            Assert.IsFalse(Edge(cone, "+y"), "and the apex is not an edge");
             Brush wedge = Make(BrushShape.Wedge, new Vector3(2f, 2f, 2f), new Vector3(10f, 0f, 0f));
-            Assert.IsFalse(Face(wedge, "-z"), "a wedge's low end is an edge");
+            Assert.IsTrue(Edge(wedge, "-z"), "a wedge's low end is an edge");
+            Assert.IsTrue(Edge(wedge, "+y"), "so is its high top edge");
             Assert.IsTrue(Face(wedge, "+z"), "its high end is a side");
             Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 2f, 4f), new Vector3(15f, 0f, 0f));
-            Assert.IsFalse(Face(stairs, "step"), "the step height is a point");
+            Assert.IsTrue(Edge(stairs, "step"), "the step height is the first step's front edge");
             Assert.IsTrue(Face(stairs, "+x"), "a stair's side is its stepped side");
+            Brush arch = Make(BrushShape.Arch, new Vector3(4f, 3f, 1f), new Vector3(20f, 0f, 0f));
+            Assert.IsTrue(Edge(arch, "thickness") && Edge(arch, "+y") && Edge(arch, "+x"), "an arch's crowns and feet are edges");
+            Brush sphere = Make(BrushShape.Sphere, new Vector3(2f, 2f, 2f), new Vector3(25f, 0f, 0f));
+            Assert.IsFalse(Edge(sphere, "+y") || Face(sphere, "+y"), "a sphere's poles are points");
         }
 
         [Test]

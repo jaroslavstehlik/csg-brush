@@ -46,20 +46,20 @@ The **Scale** tool also resizes the brush. When you release it, the scale goes i
 
 A selected brush's shape can be changed directly in the Scene view: drag one of its sides, or one of its points, such as a cone's apex or a cylinder's radius. The handles stay with whichever tool is active, so you can move or rotate the brush and change its shape without switching tools. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
 
-Only the sides turned towards you are handles. A side shows a faint outline, and lights up when the pointer is on it; drag it anywhere to move it out or in, and the opposite side stays where it is. A plain click on a side still selects, as usual: a side only starts moving after a short drag. Where a part of the shape is a point, such as an apex, a radius on a rim, or the top of the first step, it's a dot instead.
+Only the sides turned towards you are handles. A side shows a faint outline, and lights up when the pointer is on it; drag it anywhere to move it out or in, and the opposite side stays where it is. A plain click on a side still selects, as usual: a side only starts moving after a short drag. Where a part of the shape is an edge, such as a wedge's low end or a cylinder's rim, it's a line you grab anywhere along; where it's a point, such as a cone's apex, it's a dot.
 
-| **Shape** | **Sides** | **Points** |
-| :--- | :--- | :--- |
-| Box | Every side. | |
-| Wedge | The high end, the bottom, and the two triangular sides. | The low end (start) and the height on the high edge. |
-| Cylinder | The top and the bottom. | The radius on the rim. A round cylinder stays round; an oval one changes the diameter you drag. |
-| Cone | The bottom. | The apex, and the radius on the base. |
-| Sphere | | One on each pole: the diameter about its centre. A round sphere stays round. |
-| Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. | The first step's top: the step height. |
-| Arch | The front and the back. | The feet (the width), the crown (the height), and the inner crown (the thickness). |
-| Curved stairs | | The column's radius, the steps' width, the height, and the end of the stairs (the angle they cover). |
-| Spiral stairs | | The column's radius, the steps' width, and the height: more height is more steps. |
-| Door, window | The sides, the top, and the bottom. | |
+| **Shape** | **Sides** | **Edges** | **Points** |
+| :--- | :--- | :--- | :--- |
+| Box | Every side. | | |
+| Wedge | The high end, the bottom, and the two triangular sides. | The low end (start) and the high top edge (height). | |
+| Cylinder | The top and the bottom. | The rim: the radius. A round cylinder stays round; an oval one keeps its proportions. | |
+| Cone | The bottom. | The rim of the base: the radius. | The apex. |
+| Sphere | | | One on each pole: the diameter about its centre. A round sphere stays round. |
+| Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. | The first step's front edge: the step height. | |
+| Arch | The front and the back. | The feet (the width), the crown (the height), and the inner crown (the thickness). | |
+| Curved stairs | | | The column's radius, the steps' width, the height, and the end of the stairs (the angle they cover). |
+| Spiral stairs | | | The column's radius, the steps' width, and the height: more height is more steps. |
+| Door, window | The sides, the top, and the bottom. | | |
 
 Unity's own Move, Rotate, and Scale handles always come first: where one of them is under the pointer, it takes the drag. While you drag, the handle shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo. With several brushes selected, dragging a handle changes the same handle on all of them.
 
