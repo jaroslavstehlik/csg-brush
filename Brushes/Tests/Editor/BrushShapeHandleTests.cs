@@ -125,6 +125,24 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void PushingAWedgesDiagonalFaceGrowsItAtTheSameSteepness()
+        {
+            Brush wedge = Make(BrushShape.Wedge, new Vector3(2f, 1.5f, 3f), Vector3.zero);
+            var before = WorldBox(wedge);
+            Assert.IsTrue(BrushShapeHandles.HandlesOf(wedge).Find(h => h.id == "slope").IsFace, "the diagonal face is a side");
+            // pushing the face out by d moves its foot along the floor by d times the face's length over the height
+            float slope = Mathf.Sqrt(3f * 3f + 1.5f * 1.5f);
+            Drag(wedge, "slope", 1.5f * 1.5f / slope);
+            Assert.AreEqual(4.5f, wedge.size.z, 1e-3f, "longer");
+            Assert.AreEqual(2.25f, wedge.size.y, 1e-3f, "and taller in proportion: still 1 in 2");
+            var after = WorldBox(wedge);
+            Assert.AreEqual(before.max.z, after.max.z, 1e-4f, "the high end stays");
+            Assert.AreEqual(before.min.y, after.min.y, 1e-4f, "the bottom stays");
+            Drag(wedge, "slope", -1f);
+            Assert.AreEqual(0.5f, wedge.size.y / wedge.size.z, 1e-4f, "pulled in: smaller, the same steepness");
+        }
+
+        [Test]
         public void ASpheresPoleChangesItsDiameterAboutItsCentre()
         {
             Brush sphere = Make(BrushShape.Sphere, new Vector3(2f, 2f, 2f), Vector3.zero);

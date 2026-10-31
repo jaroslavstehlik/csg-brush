@@ -51,7 +51,7 @@ Only the sides turned towards you are handles. A side shows a faint outline, and
 | **Shape** | **Sides** | **Edges** | **Points** |
 | :--- | :--- | :--- | :--- |
 | Box | Every side. | | |
-| Wedge | The high end, the bottom, and the two triangular sides. | The low end (start) and the high top edge (height). | |
+| Wedge | The diagonal face, the high end, the bottom, and the two triangular sides. Pushing the diagonal face makes the ramp longer and taller at the same steepness; its length snaps and its height follows. | The low end (start) and the high top edge (height). | |
 | Cylinder | The top and the bottom. | The rim: the radius. A round cylinder stays round; an oval one keeps its proportions. | |
 | Cone | The bottom. | The rim of the base: the radius. | The apex. |
 | Sphere | | | One on each pole: the diameter about its centre. A round sphere stays round. |

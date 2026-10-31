@@ -109,6 +109,14 @@ namespace CsgBrush.Editor
                     Face("+z", new Vector3(c.x, c.y, max.z), 2, 1);                                   // the high end
                     Edge("-z", 2, -1, new Vector3(min.x, min.y, min.z), new Vector3(max.x, min.y, min.z)); // the low end (start)
                     Edge("+y", 1, 1, new Vector3(min.x, max.y, max.z), new Vector3(max.x, max.y, max.z));  // the high top edge: the height
+                    // the diagonal face: pushed out parallel to itself, the ramp grows longer and taller at the same steepness
+                    list.Add(new Handle
+                    {
+                        id = "slope", local = new Vector3(c.x, c.y, c.z), direction = new Vector3(0f, size.z, -size.y).normalized,
+                        faces = new[] { new[] { new Vector3(min.x, min.y, min.z), new Vector3(max.x, min.y, min.z), new Vector3(max.x, max.y, max.z), new Vector3(min.x, max.y, max.z) } },
+                        apply = (br, st, d, sym, snap) => ResizeSlope(br, st, d, snap),
+                        label = br => Length(br.size.z) + " \u00d7 " + Length(br.size.y),
+                    });
                     Face("-y", new Vector3(c.x, min.y, c.z), 1, -1);
                     float wy = min.y + size.y / 3f, wz = max.z - size.z / 3f;                          // the side caps' middles
                     for (int sx = -1; sx <= 1; sx += 2)
@@ -347,6 +355,24 @@ namespace CsgBrush.Editor
                 int other = axis == 0 ? 2 : 0;
                 if (Mathf.Abs(startSize[other] - startSize[axis]) < 1e-4f) Set(other);
             }
+            Place(b, start, min, max);
+        }
+
+        /// <summary>
+        /// A wedge's diagonal face pushed out by <paramref name="distance"/> along its normal: the bottom and the high end stay,
+        /// the ramp grows longer and taller in proportion, so its steepness stays. The length snaps; the height follows it.
+        /// </summary>
+        static void ResizeSlope(Brush b, State start, float distance, bool snap)
+        {
+            Vector3 startSize = Vector3.Max(start.size, Vector3.one * 0.001f);
+            float length = startSize.z, height = startSize.y, slope = Mathf.Sqrt(length * length + height * height);
+            float newLength = Mathf.Max(0.001f, length + distance * slope / height);
+            if (snap) newLength = SnapLength(b, newLength, true);
+            float newHeight = height * newLength / length;
+            Vector3 startShift = b.PivotShiftFor(startSize);
+            Vector3 min = startShift - startSize * 0.5f, max = startShift + startSize * 0.5f;
+            min.z = max.z - newLength;   // the high end stays
+            max.y = min.y + newHeight;   // the bottom stays
             Place(b, start, min, max);
         }
 

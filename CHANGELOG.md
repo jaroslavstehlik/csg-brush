@@ -5,7 +5,7 @@
 - Shape handles change a selected brush's shape directly, alongside the Move, Rotate or Scale tool, and the brush stays
   the shape it is:
   - Sides turned towards the camera are handles: a side lights up under the pointer and is grabbed anywhere on it.
-    A plain click still selects.
+    A plain click still selects. A wedge's diagonal face grows or shrinks the ramp at the same steepness.
   - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, a cylinder's or cone's rim (the
     radius), a stair's first step (the step height), an arch's feet, crown and inner crown.
   - Real points stay dots: a cone's apex, a sphere's poles, and curved and spiral stairs' column, width, height and
