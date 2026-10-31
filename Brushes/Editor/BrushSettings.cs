@@ -60,6 +60,8 @@ namespace CsgBrush.Editor
         public bool showCuts = false;
         [Tooltip("Show the width, depth and height of a brush or wall while it is drawn.")]
         public bool showDimensions = true;
+        [Tooltip("Show dots on selected brushes that change their shape directly: a box's sides, a cylinder's radius, a stair's steps.")]
+        public bool shapeHandles = true;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]
         public bool snapToGrid = true;
 

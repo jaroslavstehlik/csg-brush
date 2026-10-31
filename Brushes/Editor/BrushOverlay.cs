@@ -14,7 +14,7 @@ namespace CsgBrush.Editor
         public override VisualElement CreatePanelContent()
         {
             var container = new IMGUIContainer(Draw);
-            container.style.minWidth = 220;
+            container.style.minWidth = 270;
             return container;
         }
 
@@ -38,6 +38,8 @@ namespace CsgBrush.Editor
             if (cuts != s.showCuts) { s.showCuts = cuts; s.NotifyChanged(); SceneView.RepaintAll(); }
             bool sizes = GUILayout.Toggle(s.showDimensions, new GUIContent("Sizes", "Show the dimensions of a brush or wall while it is drawn"), EditorStyles.miniButton, GUILayout.Width(44), GUILayout.Height(18));
             if (sizes != s.showDimensions) { s.showDimensions = sizes; s.NotifyChanged(); SceneView.RepaintAll(); }
+            bool shapes = GUILayout.Toggle(s.shapeHandles, new GUIContent("Shape", "Dots on selected brushes change their shape directly, with any tool: drag a side, a radius, a step (B)"), EditorStyles.miniButton, GUILayout.Width(46), GUILayout.Height(18));
+            if (shapes != s.shapeHandles) { s.shapeHandles = shapes; s.NotifyChanged(); SceneView.RepaintAll(); }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 

@@ -42,6 +42,27 @@ Use the **Move** and **Rotate** tools as for any GameObject. Set the brush's **S
 
 The **Scale** tool also resizes the brush. When you release it, the scale goes into the brush's **Size** and the transform's scale returns to one.
 
+### Shape handles
+
+A selected brush shows small dots on its shape: drag one to change that part of the shape directly. The dots stay with whichever tool is active, so you can move or rotate the brush and change its shape without switching tools. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
+
+| **Shape** | **Handles** |
+| :--- | :--- |
+| Box | One on each side: drag a side out or in. The opposite side stays where it is. |
+| Wedge | The low end (start), the high end, the height on the high edge, the bottom, and each side. |
+| Cylinder | The top, the bottom, and the radius on the rim. A round cylinder stays round; an oval one changes the diameter you drag. |
+| Cone | The apex, the bottom, and the radius on the base. |
+| Sphere | One on each pole: the diameter about its centre. A round sphere stays round. |
+| Linear stairs | Each side, the start, the end, the height on the top step, and the first step's top for the step height. |
+| Arch | Each foot (the width), the top, the front and back, and the inner crown for the thickness. |
+| Curved stairs | The column's radius, the steps' width, the height, and the end of the stairs for the angle they cover. |
+| Spiral stairs | The column's radius, the steps' width, and the height: more height is more steps. |
+| Door, window | Each side, the top, and the bottom. |
+
+While you drag, the dot shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo. With several brushes selected, dragging a handle changes the same handle on all of them.
+
+To show or hide the dots, use **Shape** in the **Brushes** overlay, or press **B** in the Scene view. A dot that would sit on the Move or Rotate gizmo moves aside onto its face, so both stay easy to grab.
+
 ### Grid snapping
 
 With **Snap to grid** on in the **Brushes** overlay (the default), brushes stay on the world grid:
