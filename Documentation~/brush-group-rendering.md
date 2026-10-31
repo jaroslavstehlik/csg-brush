@@ -17,6 +17,10 @@ New brushes and Floor Plans start with the static flags set in **Project Setting
 > [!NOTE]
 > The static flags of the Brush Group GameObject itself don't affect its meshes.
 
+## Moving groups
+
+A Brush Group's transform moves everything the group builds: its meshes and its colliders. To build something once and move it as a whole at runtime, such as a lift or a drawbridge, put its brushes under their own Brush Group and turn on **Moving** in the group's Inspector. The group's brushes then aren't static, so their meshes can move. Move or animate the group's transform, not the brushes: CSG Brush builds in the editor only, so a brush moved at runtime isn't carved again.
+
 ## Renderer settings
 
 The **Rendering** section of the Brush Group Inspector holds the settings of a Mesh Renderer. Every render mesh of the group uses them. The materials come from the brushes.

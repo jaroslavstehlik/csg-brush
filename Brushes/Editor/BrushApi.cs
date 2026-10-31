@@ -8,12 +8,18 @@ namespace CsgBrush.Editor
     /// Every brush operation as an undoable step. The Inspector, the menus, the Scene view tool and the
     /// tests all go through here, so undo behaves the same everywhere.
     /// </summary>
-    public static class BrushApi
+    public static partial class BrushApi
     {
-        public static Brush Create(BrushShape shape, Vector3 position, Vector3 sizeMeters, Quaternion rotation, Transform parent = null, string name = null)
+        /// <summary>
+        /// A new brush. With <paramref name="snap"/> it lands on the grid, as one drawn in the Scene view does; without, it
+        /// stays exactly where it is put (a level built from measured numbers). Under a moving group it is not static.
+        /// </summary>
+        public static Brush Create(BrushShape shape, Vector3 position, Vector3 sizeMeters, Quaternion rotation, Transform parent = null, string name = null, bool snap = true)
         {
             var go = new GameObject(name ?? shape.ToString());
-            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // static unless made otherwise: its meshes and colliders follow it
+            var group = parent != null ? parent.GetComponentInParent<BrushGroup>(true) : null;
+            // static unless made otherwise: its meshes and colliders follow it; a moving group's brushes move with it
+            GameObjectUtility.SetStaticEditorFlags(go, group != null && group.moving ? 0 : BrushSettings.instance.defaultModelStaticFlags);
             Undo.RegisterCreatedObjectUndo(go, "Create brush");
             if (parent != null) Undo.SetTransformParent(go.transform, parent, "Create brush");
             go.transform.SetPositionAndRotation(position, rotation);
@@ -21,8 +27,8 @@ namespace CsgBrush.Editor
             var brush = Undo.AddComponent<Brush>(go);
             brush.shape = shape;
             brush.size = sizeMeters;
-            brush.gridSnap = BrushSettings.instance.newGridSnap;
-            BrushSnap.SnapOnce(brush); // a new brush lands on the grid; a loaded one is accepted where it is
+            brush.gridSnap = snap ? BrushSettings.instance.newGridSnap : GridSnap.Off;
+            if (snap) BrushSnap.SnapOnce(brush); // a new brush lands on the grid; a loaded one is accepted where it is
             if (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
                 var d = BrushGeometry.ShapeParams.Default(sizeMeters);
@@ -123,6 +129,15 @@ namespace CsgBrush.Editor
             if (brush.material == material) return;
             Undo.RecordObject(brush, "Change brush material");
             brush.material = material;
+            BrushSync.Ensure(brush);
+        }
+
+        /// <summary>Subtract brushes: which material the faces they cut take.</summary>
+        public static void SetCutFaces(Brush brush, CutFaces cutFaces)
+        {
+            if (brush.cutFaces == cutFaces) return;
+            Undo.RecordObject(brush, "Change cut faces");
+            brush.cutFaces = cutFaces;
             BrushSync.Ensure(brush);
         }
 
@@ -375,14 +390,19 @@ namespace CsgBrush.Editor
             BrushSync.Ensure(brush);
         }
 
-        /// <summary>Rebuild every model and its convex colliders now, instead of waiting for the editor loop. Used by tests and menus.</summary>
-        public static void ForceUpdate()
+        /// <summary>
+        /// Rebuild every model and its convex colliders now, instead of waiting for the editor loop. Used by tests, menus
+        /// and scripts; returns what was built.
+        /// </summary>
+        public static RebuildReport ForceUpdate()
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             BrushSnap.ProcessChanged(); // what the editor loop does every frame
             BrushHooks.Process();
             BrushCsg.RebuildAllNow();
             Colliders.Editor.ConvexColliderBuilder.FlushDeferred();
             BrushSync.ApplyVisibility();
+            return RebuildReport.OfLoadedScenes(sw.Elapsed.TotalMilliseconds);
         }
     }
 }

@@ -78,6 +78,20 @@ namespace CsgBrush.Editor
             EditorGUILayout.EndFoldoutHeaderGroup();
         }
 
+        /// <summary>A moving group's brushes are not static (static meshes cannot move); a still one's get the default flags back.</summary>
+        static void SetMoving(BrushGroup group, bool moving)
+        {
+            var flags = moving ? 0 : BrushSettings.instance.defaultModelStaticFlags;
+            Undo.RecordObject(group.gameObject, "Change moving group");
+            GameObjectUtility.SetStaticEditorFlags(group.gameObject, flags);
+            foreach (var brush in BrushPrefabBuild.BrushesOf(group))
+            {
+                Undo.RecordObject(brush.gameObject, "Change moving group");
+                GameObjectUtility.SetStaticEditorFlags(brush.gameObject, flags);
+                BrushSync.Ensure(brush);
+            }
+        }
+
         static string[] RenderingLayerNames()
         {
             var names = UnityEngine.RenderingLayerMask.GetDefinedRenderingLayerNames();
@@ -87,6 +101,15 @@ namespace CsgBrush.Editor
         public override void OnInspectorGUI()
         {
             if (targets.Length == 1) EditorGUILayout.LabelField("Brushes", BrushPrefabBuild.BrushesOf((BrushGroup)target).Count.ToString());
+            serializedObject.Update();
+            var movingProp = serializedObject.FindProperty(nameof(BrushGroup.moving));
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(movingProp, new GUIContent("Moving", "Built once and moved as a whole at runtime (a lift, a drawbridge): its brushes are not static."));
+            if (EditorGUI.EndChangeCheck())
+            {
+                serializedObject.ApplyModifiedProperties();
+                foreach (var t in targets) SetMoving((BrushGroup)t, ((BrushGroup)t).moving);
+            }
             bool unsaved = false;
             foreach (var t in targets)
             {

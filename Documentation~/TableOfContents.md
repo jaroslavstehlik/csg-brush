@@ -9,5 +9,7 @@
   * [Stand an object away from the wall](wall-anchor.md#stand-an-object-away-from-the-wall)
   * [Wall Anchor component reference](wall-anchor.md#wall-anchor-component-reference)
 * [Brush Group rendering and lightmapping](brush-group-rendering.md)
+  * [Moving groups](brush-group-rendering.md#moving-groups)
   * [Brush Group component reference](brush-group-rendering.md#brush-group-component-reference)
 * [Brush reference](brush-reference.md)
+* [Build levels from scripts](scripting.md)

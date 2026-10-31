@@ -442,7 +442,7 @@ namespace CsgBrush.Editor
             {
                 int meshKey = 17 * 31 + MeshFormat;
                 for (int i = 0; i < job.pieceKeys.Count; i++) { var pr = job.records[job.pieceRecord[i]]; meshKey = meshKey * 31 + job.pieceKeys[i].GetHashCode(); var mat = pr.brush.material; if (mat == null) mat = DefaultMaterial(); meshKey = meshKey * 31 + MaterialKey(mat); meshKey = meshKey * 31 + pr.layer; meshKey = meshKey * 31 + StaticFlags(pr.brush);
-                    foreach (int c in job.pieceCutters[i]) { var cm = job.records[c].brush.material; meshKey = meshKey * 31 + MaterialKey(cm != null ? cm : DefaultMaterial()); } } // static flags: which mesh its triangles go to; carved faces take the cutter's material
+                    foreach (int c in job.pieceCutters[i]) { var cb = job.records[c].brush; var cm = cb.material; meshKey = meshKey * 31 + MaterialKey(cm != null ? cm : DefaultMaterial()); meshKey = meshKey * 31 + (int)cb.cutFaces; } } // static flags: which mesh its triangles go to; carved faces take the cutter's material, or the cut solid's
                 job.meshKey = meshKey;
             }
             bool anyMesh = false; foreach (var t in MeshObjects(model)) if (t.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null) { anyMesh = true; break; }
@@ -780,7 +780,7 @@ namespace CsgBrush.Editor
             public ManifoldSolid.MeshData data;        // their union, read back
             public Dictionary<int, Brush> sources;     // solid id (triangleSource) to brush, cutters included: whose material a triangle takes
             // the Unity arrays, built on the main thread; valid while every source brush has the material and static flags it had then
-            public Material[] convertedWith; public int[] convertedFlags; public Material convertedDefault; public int convertedDefaultFlags;
+            public Material[] convertedWith; public int[] convertedFlags, convertedCutFaces; public Material convertedDefault; public int convertedDefaultFlags;
             public List<Part> parts;
         }
 
@@ -837,9 +837,9 @@ namespace CsgBrush.Editor
         {
             var data = island.data;
             island.parts = new List<Part>();
-            var used = new List<Material>(); var usedFlags = new List<int>();
-            foreach (var b in island.sources.Values) { used.Add(b != null ? b.material : null); usedFlags.Add(b != null ? StaticFlags(b) : 0); }
-            island.convertedWith = used.ToArray(); island.convertedFlags = usedFlags.ToArray(); island.convertedDefault = fallback; island.convertedDefaultFlags = defaultFlags;
+            var used = new List<Material>(); var usedFlags = new List<int>(); var usedCutFaces = new List<int>();
+            foreach (var b in island.sources.Values) { used.Add(b != null ? b.material : null); usedFlags.Add(b != null ? StaticFlags(b) : 0); usedCutFaces.Add(b != null ? (int)b.cutFaces : 0); }
+            island.convertedWith = used.ToArray(); island.convertedFlags = usedFlags.ToArray(); island.convertedCutFaces = usedCutFaces.ToArray(); island.convertedDefault = fallback; island.convertedDefaultFlags = defaultFlags;
             // the solids a cut can have carved: added brushes, by their boxes in the model's space
             var carved = new List<(Brush brush, Bounds box)>();
             foreach (var b in island.sources.Values)
@@ -882,13 +882,16 @@ namespace CsgBrush.Editor
                 var n = byFace ? sum / sumLength : own / ownLength;
                 if (byFace && ownLength > 1e-4f && Vector3.Dot(own / ownLength, n) < 0.99f) { n = own / ownLength; byFace = false; } // a well-shaped triangle off its face's plane: its own
                 int flags = brush != null ? StaticFlags(brush) : defaultFlags;
+                Brush cutFrom = null;
                 if (brush != null && brush.operation == BrushOperation.Subtract)
                 {
                     var inside = (a + b + c) / 3f - n * 2e-3f; // the solid a cut face bounds lies behind it
-                    foreach (var (addBrush, box) in carved) if (box.Contains(inside)) { flags = StaticFlags(addBrush); break; }
+                    foreach (var (addBrush, box) in carved) if (box.Contains(inside)) { flags = StaticFlags(addBrush); cutFrom = addBrush; break; }
                 }
                 if (!partOf.TryGetValue(flags, out var part)) { part = new Part { flags = flags }; partOf[flags] = part; island.parts.Add(part); }
-                Material mat = brush != null && brush.material != null ? brush.material : fallback;
+                // a cut face takes the cutter's material, or, when the cutter asks, the material of the solid it was cut from
+                var materialBrush = cutFrom != null && brush.cutFaces == CutFaces.CutSolidMaterial ? cutFrom : brush;
+                Material mat = materialBrush != null && materialBrush.material != null ? materialBrush.material : fallback;
                 if (!part.materialIndex.TryGetValue(mat, out int mi)) { mi = part.materials.Count; part.materials.Add(mat); part.materialIndex[mat] = mi; part.triangles.Add(new List<int>()); part.triangleBrush.Add(new List<Brush>()); }
                 part.triangleBrush[mi].Add(brush);
                 // planar UVs on the dominant axis plane, one texture per metre
@@ -917,7 +920,8 @@ namespace CsgBrush.Editor
             int i = 0;
             foreach (var b in island.sources.Values)
             {
-                if (!ReferenceEquals(island.convertedWith[i], b != null ? b.material : null) || island.convertedFlags[i] != (b != null ? StaticFlags(b) : 0)) return false;
+                if (!ReferenceEquals(island.convertedWith[i], b != null ? b.material : null) || island.convertedFlags[i] != (b != null ? StaticFlags(b) : 0)
+                    || island.convertedCutFaces == null || island.convertedCutFaces[i] != (b != null ? (int)b.cutFaces : 0)) return false;
                 i++;
             }
             return true;

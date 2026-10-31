@@ -11,6 +11,7 @@ namespace CsgBrush
     {
         [Tooltip("The brush's outermost vertices go onto grid lines, so brushes meet cleanly: the classic brush workflow.")] Shape,
         [Tooltip("The brush's pivot goes onto the grid and the shape follows: the ProBuilder workflow.")] Pivot,
+        [Tooltip("Never moved or resized onto the grid: placed exactly, as a level built from measured numbers is.")] Off,
     }
 
     /// <summary>How a brush's pivot is measured.</summary>
@@ -18,6 +19,13 @@ namespace CsgBrush
     {
         [Tooltip("0 to 1 of the size: follows the brush when resized.")] Normalized,
         [Tooltip("Distance from the brush's left, bottom, back corner: stays put when resized.")] Absolute,
+    }
+
+    /// <summary>Which material the faces a subtractive brush cuts take.</summary>
+    public enum CutFaces
+    {
+        [Tooltip("The cutting brush's material: a doorway lined with its own frame material.")] CutterMaterial,
+        [Tooltip("The material of the solid it cuts: a hole in a wall looks like the wall inside.")] CutSolidMaterial,
     }
 
     public enum BrushShape
@@ -152,8 +160,10 @@ namespace CsgBrush
         [Tooltip("Spiral stairs: the underside slopes instead of stepping.")]
         public bool slopedCeiling;
 
-        [Tooltip("Applied to every face. Per-face materials can be dropped onto faces in the Scene view.")]
+        [Tooltip("Applied to every face. Dropping a material onto the brush in the Scene view sets it too.")]
         public Material material;
+        [Tooltip("Subtract only: the faces it cuts take this brush's material, or the material of the solid they were cut from.")]
+        public CutFaces cutFaces = CutFaces.CutterMaterial;
 
         /// <summary>Set by the editor layer; called when the component needs to push its values into the generated structure.</summary>
         public static Action<Brush> SyncRequested;
@@ -171,7 +181,7 @@ namespace CsgBrush
         [NonSerialized] public bool anchored;
 
         /// <summary>Placed by something else (its generator, its wall): never snapped to the grid.</summary>
-        public bool IsPlaced => generatedBy != null || IsOpening || anchored;
+        public bool IsPlaced => generatedBy != null || IsOpening || anchored || gridSnap == GridSnap.Off;
 
         // ------------------------------------------------------------------ registry
 

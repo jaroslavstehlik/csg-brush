@@ -1,7 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (unreleased)
 
+- Build levels from scripts (new manual page):
+  - `BrushApi.CreateBox(min, max)` places a box exactly between two corners.
+  - `BrushApi.Create` takes `snap`. The new **Grid snap** value **Off** keeps a brush exactly where it was placed.
+  - `BrushApi.Batch()` makes a whole build one undo step and rebuilds once at the end.
+  - `BrushApi.ForceUpdate()` returns a `RebuildReport` with brushes, groups, triangles, box and convex mesh colliders,
+    and time.
+- **Cut faces** on subtract brushes: the faces a cut makes take the cutter's material (as before), or the material of
+  the solid they're cut into.
+- `BrushApi.Regenerate` and the **Generated Brushes** component rebuild what a script made and keep the brushes beside
+  it. Your subtract brushes still cut the generated ones.
+- **Moving** Brush Groups (`BrushApi.CreateGroup(..., moving: true)`) are built once and moved as a whole at runtime.
+  Their brushes aren't static.
+- **Tools** > **CSG Brush** > **Select Convex Mesh Colliders**.
+- The Material tooltip and the manual no longer mention per-face materials, which don't exist.
 - Fixed: axis aligned box pieces got convex mesh colliders, instead of box colliders, whenever their hull left one
   side split into two faces (for example stair steps away from the origin). A piece bounded only by axis aligned planes
   now always gets a box collider. Physics treats a capsule against a convex mesh's edge less exactly than against a

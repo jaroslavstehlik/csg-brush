@@ -26,6 +26,13 @@ namespace CsgBrush
         /// <summary>Key of the content the generated children were last built from; a prefab instance whose brushes still match its prefab's key keeps the prefab's built meshes.</summary>
         [HideInInspector, UnityEngine.Serialization.FormerlySerializedAs("bakedKey")] public int builtKey;
 
+        /// <summary>
+        /// Built once in the editor and moved as a whole at runtime (a lift, a drawbridge): its brushes are not static, and
+        /// moving the group's transform moves everything it builds. It is never carved again at runtime.
+        /// </summary>
+        [Tooltip("Built once and moved as a whole at runtime (a lift, a drawbridge): its brushes are not static.")]
+        public bool moving;
+
         /// <summary>What every render mesh of the group gets on its renderer (the materials come from the brushes).</summary>
         public RenderingSettings rendering = new RenderingSettings();
     }

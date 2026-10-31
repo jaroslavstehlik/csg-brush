@@ -56,8 +56,9 @@ When you move or resize a brush, its **Grid snap** setting decides what goes ont
 | :--- | :--- | :--- |
 | **Shape** | The brush's outermost vertices: the corner of its bounds. An axis-aligned brush has its faces on grid lines, so brushes meet cleanly. This is the default. | The classic brush workflow, and collision geometry. |
 | **Pivot** | The brush's pivot. The shape follows, wherever it ends up. | The ProBuilder workflow, such as detail brushes placed around a point. |
+| **Off** | Nothing. The brush stays exactly where it's put and keeps its size. | Levels built from measured numbers, such as by a [script](scripting.md). |
 
-Either way, rotating a brush never moves it: it turns about its pivot, and only the angle snaps. The next time you move it, it snaps again. An undo, setting the pivot, and opening a scene don't move brushes either. Vertices you move in [edit mode](#edit-a-brushs-shape) snap to the grid in both modes; a Custom shape in **Shape** mode also puts its vertices on the grid while it's axis-aligned.
+With **Shape** or **Pivot**, rotating a brush never moves it: it turns about its pivot, and only the angle snaps. The next time you move it, it snaps again. An undo, setting the pivot, and opening a scene don't move brushes either. Vertices you move in [edit mode](#edit-a-brushs-shape) snap to the grid in both modes; a Custom shape in **Shape** mode also puts its vertices on the grid while it's axis-aligned.
 
 Set **Grid snap** in the Brush Inspector. New brushes get the setting in the **Brushes** overlay while a Create tool is active.
 
@@ -145,7 +146,7 @@ To extrude:
 
 Nothing changes until you click **Apply**. The faces stay selected, so **Apply** again extrudes them again. If the extrusion can't be made, the overlay says why instead of enabling **Apply**. You can also hold **Shift** when you start dragging the **Move** gizmo on selected faces: they extrude by the distance you drag. Drag into the brush to cut.
 
-An extrusion can run through other parts of the brush. Your own faces, edges, and vertices survive it, so coplanar faces you keep apart stay apart, and per-face materials stay where they were.
+An extrusion can run through other parts of the brush. Your own faces, edges, and vertices survive it, so coplanar faces you keep apart stay apart.
 
 ### Bridge
 
@@ -159,7 +160,7 @@ A brush's **Material** applies to every face of the brush.
 
 To set a material, you can also drag it from the Project window onto a brush in the Scene view. While you drag, the Scene view outlines the brushes the material will go to. On a [Floor Plan](floor-plans.md), the material goes to all of the plan's walls, or to the floor or ceiling of the one room under the pointer. A regular mesh in front of a brush takes the material the usual Unity way.
 
-The faces a subtract brush carves take the subtract brush's material. For example, the sides of a doorway can have a different material from the wall.
+The faces a subtract brush carves take the subtract brush's material by default. For example, the sides of a doorway can have a different material from the wall. To make them look like the solid they're cut into instead, select the subtract brush and set **Cut faces** to **Cut Solid Material**: a hole in a stone wall is then stone inside.
 
 Faces without a material show a generated ruler texture: lines at every grid step, stronger at each metre, on a metre checker. It lines up with the world grid across brushes and cuts. CSG Brush creates it under `Assets/CSG Brush` the first time it's needed. To use your own material instead, set it in **Project Settings** > **Brushes**.
 

@@ -248,6 +248,8 @@ namespace CsgBrush.Editor
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(materialProp, new GUIContent("Material", "Applied to every face; dropping a material onto the brush in the Scene view sets it too."));
+                if (!operationProp.hasMultipleDifferentValues && operationProp.enumValueIndex == (int)BrushOperation.Subtract)
+                    EditorGUILayout.PropertyField(serializedObject.FindProperty(nameof(Brush.cutFaces)), new GUIContent("Cut faces", "The faces this brush cuts take its material, or the material of the solid they were cut from."));
                 EditorGUILayout.LabelField(" ", "its faces render with this object's layer and static flags; the rest is its group's renderer", EditorStyles.miniLabel);
                 EditorGUI.indentLevel--;
             }
