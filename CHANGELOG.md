@@ -21,7 +21,7 @@
   - Real points stay dots: a cone's apex.
   - Unity's own tool handles always take the drag first.
   - Shift drags both sides. Sizes follow the grid. One drag is one undo step.
-  - The **Shape Edit** toolbar turns them on or off (or **B**), and sets what a drag does to the other selected
+  - **Shape Edit** in the Brushes overlay turns them on or off (or **B**), and sets what a drag does to the other selected
     brushes: **Single** (the default), **Offset** (brushes of the same shape change by the same amount) or **Match**
     (they get the same size).
 - Build levels from scripts (new manual page):

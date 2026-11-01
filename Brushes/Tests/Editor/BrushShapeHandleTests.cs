@@ -110,7 +110,7 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void TheShapeEditToolbarHasAnIconForEachChoice()
+        public void ShapeEditHasAnIconForEachChoice()
         {
             Assert.AreEqual(3, System.Enum.GetValues(typeof(ShapeEditSelection)).Length, "Single, Offset, Match");
             foreach (var name in new[] { "ShapeEdit", "ShapeEdit_Single", "ShapeEdit_Offset", "ShapeEdit_Match" })

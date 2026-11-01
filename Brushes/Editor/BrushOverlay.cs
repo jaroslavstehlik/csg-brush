@@ -18,6 +18,42 @@ namespace CsgBrush.Editor
             return container;
         }
 
+        static readonly string[] SelectionIcons = { "ShapeEdit_Single", "ShapeEdit_Offset", "ShapeEdit_Match" };
+        static readonly string[] SelectionNames = { "Single", "Offset", "Match" };
+        static readonly string[] SelectionTips =
+        {
+            "Single: only the brush you drag changes",
+            "Offset: selected brushes of the same shape change by the same amount",
+            "Match: selected brushes of the same shape get the same size",
+        };
+
+        /// <summary>An icon, or its name while the icon isn't imported yet.</summary>
+        static GUIContent IconOrName(string icon, string name, string tooltip)
+        {
+            var image = BrushIcons.Get(icon);
+            return image != null ? new GUIContent(image, tooltip) : new GUIContent(name, tooltip);
+        }
+
+        /// <summary>The Shape Edit toggle and, while it is on, what a drag does to the other selected brushes (Single / Offset / Match).</summary>
+        static void DrawShapeEdit(BrushSettings s)
+        {
+            EditorGUILayout.BeginHorizontal();
+            var icon = BrushIcons.Get("ShapeEdit");
+            var content = new GUIContent(icon != null ? " Shape Edit" : "Shape Edit", icon, "Drag a selected brush's sides to change its shape (B)");
+            bool shapes = GUILayout.Toggle(s.shapeHandles, content, EditorStyles.miniButton, GUILayout.Height(20));
+            if (shapes != s.shapeHandles) { s.shapeHandles = shapes; s.NotifyChanged(); SceneView.RepaintAll(); }
+            if (s.shapeHandles)
+            {
+                var options = new GUIContent[SelectionIcons.Length];
+                for (int i = 0; i < options.Length; i++) options[i] = IconOrName(SelectionIcons[i], SelectionNames[i], SelectionTips[i]);
+                int current = Mathf.Clamp((int)s.shapeEditSelection, 0, options.Length - 1);
+                int chosen = GUILayout.Toolbar(current, options, EditorStyles.miniButton, GUILayout.Height(20));
+                if (chosen != current) { s.shapeEditSelection = (ShapeEditSelection)chosen; s.NotifyChanged(); }
+            }
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+        }
+
         static void Draw()
         {
             var s = BrushSettings.instance;
@@ -42,6 +78,8 @@ namespace CsgBrush.Editor
             EditorGUILayout.EndHorizontal();
 
             if (BrushCreateTool.Active != null) DrawNewBrush(s, BrushCreateTool.Active);
+
+            DrawShapeEdit(s);
 
             // edit mode: one row, Edit brush toggle then Vertex / Edge / Face
             EditorGUILayout.BeginHorizontal();
