@@ -11,11 +11,52 @@ namespace CsgBrush.Editor
     [Overlay(typeof(SceneView), "Brushes", true)]
     public sealed class BrushOverlay : Overlay
     {
+        const float PreferredWidth = 270f, Gap = 4f;
+
+        /// <summary>The width the panel has: the Scene view's, right of where the overlay starts. Rows wrap to fit it.</summary>
+        static float s_Width = float.MaxValue;
+
         public override VisualElement CreatePanelContent()
         {
-            var container = new IMGUIContainer(Draw);
-            container.style.minWidth = 270;
+            IMGUIContainer container = null;
+            float limit = -1f;
+            container = new IMGUIContainer(() =>
+            {
+                float width = AvailableWidth();
+                if (Mathf.Abs(width - limit) > 0.5f) // only on a change: a style change lays the panel out again
+                {
+                    limit = width;
+                    container.style.minWidth = Mathf.Min(PreferredWidth, width);
+                    container.style.maxWidth = width;
+                }
+                s_Width = width;
+                Draw();
+            });
+            container.style.minWidth = PreferredWidth;
             return container;
+        }
+
+        /// <summary>How wide the panel can be before the Scene view cuts it off; no limit while that isn't known.</summary>
+        float AvailableWidth()
+        {
+            var window = containerWindow;
+            if (window == null || rootVisualElement == null || window.rootVisualElement == null) return 4096f;
+            float left = rootVisualElement.worldBound.x - window.rootVisualElement.worldBound.x;
+            if (float.IsNaN(left)) return 4096f;
+            return Mathf.Max(120f, window.position.width - Mathf.Max(0f, left) - 24f); // the overlay's own frame and margin
+        }
+
+        /// <summary>A row of buttons that wraps: before a button of this width, start a new row if it would not fit.</summary>
+        static void Wrap(ref float x, float width, float indent = 0f)
+        {
+            if (x > indent && x + width > s_Width)
+            {
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.BeginHorizontal();
+                if (indent > 0f) GUILayout.Space(indent);
+                x = indent;
+            }
+            x += width + Gap;
         }
 
         static readonly string[] SelectionIcons = { "ShapeEdit_Single", "ShapeEdit_Offset", "ShapeEdit_Match" };
@@ -35,10 +76,12 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>The Shape Edit toggle and, while it is on, what a drag does to the other selected brushes (Single / Offset / Match): part of the grid row.</summary>
-        static void DrawShapeEdit(BrushSettings s)
+        static void DrawShapeEdit(BrushSettings s, ref float x)
         {
             var icon = BrushIcons.Get("ShapeEdit");
             var content = new GUIContent(icon != null ? " Shape Edit" : "Shape Edit", icon, "Drag a selected brush's sides to change its shape (B)");
+            float width = EditorStyles.miniButton.CalcSize(content).x + (s.shapeHandles ? Gap + SelectionIcons.Length * 24f : 0f);
+            Wrap(ref x, width); // the toggle and its choices stay together
             bool shapes = GUILayout.Toggle(s.shapeHandles, content, EditorStyles.miniButton, GUILayout.Height(18));
             if (shapes != s.shapeHandles) { s.shapeHandles = shapes; s.NotifyChanged(); SceneView.RepaintAll(); }
             if (s.shapeHandles)
@@ -71,7 +114,8 @@ namespace CsgBrush.Editor
             if (cuts != s.showCuts) { s.showCuts = cuts; s.NotifyChanged(); SceneView.RepaintAll(); }
             bool sizes = GUILayout.Toggle(s.showDimensions, new GUIContent("Sizes", "Show the dimensions of a brush or wall while it is drawn"), EditorStyles.miniButton, GUILayout.Width(44), GUILayout.Height(18));
             if (sizes != s.showDimensions) { s.showDimensions = sizes; s.NotifyChanged(); SceneView.RepaintAll(); }
-            DrawShapeEdit(s);
+            float x = 20f + 74f + 26f + 40f + 44f + 5 * Gap;
+            DrawShapeEdit(s, ref x);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
@@ -146,10 +190,13 @@ namespace CsgBrush.Editor
             {
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.PrefixLabel(new GUIContent("Modules", "The game's data every new brush gets, as components on it"));
+                float indent = EditorGUIUtility.labelWidth + 2f, x = indent;
                 foreach (var t in moduleTypes)
                 {
                     bool on = s.newModules.Contains(t.FullName);
-                    bool want = GUILayout.Toggle(on, new GUIContent(ObjectNames.NicifyVariableName(t.Name)), EditorStyles.miniButton);
+                    var label = new GUIContent(ObjectNames.NicifyVariableName(t.Name));
+                    Wrap(ref x, EditorStyles.miniButton.CalcSize(label).x, indent);
+                    bool want = GUILayout.Toggle(on, label, EditorStyles.miniButton);
                     if (want != on) { if (want) s.newModules.Add(t.FullName); else s.newModules.Remove(t.FullName); }
                 }
                 EditorGUILayout.EndHorizontal();
