@@ -175,13 +175,21 @@ namespace CsgBrush.Editor
                 case BrushShape.Arch: // the ring between an outer ellipse and one a thickness in, on the box's floor
                     Edge("+x", 0, 1, new Vector3(max.x, min.y, min.z), new Vector3(max.x, min.y, max.z));   // the feet: the width
                     Edge("-x", 0, -1, new Vector3(min.x, min.y, min.z), new Vector3(min.x, min.y, max.z));
-                    Edge("+y", 1, 1, new Vector3(c.x, max.y, min.z), new Vector3(c.x, max.y, max.z));       // the crown: the height
                     Side("+z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, max.z), 2, 1, Ring(b, min, max, max.z));
                     Side("-z", new Vector3(c.x, max.y - b.wallThickness * 0.5f, min.z), 2, -1, Ring(b, min, max, min.z));
+                    // the curved faces between the front and the back: the outer one sets the height, the inner one the thickness
+                    ArchSurface(b, min, max, true, out var outerFaces, out var outerNormals);
                     list.Add(new Handle
                     {
-                        id = "thickness", local = new Vector3(c.x, max.y - b.wallThickness, c.z), direction = Vector3.down, // the inner crown
-                        edge = new[] { new Vector3(c.x, max.y - b.wallThickness, min.z), new Vector3(c.x, max.y - b.wallThickness, max.z) },
+                        id = "+y", local = new Vector3(c.x, max.y, c.z), direction = Vector3.up, faces = outerFaces, faceNormals = outerNormals,
+                        apply = (br, st, d, sym, snap) => ResizeBox(br, st, 1, 1, d, sym, snap),
+                        label = br => Length(br.size.y),
+                    });
+                    ArchSurface(b, min, max, false, out var innerFaces, out var innerNormals);
+                    list.Add(new Handle
+                    {
+                        id = "thickness", local = new Vector3(c.x, max.y - b.wallThickness, c.z), direction = Vector3.down,
+                        faces = innerFaces, faceNormals = innerNormals,
                         apply = (br, st, d, sym, snap) => { br.wallThickness = Mathf.Clamp(SnapLength(br, st.wallThickness + d, snap), 0.01f, Mathf.Min(br.ClampedSize.x * 0.5f, br.ClampedSize.y) - 0.01f); },
                         label = br => "thickness " + Length(br.wallThickness),
                     });
@@ -395,6 +403,30 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>An arch's front or back at depth <paramref name="z"/>: one quad per segment of its ring.</summary>
+        /// <summary>
+        /// An arch's curved faces between its front and back, one quad per segment, with each one's outward normal: the outer
+        /// face (the top of the arch), or the inner face (the underside of the opening), whose outside looks into the opening.
+        /// </summary>
+        static void ArchSurface(Brush b, Vector3 min, Vector3 max, bool outer, out Vector3[][] quads, out Vector3[] normals)
+        {
+            int n = Mathf.Max(1, b.sides);
+            float a = Mathf.Max(0.001f, (max.x - min.x) * 0.5f), h = Mathf.Max(0.001f, max.y - min.y);
+            float t = Mathf.Clamp(b.wallThickness, 0.001f, Mathf.Min(a, h) - 0.0005f);
+            float ra = outer ? a : a - t, rh = outer ? h : h - t;
+            float angle = Mathf.Clamp(b.curveAngle, 1f, 180f) * Mathf.Deg2Rad, start = Mathf.PI * 0.5f + angle * 0.5f, step = -angle / n;
+            float cx = (min.x + max.x) * 0.5f;
+            quads = new Vector3[n][];
+            normals = new Vector3[n];
+            for (int k = 0; k < n; k++)
+            {
+                float u0 = start + k * step, u1 = start + (k + 1) * step, um = (u0 + u1) * 0.5f;
+                Vector3 E(float u, float z) => new Vector3(cx + ra * Mathf.Cos(u), min.y + rh * Mathf.Sin(u), z);
+                quads[k] = new[] { E(u0, min.z), E(u1, min.z), E(u1, max.z), E(u0, max.z) };
+                var normal = new Vector3(Mathf.Cos(um) / ra, Mathf.Sin(um) / rh, 0f).normalized; // the ellipse's normal
+                normals[k] = outer ? normal : -normal;
+            }
+        }
+
         static Vector3[][] Ring(Brush b, Vector3 min, Vector3 max, float z)
         {
             int n = Mathf.Max(1, b.sides);

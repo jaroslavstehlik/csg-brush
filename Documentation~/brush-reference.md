@@ -57,7 +57,7 @@ Only the sides turned towards you are handles. A side shows a faint outline, and
 | Cone | The bottom, and the sloped side: the radius of the base. | | The apex. |
 | Sphere | The surface: the radius. Only the part facing you lights up; drag it out or in, away from the centre. A round sphere stays round; a stretched one keeps its proportions. | | |
 | Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. Set the step height in the Inspector. | | |
-| Arch | The front and the back. | The feet (the width), the crown (the height), and the inner crown (the thickness). | |
+| Arch | The front and the back. The curved outer face: the height. The curved inner face, under the opening: the thickness. | The feet (the width). | |
 | Curved stairs | The inner face (towards the column) and the outer face: each moves its own edge, and the other stays. The top step's tread: the height, spread over the same steps. The last step's end: the angle the stairs cover. | | |
 | Spiral stairs | The inner and the outer face, as on curved stairs. The top step's tread and the last step's end: more steps, going round further. | | |
 | Door, window | The sides, the top, and the bottom. | | |

@@ -12,9 +12,8 @@
   - Sides turned towards the camera are handles: a side lights up under the pointer and is grabbed anywhere on it.
     A plain click still selects. A wedge's diagonal face grows or shrinks the ramp at the same steepness;
     a cylinder's round side, a cone's sloped side and a sphere's surface change the radius, dragged away from the
-    axis or centre.
-  - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, an arch's feet, crown and inner
-    crown. A stair's step height is set in the Inspector only, so the first riser, which sets the stair's length, is
+    axis or centre; an arch's curved outer face sets its height, and its inner face its thickness.
+  - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, an arch's feet. A stair's step height is set in the Inspector only, so the first riser, which sets the stair's length, is
     easy to grab.
   - Curved and spiral stairs are all faces: the inner and outer faces move their own edge, the top tread sets the
     height, and the last step's end turns the stairs further (curved) or adds steps (spiral).

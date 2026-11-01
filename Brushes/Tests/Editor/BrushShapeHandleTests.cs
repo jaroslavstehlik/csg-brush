@@ -253,12 +253,25 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void AnArchsCrownSetsItsThickness()
+        public void AnArchsOuterFaceSetsItsHeightAndItsInnerFaceItsThickness()
         {
             Brush arch = Make(BrushShape.Arch, new Vector3(4f, 3f, 1f), Vector3.zero);
             arch.wallThickness = 0.5f;
+            float floor = WorldBox(arch).min.y;
+            Drag(arch, "+y", 1f);
+            Assert.AreEqual(4f, arch.size.y, 1e-4f, "taller");
+            Assert.AreEqual(floor, WorldBox(arch).min.y, 1e-4f, "the feet stay on the floor");
             Drag(arch, "thickness", 0.25f);
             Assert.AreEqual(0.75f, arch.wallThickness, 1e-4f);
+            foreach (var h in BrushShapeHandles.HandlesOf(arch))
+                if (h.id == "+y" || h.id == "thickness")
+                    for (int i = 0; i < h.faces.Length; i++)
+                    {
+                        Vector3 middle = Vector3.zero;
+                        foreach (var p in h.faces[i]) middle += p / h.faces[i].Length;
+                        float away = Vector3.Dot(h.faceNormals[i], middle - new Vector3(arch.PivotShift.x, arch.PivotShift.y - arch.ClampedSize.y * 0.5f, middle.z));
+                        Assert.That(h.id == "+y" ? away > 0f : away < 0f, h.id + " face " + i + " looks the right way");
+                    }
         }
 
         [Test]
@@ -302,7 +315,8 @@ namespace CsgBrush.Tests
             Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 2f, 4f), new Vector3(15f, 0f, 0f));
             Assert.IsTrue(Face(stairs, "+x"), "a stair's side is its stepped side");
             Brush arch = Make(BrushShape.Arch, new Vector3(4f, 3f, 1f), new Vector3(20f, 0f, 0f));
-            Assert.IsTrue(Edge(arch, "thickness") && Edge(arch, "+y") && Edge(arch, "+x"), "an arch's crowns and feet are edges");
+            Assert.IsTrue(Face(arch, "+y") && Face(arch, "thickness"), "an arch's curved faces between front and back are sides");
+            Assert.IsTrue(Edge(arch, "+x"), "its feet are edges");
             Brush sphere = Make(BrushShape.Sphere, new Vector3(2f, 2f, 2f), new Vector3(25f, 0f, 0f));
             Assert.IsTrue(Face(sphere, "surface"), "a sphere's radius is its surface");
         }
