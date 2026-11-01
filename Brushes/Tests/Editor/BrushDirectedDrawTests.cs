@@ -66,6 +66,21 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void AnArchDrawnFromFootToFootSpansTheLine()
+        {
+            // drawn along -x from 6 to 2, 1 m deep to the right of the line, 3 m high
+            BrushDraw.SpanPose(new Vector3(6f, 0f, 0f), new Vector3(2f, 0f, 0f), 1f, false, 3f, Floor, 0.5f, 15f, out var centre, out var size, out var rotation);
+            Assert.AreEqual(F(new Vector3(4f, 3f, 1f)), F(size), "span, height, depth");
+            Assert.AreEqual(1f, Mathf.Abs(Vector3.Dot(rotation * Vector3.right, Vector3.right)), 1e-4f, "its width runs along the line");
+            var m = Matrix4x4.TRS(centre, rotation, Vector3.one);
+            float minX = float.PositiveInfinity, maxX = float.NegativeInfinity;
+            foreach (var v in BrushPolyhedron.Arch(size, 1f, 180f, 8).vertices) { var w = m.MultiplyPoint3x4(v); minX = Mathf.Min(minX, w.x); maxX = Mathf.Max(maxX, w.x); }
+            Assert.AreEqual(2f, minX, 1e-3f, "one foot at the release");
+            Assert.AreEqual(6f, maxX, 1e-3f, "the other at the press");
+            Assert.AreEqual(0.5f, centre.z, 1e-4f, "its depth to the side the pointer was on");
+        }
+
+        [Test]
         public void ShiftCentresTheWidthOnTheLine()
         {
             BrushDraw.DirectedPose(Vector3.zero, new Vector3(0f, 0f, 4f), 3f, true, 1f, Floor, 0.5f, 15f, out var centre, out var size, out _);

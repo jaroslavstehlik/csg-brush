@@ -127,6 +127,18 @@ namespace CsgBrush.Editor
             centre = start + rotation * new Vector3(centred ? 0f : width * 0.5f, height * 0.5f, length * 0.5f);
         }
 
+        /// <summary>
+        /// Pose of an arch drawn by its span, as <see cref="DirectedPose"/> with the line from one foot to the other: the
+        /// same box, turned so the arch's local +x (its width) runs along the line and its depth to the side.
+        /// </summary>
+        public static void SpanPose(Vector3 start, Vector3 end, float side, bool centred, float height, Quaternion planeRotation, float grid, float rotationSnap,
+            out Vector3 centre, out Vector3 size, out Quaternion rotation)
+        {
+            DirectedPose(start, end, side, centred, height, planeRotation, grid, rotationSnap, out centre, out size, out rotation);
+            rotation *= Quaternion.Euler(0f, -90f, 0f); // local x onto the line, local z across it
+            size = new Vector3(size.z, size.y, size.x);
+        }
+
         /// <summary>Signed distance along the plane normal from <paramref name="corner"/> to the point on that line nearest the ray.</summary>
         public static float HeightFromRay(Vector3 corner, Vector3 normal, Ray ray)
         {
@@ -142,7 +154,7 @@ namespace CsgBrush.Editor
 
     /// <summary>
     /// Draw a brush the ProBuilder way: press on a surface (a brush face, else the Scene view grid), drag the base rectangle,
-    /// release, move the mouse to set the height, click to create. Wedges and linear stairs are drawn by their direction
+    /// release, move the mouse to set the height, click to create. Wedges, linear stairs and arches are drawn by their direction
     /// instead (see <see cref="IsDirected"/>). Escape cancels the current shape or leaves the tool.
     /// One tool per shape; they share a toolbar button with a shape dropdown.
     /// </summary>
@@ -183,11 +195,11 @@ namespace CsgBrush.Editor
         public static bool IsRadial(BrushShape shape) => shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs;
 
         /// <summary>
-        /// Wedges and linear stairs are drawn by their direction, in three steps: press at the low end and drag to the high
-        /// end (direction and length), click for the width (to the side of the line the pointer is on; Shift centres it on
-        /// the line), click for the height.
+        /// Wedges, linear stairs and arches are drawn by their direction, in three steps: press at the low end and drag to
+        /// the high end (direction and length; an arch's span, from foot to foot), click for the width (an arch's depth; to
+        /// the side of the line the pointer is on, Shift centres it on the line), click for the height.
         /// </summary>
-        public static bool IsDirected(BrushShape shape) => shape == BrushShape.Wedge || shape == BrushShape.Stairs;
+        public static bool IsDirected(BrushShape shape) => shape == BrushShape.Wedge || shape == BrushShape.Stairs || shape == BrushShape.Arch;
 
         /// <summary>Round brushes are drawn from the centre of their base: press on the centre, drag the radius, then the height.</summary>
         public static bool IsCentred(BrushShape shape) => shape == BrushShape.Cylinder || shape == BrushShape.Cone || shape == BrushShape.Sphere;
@@ -454,6 +466,7 @@ namespace CsgBrush.Editor
                 return;
             }
             if (IsCentred(Shape)) { BrushDraw.CentredPose(origin, opposite, height, planeRotation, Grid, Shape == BrushShape.Sphere, out centre, out size, out rotation); return; }
+            if (Shape == BrushShape.Arch) { BrushDraw.SpanPose(origin, opposite, side, centred, height, planeRotation, Grid, BrushSettings.instance.rotationSnapDegrees, out centre, out size, out rotation); return; }
             if (IsDirected(Shape)) { BrushDraw.DirectedPose(origin, opposite, side, centred, height, planeRotation, Grid, BrushSettings.instance.rotationSnapDegrees, out centre, out size, out rotation); return; }
             BrushDraw.Pose(origin, opposite, height, planeRotation, Grid, out centre, out size, out rotation);
         }

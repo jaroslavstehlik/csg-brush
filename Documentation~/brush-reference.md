@@ -22,8 +22,9 @@ Some shapes are drawn differently:
 
 | **Shape** | **How to draw it** |
 | :--- | :--- |
-| **Box**, **Arch** | Drag the base rectangle, then set the height. |
+| **Box** | Drag the base rectangle, then set the height. |
 | **Wedge**, **Linear Stairs** | Press at the low end and drag to the high end, then release. Click to set the width; it goes to the side the pointer is on, and **Shift** centres it on the line. Then click to set the height. The direction snaps to the rotation snap, and the length to the grid. |
+| **Arch** | As a wedge, but the line is the span: press at one foot and drag to the other, then release. Click to set the depth, then the height. |
 | **Cylinder**, **Cone**, **Sphere** | Press on the centre of the base, drag the radius, then set the height. A sphere with no height is round; lift it to make an ellipsoid. |
 | **Curved Stairs**, **Spiral Stairs** | Press where the column's axis goes and drag the outer radius. The drag direction is where the first step starts. Then set the height. The brush's transform is on the axis, at floor level. |
 | **Door**, **Window** | Click once. See [Doors and windows](doors-and-windows.md). |
