@@ -13,37 +13,24 @@ namespace CsgBrush.Editor
     {
         const float PreferredWidth = 270f, Gap = 4f;
 
-        /// <summary>The width the panel has: the Scene view's, right of where the overlay starts. Rows wrap to fit it.</summary>
-        static float s_Width = float.MaxValue;
+        /// <summary>The panel's width: rows of buttons wrap to fit it.</summary>
+        static float s_Width = PreferredWidth;
 
         public override VisualElement CreatePanelContent()
         {
             IMGUIContainer container = null;
-            float limit = -1f;
             container = new IMGUIContainer(() =>
             {
-                float width = AvailableWidth();
-                if (Mathf.Abs(width - limit) > 0.5f) // only on a change: a style change lays the panel out again
-                {
-                    limit = width;
-                    container.style.minWidth = Mathf.Min(PreferredWidth, width);
-                    container.style.maxWidth = width;
-                }
-                s_Width = width;
-                Draw();
+                float width = container.contentRect.width;
+                s_Width = float.IsNaN(width) || width < PreferredWidth ? PreferredWidth : width;
+                s_Width -= 8f; // the panel's padding
+                float labelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = Mathf.Clamp(s_Width * 0.45f, 100f, 160f); // from the panel, not the whole Scene view
+                try { Draw(); }
+                finally { EditorGUIUtility.labelWidth = labelWidth; }
             });
             container.style.minWidth = PreferredWidth;
             return container;
-        }
-
-        /// <summary>How wide the panel can be before the Scene view cuts it off; no limit while that isn't known.</summary>
-        float AvailableWidth()
-        {
-            var window = containerWindow;
-            if (window == null || rootVisualElement == null || window.rootVisualElement == null) return 4096f;
-            float left = rootVisualElement.worldBound.x - window.rootVisualElement.worldBound.x;
-            if (float.IsNaN(left)) return 4096f;
-            return Mathf.Max(120f, window.position.width - Mathf.Max(0f, left) - 24f); // the overlay's own frame and margin
         }
 
         /// <summary>A row of buttons that wraps: before a button of this width, start a new row if it would not fit.</summary>
