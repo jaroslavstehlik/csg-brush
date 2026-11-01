@@ -249,9 +249,11 @@ namespace CsgBrush.Tests
                 if (BrushShapeHandles.FacesCamera(box.transform.TransformDirection(h.direction), box.transform.TransformPoint(h.local), camera)) shown.Add(h.id);
             shown.Sort();
             Assert.AreEqual("+x,+y,+z", string.Join(",", shown), "seen from above, right and front");
-            camera.transform.position = new Vector3(10f, 0.1f, 0f);
+            camera.transform.position = new Vector3(10f, 1.3f, 0f);
             camera.transform.LookAt(Vector3.zero);
-            Assert.IsFalse(BrushShapeHandles.FacesCamera(Vector3.up, new Vector3(0f, 1f, 0f), camera), "the top seen edge-on is hidden");
+            Assert.IsTrue(BrushShapeHandles.FacesCamera(Vector3.up, new Vector3(0f, 1f, 0f), camera), "the top seen at a steep angle still works");
+            camera.transform.position = new Vector3(10f, 0.9f, 0f);
+            Assert.IsFalse(BrushShapeHandles.FacesCamera(Vector3.up, new Vector3(0f, 1f, 0f), camera), "seen from below, it is hidden");
         }
 
         [Test]

@@ -516,8 +516,11 @@ namespace CsgBrush.Editor
         const float YieldDistance = 4f;
         /// <summary>A side starts resizing only after the pointer moves this far (pixels): a plain click still selects.</summary>
         const float DragThreshold = 4f;
-        /// <summary>A side seen nearly edge-on is hidden: dragging it would be imprecise.</summary>
-        const float MinFacing = 0.15f;
+        /// <summary>
+        /// A side works whenever its front can be seen; only one seen exactly edge-on (or from behind) is left out. For a flat
+        /// side this is exact everywhere on it, in perspective too: its plane's distance to the camera is the same at every point.
+        /// </summary>
+        const float MinFacing = 1e-4f;
 
         static readonly int s_Hash = "BrushShapeHandle".GetHashCode();
         static readonly Dictionary<Brush, State> s_Start = new Dictionary<Brush, State>();
@@ -534,7 +537,7 @@ namespace CsgBrush.Editor
             return s.shapeHandles && !BrushEditContext.IsActive && !FloorPlanEditContext.IsActive && BrushCreateTool.Active == null && Tools.current != Tool.View;
         }
 
-        /// <summary>Is a side with this world normal and middle turned towards the camera (seen from its front, not edge-on)?</summary>
+        /// <summary>Is a side with this world normal and middle turned towards the camera: is its front seen at all?</summary>
         public static bool FacesCamera(Vector3 worldNormal, Vector3 worldMiddle, Camera camera)
         {
             Vector3 toCamera = camera.orthographic ? -camera.transform.forward : (camera.transform.position - worldMiddle).normalized;
