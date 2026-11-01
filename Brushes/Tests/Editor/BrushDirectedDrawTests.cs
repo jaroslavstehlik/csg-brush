@@ -28,6 +28,26 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void StairsDrawnTowardsMinusXClimbFromThePressToTheRelease()
+        {
+            BrushDraw.DirectedPose(new Vector3(5f, 0f, 0f), new Vector3(1f, 0f, 0f), 1f, false, 2f, Floor, 0.5f, 15f, out var centre, out var size, out var rotation);
+            var stairs = BrushPolyhedron.Stairs(size, 0.25f);
+            var m = Matrix4x4.TRS(centre, rotation, Vector3.one);
+            // the lowest top tread lies by the press, the highest by the release
+            float lowTreadX = float.NaN, highTreadX = float.NaN, lowY = float.PositiveInfinity, highY = float.NegativeInfinity;
+            foreach (var v in stairs.vertices)
+            {
+                var w = m.MultiplyPoint3x4(v);
+                if (w.y < 1e-4f) continue;
+                if (w.y < lowY - 1e-4f || (Mathf.Abs(w.y - lowY) < 1e-4f && w.x > lowTreadX)) { lowY = w.y; lowTreadX = w.x; }
+                if (w.y > highY + 1e-4f || (Mathf.Abs(w.y - highY) < 1e-4f && w.x < highTreadX)) { highY = w.y; highTreadX = w.x; }
+            }
+            Assert.AreEqual(2f, highY, 1e-4f);
+            Assert.AreEqual(5f, lowTreadX, 1e-4f, "the first step starts at the press");
+            Assert.AreEqual(1f, highTreadX, 1e-4f, "the top step ends at the release");
+        }
+
+        [Test]
         public void ARampDrawnTowardsMinusXFacesThatWay()
         {
             BrushDraw.DirectedPose(new Vector3(5f, 0f, 0f), new Vector3(2f, 0f, 0f), -1f, false, 1f, Floor, 0.5f, 15f, out _, out var size, out var rotation);
