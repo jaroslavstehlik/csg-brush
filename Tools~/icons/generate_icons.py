@@ -417,6 +417,47 @@ def extrude(ic):
     arrow(ic, c, t, BOLD * 0.8, 2.2)
 
 
+
+def shape_edit(ic):
+    # a low solid whose top side is grabbed: the side lit, an arrow pulling it up
+    t = 0.45
+    prisms(ic, [([(0, 0, True), (1, 0, True), (1, 1, True), (0, 1, True)], 0, t)])
+    top = [P(0, t, 0), P(1, t, 0), P(1, t, 1), P(0, t, 1)]
+    ic.fill(top, 0.55)
+    ic.line(top, LINE, 1.0, closed=True)
+    c = P(0.5, t, 0.5)
+    arrow(ic, c, (c[0], 1.6), BOLD * 0.8, 2.2)
+    ic.dot(c, 1.0)
+
+
+def bars(ic, heights, caps, base=14.0, width=3.4, gap=1.4):
+    """Bars standing on one floor, left to right: an outline each, filled where capped (the part a drag changes)."""
+    x = (16.0 - len(heights) * width - (len(heights) - 1) * gap) / 2
+    for h, cap in zip(heights, caps):
+        top = base - h
+        if cap == "all":
+            ic.fill([(x, top), (x + width, top), (x + width, base), (x, base)], 1.0)
+        elif cap:
+            ic.fill([(x, top), (x + width, top), (x + width, top + cap), (x, top + cap)], 1.0)
+        ic.line([(x, top), (x + width, top), (x + width, base), (x, base)], LINE, 1.0 if cap else DIM, closed=True)
+        x += width + gap
+
+
+def selection_single(ic):
+    # one bar changes, the others are left alone
+    bars(ic, [9.0, 6.0, 11.0], ["all", None, None])
+
+
+def selection_offset(ic):
+    # every bar grows by the same amount: the same cap on each
+    bars(ic, [9.0, 6.0, 11.0], [3.0, 3.0, 3.0])
+
+
+def selection_match(ic):
+    # every bar grows to the same level, each by its own amount: a line across their tops
+    bars(ic, [10.0, 10.0, 10.0], [1.5, 4.5, 3.0])
+    ic.line([(1.6, 2.6), (14.4, 2.6)], LINE, 1.0)
+
 ICONS = {
     # create tools (names match BrushShape)
     "Box": box, "Wedge": wedge, "Cylinder": cylinder, "Cone": cone, "Sphere": sphere,
@@ -426,6 +467,8 @@ ICONS = {
     "SelectHidden": select_hidden, "DragRect": drag_rect, "ToolHandleElement": handle_element,
     # overlays and the Brush component
     "Brush": brush, "Extrude": extrude,
+    # shape edit
+    "ShapeEdit": shape_edit, "ShapeEdit_Single": selection_single, "ShapeEdit_Offset": selection_offset, "ShapeEdit_Match": selection_match,
 }
 
 

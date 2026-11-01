@@ -64,15 +64,15 @@ Only the sides turned towards you are handles. A side shows a faint outline, and
 
 Unity's own Move, Rotate, and Scale handles always come first: where one of them is under the pointer, it takes the drag. While you drag, the handle shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo.
 
-To turn the handles on or off, use **Shape Edit** in the **Brushes** overlay, or press **B** in the Scene view.
+The handles have their own toolbar in the Scene view, **Shape Edit**. Its first button turns them on or off; **B** in the Scene view does the same. While they're on, the second button sets what a drag does to the other selected brushes. It works like Unity's **Pivot** / **Center** button: it shows the current choice, and a click lists all three.
 
-While **Shape Edit** is on, **Other selected** in the overlay sets what a drag does to the other selected brushes:
-
-| **Setting** | **What happens** |
+| **Choice** | **What happens** |
 | :--- | :--- |
-| **Only this brush** (default) | Only the brush you drag changes. |
-| **Same shapes, by the same amount** | Selected brushes of the same shape change by the same amount: drag one cylinder's top up 1 m, and every selected cylinder gets 1 m taller. |
-| **Same shapes, to the same value** | Selected brushes of the same shape take the dragged brush's new value: every selected cylinder becomes as tall as the one you drag. |
+| **Single** (default) | Only the brush you drag changes. |
+| **Offset** | Selected brushes of the same shape change by the same amount: drag one cylinder's top up 1 m, and every selected cylinder gets 1 m taller. |
+| **Match** | Selected brushes of the same shape take the dragged brush's new size: every selected cylinder becomes as tall as the one you drag. |
+
+If the toolbar is hidden, show it from the Scene view's Overlays menu (**`** in the Scene view).
 
 Brushes of other shapes never change.
 

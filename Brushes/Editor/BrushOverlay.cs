@@ -43,10 +43,8 @@ namespace CsgBrush.Editor
 
             if (BrushCreateTool.Active != null) DrawNewBrush(s, BrushCreateTool.Active);
 
-            // edit mode: one row, Shape Edit and Edit brush toggles
+            // edit mode: one row, Edit brush toggle then Vertex / Edge / Face
             EditorGUILayout.BeginHorizontal();
-            bool shapes = GUILayout.Toggle(s.shapeHandles, new GUIContent("Shape Edit", "Drag a selected brush's sides to change its shape (B)"), EditorStyles.miniButton);
-            if (shapes != s.shapeHandles) { s.shapeHandles = shapes; s.NotifyChanged(); SceneView.RepaintAll(); }
             bool editing = BrushEditContext.IsActive;
             bool editable = false;
             foreach (var go in Selection.gameObjects)
@@ -67,14 +65,6 @@ namespace CsgBrush.Editor
                 if (wantEditing != editing) { if (wantEditing) BrushEditContext.Enter(); else BrushEditContext.Exit(); }
             }
             EditorGUILayout.EndHorizontal();
-            if (s.shapeHandles && !editing)
-            {
-                EditorGUILayout.BeginHorizontal();
-                GUILayout.Label(new GUIContent("Other selected", "What a shape edit does to the other selected brushes"), EditorStyles.miniLabel, GUILayout.Width(84));
-                var selection = (ShapeEditSelection)EditorGUILayout.EnumPopup(s.shapeEditSelection);
-                if (selection != s.shapeEditSelection) { s.shapeEditSelection = selection; s.NotifyChanged(); }
-                EditorGUILayout.EndHorizontal();
-            }
             if (editing) BrushExtrude.DrawPanel();
 
             // lint: parents that rotate or scale brushes off the grid

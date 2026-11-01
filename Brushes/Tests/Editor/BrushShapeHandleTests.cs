@@ -65,7 +65,7 @@ namespace CsgBrush.Tests
         [Test]
         public void OnlyTheDraggedBrushChanges()
         {
-            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.OnlyThisBrush);
+            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.Single);
             Assert.AreEqual(3f, dragged.size.y, 1e-4f);
             Assert.AreEqual(4f, other.size.y, 1e-4f, "the other cylinder stays");
             Assert.AreEqual(2f, box.size.y, 1e-4f, "the box stays");
@@ -74,7 +74,7 @@ namespace CsgBrush.Tests
         [Test]
         public void SameShapesChangeByTheSameAmount()
         {
-            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.SameShapesBySameAmount);
+            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.Offset);
             Assert.AreEqual(3f, dragged.size.y, 1e-4f);
             Assert.AreEqual(5f, other.size.y, 1e-4f, "1 m taller too");
             Assert.AreEqual(2f, box.size.y, 1e-4f, "another shape stays");
@@ -83,7 +83,7 @@ namespace CsgBrush.Tests
         [Test]
         public void SameShapesChangeToTheSameValue()
         {
-            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.SameShapesToSameValue);
+            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.Match);
             Assert.AreEqual(3f, dragged.size.y, 1e-4f);
             Assert.AreEqual(3f, other.size.y, 1e-4f, "as tall as the dragged one");
             Assert.AreEqual(2f, box.size.y, 1e-4f, "another shape stays");
@@ -101,12 +101,21 @@ namespace CsgBrush.Tests
                 var brushes = new List<Brush> { dragged, other };
                 var starts = new Dictionary<Brush, BrushShapeHandles.State>();
                 foreach (var x in brushes) starts[x] = BrushShapeHandles.State.Of(x);
-                BrushShapeHandles.ApplyToSelection(brushes, dragged, handle, 0.5f, false, ShapeEditSelection.SameShapesToSameValue, starts);
+                BrushShapeHandles.ApplyToSelection(brushes, dragged, handle, 0.5f, false, ShapeEditSelection.Match, starts);
                 Assert.AreNotEqual(starts[dragged].size.x + starts[dragged].size.z, dragged.size.x + dragged.size.z, handle + " changed the dragged brush");
                 Assert.AreEqual(dragged.size.x, other.size.x, 1e-3f, handle + ": the same width");
                 if (handle == "side") Assert.AreEqual(dragged.size.z, other.size.z, 1e-3f, "the same diameter");
                 else Assert.AreEqual(dragged.size.z, other.size.z, 1e-3f, "the same ramp length");
             }
+        }
+
+        [Test]
+        public void TheShapeEditToolbarHasAnIconForEachChoice()
+        {
+            Assert.AreEqual(3, System.Enum.GetValues(typeof(ShapeEditSelection)).Length, "Single, Offset, Match");
+            foreach (var name in new[] { "ShapeEdit", "ShapeEdit_Single", "ShapeEdit_Offset", "ShapeEdit_Match" })
+                foreach (var file in new[] { name, "d_" + name })
+                    Assert.IsNotNull(UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/" + file + ".png"), file);
         }
 
         [Test]

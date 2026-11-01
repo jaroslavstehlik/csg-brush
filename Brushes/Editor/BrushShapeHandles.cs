@@ -516,12 +516,12 @@ namespace CsgBrush.Editor
         {
             if (!starts.TryGetValue(dragged, out var draggedStart)) return;
             Apply(dragged, draggedStart, handleId, distance, symmetric);
-            if (mode == ShapeEditSelection.OnlyThisBrush) return;
-            int measure = mode == ShapeEditSelection.SameShapesToSameValue ? Measured(dragged, draggedStart, handleId, distance, symmetric) : -1;
+            if (mode == ShapeEditSelection.Single) return;
+            int measure = mode == ShapeEditSelection.Match ? Measured(dragged, draggedStart, handleId, distance, symmetric) : -1;
             foreach (var other in brushes)
             {
                 if (other == dragged || other.shape != dragged.shape || !starts.TryGetValue(other, out var start)) continue;
-                if (mode == ShapeEditSelection.SameShapesBySameAmount) { Apply(other, start, handleId, distance, symmetric); continue; }
+                if (mode == ShapeEditSelection.Offset) { Apply(other, start, handleId, distance, symmetric); continue; }
                 if (measure < 0) { Apply(other, start, handleId, 0f, symmetric); continue; }
                 Apply(other, start, handleId, DistanceTo(other, start, handleId, symmetric, measure, Values(State.Of(dragged))[measure]), symmetric);
             }

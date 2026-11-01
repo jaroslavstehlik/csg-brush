@@ -13,11 +13,11 @@ namespace CsgBrush.Editor
     public enum ShapeEditSelection
     {
         /// <summary>Only the brush whose handle is dragged changes.</summary>
-        [InspectorName("Only this brush")] OnlyThisBrush = 0,
+        [InspectorName("Single")] Single = 0,
         /// <summary>Selected brushes of the same shape change by the same amount.</summary>
-        [InspectorName("Same shapes, by the same amount")] SameShapesBySameAmount = 1,
+        [InspectorName("Offset")] Offset = 1,
         /// <summary>Selected brushes of the same shape take the dragged brush's new value.</summary>
-        [InspectorName("Same shapes, to the same value")] SameShapesToSameValue = 2,
+        [InspectorName("Match")] Match = 2,
     }
 
     [FilePath("ProjectSettings/BrushSettings.asset", FilePathAttribute.Location.ProjectFolder)]
@@ -74,7 +74,7 @@ namespace CsgBrush.Editor
         [Tooltip("Drag a selected brush's sides to change its shape.")]
         public bool shapeHandles = true;
         [Tooltip("What a shape edit does to the other selected brushes.")]
-        public ShapeEditSelection shapeEditSelection = ShapeEditSelection.OnlyThisBrush;
+        public ShapeEditSelection shapeEditSelection = ShapeEditSelection.Single;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]
         public bool snapToGrid = true;
 
