@@ -527,8 +527,7 @@ namespace CsgBrush.Editor
 
     /// <summary>Toolbar icons drawn in code from small pixel-art strings ('#' opaque), so the package needs no image assets.</summary>
     /// <summary>
-    /// The package's icons (Brushes/Editor/Icons, drawn by Tools~/icons/generate_icons.py). Unity picks the d_ variant on the
-    /// dark theme and caches them.
+    /// The package's icons (Brushes/Editor/Icons, drawn by Tools~/icons/generate_icons.py): the d_ variant on the dark theme.
     /// </summary>
     static class BrushIcons
     {
@@ -539,9 +538,8 @@ namespace CsgBrush.Editor
         /// </summary>
         public static Texture2D Get(string name)
         {
-            string path = Folder + name + ".png";
-            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) == null) return null;
-            return EditorGUIUtility.IconContent(path).image as Texture2D;
+            var icon = EditorGUIUtility.isProSkin ? AssetDatabase.LoadAssetAtPath<Texture2D>(Folder + "d_" + name + ".png") : null;
+            return icon != null ? icon : AssetDatabase.LoadAssetAtPath<Texture2D>(Folder + name + ".png");
         }
     }
 

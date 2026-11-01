@@ -40,6 +40,8 @@
   - **Shape Edit** in the Brushes overlay turns them on or off (or **B**), and sets what a drag does to the other selected
     brushes: **Single** (the default), **Offset** (brushes of the same shape change by the same amount) or **Match**
     (they get the same size).
+  - Sides and edges that run past the camera still work close up: only their part in front of the camera is used.
+- The toolbar icons no longer log "Unable to load the icon" while the dark theme ones are still importing.
 - Build levels from scripts (new manual page):
   - `BrushApi.CreateBox(min, max)` places a box exactly between two corners.
   - `BrushApi.Create` takes `snap`. The new **Grid snap** value **Off** keeps a brush exactly where it was placed.

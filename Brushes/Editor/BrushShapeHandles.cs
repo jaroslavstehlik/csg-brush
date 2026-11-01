@@ -657,6 +657,7 @@ namespace CsgBrush.Editor
                 if (go != null && go.TryGetComponent<Brush>(out var b) && !b.IsGenerated && b.shape != BrushShape.Custom) brushes.Add(b);
             if (brushes.Count == 0 || brushes.Count > 32) return;
             var e = Event.current;
+            Plane? near = NearPlane(view.camera);
             foreach (var b in brushes)
             {
                 var toWorld = b.transform.localToWorldMatrix;
@@ -665,9 +666,10 @@ namespace CsgBrush.Editor
                     int id = GUIUtility.GetControlID(s_Hash, FocusType.Passive); // one per handle, shown or not, so ids stay stable
                     Vector3 world = toWorld.MultiplyPoint3x4(h.local);
                     Vector3 dir = toWorld.MultiplyVector(h.direction).normalized;
-                    Vector3[] line = h.IsEdge ? System.Array.ConvertAll(h.edge, p => toWorld.MultiplyPoint3x4(p)) : null;
-                    Vector3[][] polygons = h.IsFace ? Facing(h, toWorld, dir, world, view.camera, GUIUtility.hotControl == id) : null;
-                    bool shown = GUIUtility.hotControl == id || !h.IsFace || polygons.Length > 0; // points and edges always; sides when they face the camera
+                    // only what lies in front of the camera: a corner behind it lands mirrored on the screen
+                    Vector3[][] line = h.IsEdge ? InFront(System.Array.ConvertAll(h.edge, p => toWorld.MultiplyPoint3x4(p)), h.closed, near) : null;
+                    Vector3[][] polygons = h.IsFace ? InFront(Facing(h, toWorld, dir, world, view.camera, GUIUtility.hotControl == id), near) : null;
+                    bool shown = GUIUtility.hotControl == id || (h.IsFace ? polygons.Length > 0 : h.IsEdge ? line.Length > 0 : near == null || near.Value.GetSide(world)); // sides when they face the camera
                     if (!shown) continue;
                     float dot = HandleUtility.GetHandleSize(world) * 0.05f;
                     switch (e.GetTypeForControl(id))
@@ -675,7 +677,7 @@ namespace CsgBrush.Editor
                         case EventType.Layout:
                         case EventType.MouseMove:
                             // an edge on a face's border wins over the face (a little nearer); Unity's own handles win over both
-                            if (line != null ? EdgeDistance(e.mousePosition, line, h.closed, out _) <= 6f : Under(e.mousePosition, world, dot, polygons))
+                            if (line != null ? EdgeDistance(e.mousePosition, line, out _) <= 6f : Under(e.mousePosition, world, dot, polygons))
                                 HandleUtility.AddControl(id, h.IsFace ? YieldDistance : YieldDistance - 1f);
                             break;
                         case EventType.MouseDown:
@@ -687,7 +689,7 @@ namespace CsgBrush.Editor
                                 if (line != null)
                                 {
                                     // grabbed where the pointer is along it
-                                    EdgeDistance(e.mousePosition, line, h.closed, out Vector3 grabbed);
+                                    EdgeDistance(e.mousePosition, line, out Vector3 grabbed);
                                     s_StartWorld = grabbed;
                                 }
                                 else if (polygons != null && Grabbed(e.mousePosition, polygons, out Vector3 point))
@@ -772,15 +774,15 @@ namespace CsgBrush.Editor
             return false;
         }
 
-        /// <summary>The pointer's distance in pixels to a polyline on the screen, and the nearest point on it in the world.</summary>
-        static float EdgeDistance(Vector2 mouse, Vector3[] line, bool closed, out Vector3 nearest)
+        /// <summary>The pointer's distance in pixels to an edge's pieces on the screen, and the nearest point on them in the world.</summary>
+        static float EdgeDistance(Vector2 mouse, Vector3[][] pieces, out Vector3 nearest)
         {
             float best = float.MaxValue;
-            nearest = line[0];
-            int segments = closed ? line.Length : line.Length - 1;
-            for (int i = 0; i < segments; i++)
+            nearest = default;
+            foreach (var line in pieces)
+            for (int i = 0; i + 1 < line.Length; i++)
             {
-                Vector3 a = line[i], b = line[(i + 1) % line.Length];
+                Vector3 a = line[i], b = line[i + 1];
                 Vector2 sa = HandleUtility.WorldToGUIPoint(a), sb = HandleUtility.WorldToGUIPoint(b);
                 Vector2 ab = sb - sa;
                 float t = ab.sqrMagnitude > 1e-6f ? Mathf.Clamp01(Vector2.Dot(mouse - sa, ab) / ab.sqrMagnitude) : 0f;
@@ -806,19 +808,90 @@ namespace CsgBrush.Editor
             return sign != 0;
         }
 
-        static void Draw(int id, Handle h, Vector3 world, Vector3 dir, float dot, Vector3[][] polygons, Vector3[] line, Brush b)
+        /// <summary>The plane just in front of a perspective camera that handles are cut to; none for an orthographic one.</summary>
+        static Plane? NearPlane(Camera camera)
+        {
+            if (camera == null || camera.orthographic) return null;
+            Vector3 forward = camera.transform.forward;
+            return new Plane(forward, camera.transform.position + forward * camera.nearClipPlane * 1.5f);
+        }
+
+        static Vector3[][] InFront(Vector3[][] polygons, Plane? near)
+        {
+            if (near == null) return polygons;
+            var result = new List<Vector3[]>(polygons.Length);
+            foreach (var polygon in polygons)
+            {
+                var part = ClipPolygon(polygon, near.Value);
+                if (part.Length >= 3) result.Add(part);
+            }
+            return result.ToArray();
+        }
+
+        static Vector3[][] InFront(Vector3[] line, bool closed, Plane? near)
+        {
+            if (near != null) return ClipLine(line, closed, near.Value);
+            if (!closed) return new[] { line };
+            var loop = new Vector3[line.Length + 1];
+            line.CopyTo(loop, 0); loop[line.Length] = line[0];
+            return new[] { loop };
+        }
+
+        /// <summary>The part of a convex polygon on the plane's front side.</summary>
+        public static Vector3[] ClipPolygon(Vector3[] polygon, Plane plane)
+        {
+            var result = new List<Vector3>(polygon.Length + 1);
+            for (int i = 0; i < polygon.Length; i++)
+            {
+                Vector3 a = polygon[i], b = polygon[(i + 1) % polygon.Length];
+                float da = plane.GetDistanceToPoint(a), db = plane.GetDistanceToPoint(b);
+                if (da >= 0f) result.Add(a);
+                if ((da >= 0f) != (db >= 0f)) result.Add(Vector3.Lerp(a, b, da / (da - db)));
+            }
+            return result.ToArray();
+        }
+
+        /// <summary>The pieces of a polyline (a loop when closed) on the plane's front side, each an open polyline.</summary>
+        public static Vector3[][] ClipLine(Vector3[] line, bool closed, Plane plane)
+        {
+            var pieces = new List<Vector3[]>();
+            var piece = new List<Vector3>();
+            int segments = closed ? line.Length : line.Length - 1;
+            for (int i = 0; i < segments; i++)
+            {
+                Vector3 a = line[i], b = line[(i + 1) % line.Length];
+                float da = plane.GetDistanceToPoint(a), db = plane.GetDistanceToPoint(b);
+                if (da < 0f && db < 0f) continue;
+                Vector3 from = da >= 0f ? a : Vector3.Lerp(a, b, da / (da - db));
+                Vector3 to = db >= 0f ? b : Vector3.Lerp(a, b, da / (da - db));
+                if (piece.Count == 0 || da < 0f) { if (piece.Count > 1) pieces.Add(piece.ToArray()); piece = new List<Vector3> { from }; }
+                piece.Add(to);
+                if (db < 0f) { pieces.Add(piece.ToArray()); piece = new List<Vector3>(); }
+            }
+            if (piece.Count > 1)
+            {
+                // a loop cut once: its last piece runs on into its first
+                if (closed && pieces.Count > 0 && piece[piece.Count - 1] == pieces[0][0])
+                {
+                    piece.AddRange(new System.ArraySegment<Vector3>(pieces[0], 1, pieces[0].Length - 1));
+                    pieces[0] = piece.ToArray();
+                }
+                else pieces.Add(piece.ToArray());
+            }
+            return pieces.ToArray();
+        }
+
+        static void Draw(int id, Handle h, Vector3 world, Vector3 dir, float dot, Vector3[][] polygons, Vector3[][] line, Brush b)
         {
             bool hot = GUIUtility.hotControl == id, hover = !hot && GUIUtility.hotControl == 0 && HandleUtility.nearestControl == id;
             Color colour = h.radial ? Handles.xAxisColor : AxisColor(h.direction);
             if (line != null)
             {
                 // an edge: a thin line, thick and lit under the pointer
-                var points = line;
-                if (h.closed) { points = new Vector3[line.Length + 1]; line.CopyTo(points, 0); points[line.Length] = line[0]; }
                 var c = hot || hover ? Handles.selectedColor : colour;
                 if (!hot && !hover) c.a = 0.6f;
                 Handles.color = c;
-                Handles.DrawAAPolyLine(hot || hover ? 5f : 2.5f, points);
+                foreach (var points in line) Handles.DrawAAPolyLine(hot || hover ? 5f : 2.5f, points);
             }
             else if (polygons != null)
             {

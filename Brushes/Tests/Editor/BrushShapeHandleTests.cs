@@ -360,5 +360,42 @@ namespace CsgBrush.Tests
                 else Assert.Greater(count, 0, shape.ToString());
             }
         }
+
+        // the camera at the origin looking along +z, its near plane at z = 0.1: a long side or edge runs past it
+        static readonly Plane NearPlane = new Plane(Vector3.forward, new Vector3(0f, 0f, 0.1f));
+
+        [Test]
+        public void ASideRunningPastTheCameraIsCutAtItsNearPlane()
+        {
+            var side = new[] { new Vector3(-1f, -1f, -20f), new Vector3(-1f, -1f, 20f), new Vector3(-1f, 1f, 20f), new Vector3(-1f, 1f, -20f) };
+            var part = BrushShapeHandles.ClipPolygon(side, NearPlane);
+            Assert.AreEqual(4, part.Length);
+            foreach (var p in part) Assert.GreaterOrEqual(p.z, 0.1f - 1e-5f, "nothing behind the camera");
+            Assert.AreEqual(0, BrushShapeHandles.ClipPolygon(System.Array.ConvertAll(side, p => new Vector3(p.x, p.y, Mathf.Min(p.z, -1f))), NearPlane).Length, "a side wholly behind is gone");
+            Assert.AreEqual(4, BrushShapeHandles.ClipPolygon(System.Array.ConvertAll(side, p => p + Vector3.forward * 30f), NearPlane).Length, "a side wholly in front is kept");
+        }
+
+        [Test]
+        public void AnEdgeRunningPastTheCameraKeepsOnlyItsPartInFront()
+        {
+            var pieces = BrushShapeHandles.ClipLine(new[] { new Vector3(0f, -1f, -5f), new Vector3(0f, -1f, 5f), new Vector3(0f, -1f, 10f) }, false, NearPlane);
+            Assert.AreEqual(1, pieces.Length);
+            Assert.AreEqual(3, pieces[0].Length);
+            Assert.AreEqual(0.1f, pieces[0][0].z, 1e-5f);
+            Assert.AreEqual(10f, pieces[0][2].z, 1e-5f);
+
+            // a rim around the camera: the loop is cut where it passes behind, and its two ends join into one piece
+            var rim = new Vector3[16];
+            for (int i = 0; i < rim.Length; i++) { float a = i * Mathf.PI * 2f / rim.Length; rim[i] = new Vector3(Mathf.Sin(a) * 3f, -1f, Mathf.Cos(a) * 3f); }
+            var rimPieces = BrushShapeHandles.ClipLine(rim, true, NearPlane);
+            Assert.AreEqual(1, rimPieces.Length);
+            foreach (var p in rimPieces[0]) Assert.GreaterOrEqual(p.z, 0.1f - 1e-5f);
+            Assert.AreEqual(0.1f, rimPieces[0][0].z, 1e-5f);
+            Assert.AreEqual(0.1f, rimPieces[0][rimPieces[0].Length - 1].z, 1e-5f);
+
+            var whole = BrushShapeHandles.ClipLine(System.Array.ConvertAll(rim, p => p + Vector3.forward * 10f), true, NearPlane);
+            Assert.AreEqual(1, whole.Length);
+            Assert.AreEqual(rim.Length + 1, whole[0].Length, "a loop wholly in front closes on itself");
+        }
     }
 }
