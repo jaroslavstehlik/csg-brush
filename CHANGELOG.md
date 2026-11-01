@@ -2,6 +2,9 @@
 
 ## 0.5.0 (unreleased)
 
+- Wedges and linear stairs are drawn by direction: press at the low end, drag to the high end, click for the width
+  (to the side the pointer is on; **Shift** centres it), then click for the height. The direction snaps to the
+  rotation snap.
 - Fixed: a very low step height (a few millimetres) made thousands of blocks and froze or crashed the editor. A step is
   now at least 0.1 m high, however it is set: the Inspector, the shape handles, scripts, or an older scene.
 - Shape handles change a selected brush's shape directly, alongside the Move, Rotate or Scale tool, and the brush stays

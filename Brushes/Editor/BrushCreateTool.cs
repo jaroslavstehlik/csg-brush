@@ -80,6 +80,31 @@ namespace CsgBrush.Editor
             rotation = planeRotation;
         }
 
+        /// <summary>
+        /// Pose of a brush drawn by its direction, as wedges and linear stairs are: a line from <paramref name="start"/> (the
+        /// low end) to <paramref name="end"/> (the high end) gives the direction and the length, both snapped (the length to
+        /// the grid, the direction to <paramref name="rotationSnap"/> degrees); <paramref name="side"/> is the signed width to
+        /// the right of the line (or about it, <paramref name="centred"/>), <paramref name="height"/> the signed height along
+        /// the plane normal. The brush's local +z points along the line, so the shape rises towards the end.
+        /// </summary>
+        public static void DirectedPose(Vector3 start, Vector3 end, float side, bool centred, float height, Quaternion planeRotation, float grid, float rotationSnap,
+            out Vector3 centre, out Vector3 size, out Quaternion rotation)
+        {
+            var line = Quaternion.Inverse(planeRotation) * (end - start);
+            float yaw = Mathf.Atan2(line.x, line.z) * Mathf.Rad2Deg;
+            if (rotationSnap > 0f) yaw = BrushSnap.Round(yaw, rotationSnap);
+            rotation = planeRotation * Quaternion.Euler(0f, yaw, 0f);
+            var along = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+            float step = grid > 0f ? grid : 0.5f;
+            float length = Vector3.Dot(new Vector3(line.x, 0f, line.z), along);
+            length = Mathf.Max(step, grid > 0f ? BrushSnap.Round(length, grid) : length);
+            float width = grid > 0f ? BrushSnap.Round(side, grid) : side;
+            if (Mathf.Abs(width) < 1e-6f) width = step;
+            if (Mathf.Abs(height) < 1e-6f) height = step;
+            size = new Vector3(Mathf.Abs(width), Mathf.Abs(height), length);
+            centre = start + rotation * new Vector3(centred ? 0f : width * 0.5f, height * 0.5f, length * 0.5f);
+        }
+
         /// <summary>Signed distance along the plane normal from <paramref name="corner"/> to the point on that line nearest the ray.</summary>
         public static float HeightFromRay(Vector3 corner, Vector3 normal, Ray ray)
         {
@@ -95,7 +120,8 @@ namespace CsgBrush.Editor
 
     /// <summary>
     /// Draw a brush the ProBuilder way: press on a surface (a brush face, else the Scene view grid), drag the base rectangle,
-    /// release, move the mouse to set the height, click to create. Escape cancels the current shape or leaves the tool.
+    /// release, move the mouse to set the height, click to create. Wedges and linear stairs are drawn by their direction
+    /// instead (see <see cref="IsDirected"/>). Escape cancels the current shape or leaves the tool.
     /// One tool per shape; they share a toolbar button with a shape dropdown.
     /// </summary>
     public abstract class BrushCreateTool : EditorTool
@@ -110,9 +136,10 @@ namespace CsgBrush.Editor
         /// <summary>Exactly what the toolbar shows: "Box Brush", "Curved Stairs Brush".</summary>
         public abstract string Title { get; }
 
-        enum State { Idle, Base, Height }
+        enum State { Idle, Base, Width, Height }
         State state;
         Vector3 origin, opposite, normal; Quaternion planeRotation; float height;
+        float side; bool centred;
         Vector3 hoverPoint; bool hoverValid;
         FloorPlan wallPlan;
         int controlId;
@@ -132,6 +159,13 @@ namespace CsgBrush.Editor
 
         /// <summary>Curved and spiral stairs are placed by their axis: press on the axis, drag the outer radius, then the height.</summary>
         public static bool IsRadial(BrushShape shape) => shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs;
+
+        /// <summary>
+        /// Wedges and linear stairs are drawn by their direction, in three steps: press at the low end and drag to the high
+        /// end (direction and length), click for the width (to the side of the line the pointer is on; Shift centres it on
+        /// the line), click for the height.
+        /// </summary>
+        public static bool IsDirected(BrushShape shape) => shape == BrushShape.Wedge || shape == BrushShape.Stairs;
 
         /// <summary>Round brushes are drawn from the centre of their base: press on the centre, drag the radius, then the height.</summary>
         public static bool IsCentred(BrushShape shape) => shape == BrushShape.Cylinder || shape == BrushShape.Cone || shape == BrushShape.Sphere;
@@ -245,8 +279,28 @@ namespace CsgBrush.Editor
                         float min = Grid > 0f ? Grid * 0.5f : 0.05f;
                         bool tooSmall = IsRadial(Shape) || IsCentred(Shape) ? new Vector2(local.x, local.z).magnitude < min : Mathf.Abs(local.x) < min && Mathf.Abs(local.z) < min;
                         if (tooSmall) { state = State.Idle; break; } // a click, not a drag
+                        if (IsDirected(Shape)) { state = State.Width; side = 0f; centred = false; break; }
                         state = State.Height; height = 0f;
                     }
+                    if (e.type == EventType.Repaint) DrawPreview();
+                    break;
+
+                case State.Width:
+                    if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag)
+                    {
+                        var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
+                        var plane = new Plane(normal, origin);
+                        if (plane.Raycast(ray, out float t))
+                        {
+                            BrushDraw.DirectedPose(origin, opposite, 0f, false, 0f, planeRotation, Grid, BrushSettings.instance.rotationSnapDegrees, out _, out _, out var r);
+                            float offset = Vector3.Dot(ray.GetPoint(t) - origin, r * Vector3.right);
+                            centred = e.shift;
+                            side = centred ? Mathf.Abs(offset) * 2f : offset;
+                        }
+                        e.Use(); SceneView.RepaintAll();
+                    }
+                    if (e.type == EventType.MouseDown && e.button == 0) { GUIUtility.hotControl = controlId; e.Use(); }
+                    if (e.type == EventType.MouseUp && e.button == 0) { GUIUtility.hotControl = 0; state = State.Height; height = 0f; e.Use(); }
                     if (e.type == EventType.Repaint) DrawPreview();
                     break;
 
@@ -372,6 +426,7 @@ namespace CsgBrush.Editor
                 return;
             }
             if (IsCentred(Shape)) { BrushDraw.CentredPose(origin, opposite, height, planeRotation, Grid, Shape == BrushShape.Sphere, out centre, out size, out rotation); return; }
+            if (IsDirected(Shape)) { BrushDraw.DirectedPose(origin, opposite, side, centred, height, planeRotation, Grid, BrushSettings.instance.rotationSnapDegrees, out centre, out size, out rotation); return; }
             BrushDraw.Pose(origin, opposite, height, planeRotation, Grid, out centre, out size, out rotation);
         }
 
@@ -388,6 +443,18 @@ namespace CsgBrush.Editor
                 for (int i = 0; i < face.indices.Length; i++)
                     Handles.DrawLine(m.MultiplyPoint3x4(poly.vertices[face.indices[i]]), m.MultiplyPoint3x4(poly.vertices[face.indices[(i + 1) % face.indices.Length]]), 2f);
             if (BrushSettings.instance.showDimensions) DrawDimensions(poly, m, state == State.Height);
+            if (IsDirected(Shape))
+            {
+                // which way it rises: an arrow from the low end to the high end, along the middle of the base
+                var b = poly.Bounds();
+                Vector3 from = m.MultiplyPoint3x4(new Vector3(b.center.x, b.min.y, b.min.z)), to = m.MultiplyPoint3x4(new Vector3(b.center.x, b.min.y, b.max.z));
+                Handles.color = Color.white;
+                Handles.DrawLine(from, to, 3f);
+                float head = HandleUtility.GetHandleSize(to) * 0.12f;
+                Vector3 back = (from - to).normalized * head, across = m.MultiplyVector(Vector3.right).normalized * head * 0.6f;
+                Handles.DrawLine(to, to + back + across, 3f);
+                Handles.DrawLine(to, to + back - across, 3f);
+            }
         }
 
         /// <summary>The drawn brush's width and depth along two edges of its base, and its height once it has one, as the floor plan shows a wall's length.</summary>
