@@ -808,5 +808,27 @@ namespace CsgBrush.Tests
             Assert.IsFalse(BrushMaterialDrop.OverBrushes(prop), "a regular mesh: Unity's own drop");
             Object.DestroyImmediate(prop);
         }
+
+        [Test]
+        public void ANewPlanSwitchesToDrawingFromItsFirstPoint()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var go = new GameObject("Floor Plan");
+            var plan = go.AddComponent<FloorPlan>();
+            plan.AddPoint(Vector3.zero);
+            Selection.activeGameObject = go; // just selected, as the Create tool does
+            try
+            {
+                FloorPlanDrawTool.Begin();
+                Assert.AreEqual(typeof(FloorPlanDrawTool), UnityEditor.EditorTools.ToolManager.activeToolType, "drawing, not starting another plan");
+                var tool = Resources.FindObjectsOfTypeAll<FloorPlanDrawTool>();
+                Assert.IsTrue(System.Array.Exists(tool, t => t.target == plan && t.LastPoint == plan.pointIds[0]), "the next wall starts at the first point");
+            }
+            finally
+            {
+                UnityEditor.EditorTools.ToolManager.RestorePreviousPersistentTool();
+                Selection.activeGameObject = null;
+            }
+        }
     }
 }

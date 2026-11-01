@@ -214,6 +214,20 @@ namespace CsgBrush.Editor
         int m_Last = -1;
         readonly List<int> m_Stroke = new List<int>();
 
+        /// <summary>
+        /// Draw on the selected plan. Unity makes a selection's component tools a little after the selection changes, so a
+        /// plan selected just now has no draw tool yet: the editors are rebuilt first, else the switch fails and the Create
+        /// tool stays active, starting a new plan at every click.
+        /// </summary>
+        public static void Begin()
+        {
+            ActiveEditorTracker.sharedTracker.ForceRebuild();
+            ToolManager.SetActiveTool<FloorPlanDrawTool>();
+        }
+
+        /// <summary>The point the next wall starts from, or -1 between strokes (for tests).</summary>
+        public int LastPoint => m_Last;
+
         public override void OnActivated()
         {
             m_Last = -1; m_Stroke.Clear();
@@ -335,7 +349,7 @@ namespace CsgBrush.Editor
             var plan = Undo.AddComponent<FloorPlan>(go);
             if (firstPoint) plan.AddPoint(Vector3.zero); // the draw tool starts its first wall here
             Selection.activeGameObject = go;
-            EditorApplication.delayCall += () => { if (Selection.activeGameObject == go) ToolManager.SetActiveTool<FloorPlanDrawTool>(); };
+            EditorApplication.delayCall += () => { if (Selection.activeGameObject == go) FloorPlanDrawTool.Begin(); };
             return plan;
         }
     }
