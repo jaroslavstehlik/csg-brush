@@ -231,8 +231,8 @@ namespace CsgBrush.Editor
                 id = "height", local = At((ri + ro) * 0.5f, lastMid, lastTop), direction = Vector3.up,
                 // curved: the height spreads over the same steps; spiral: more height is more steps, going round further
                 apply = spiral
-                    ? (System.Action<Brush, State, float, bool, bool>)((br, st, d, sym, snap) => { br.numSteps = Mathf.Max(1, Mathf.RoundToInt((st.numSteps * st.stepHeight + d) / Mathf.Max(0.001f, st.stepHeight))); })
-                    : (br, st, d, sym, snap) => { br.stepHeight = Mathf.Max(0.01f, SnapStep(st.stepHeight + d / Mathf.Max(1, st.numSteps), snap)); },
+                    ? (System.Action<Brush, State, float, bool, bool>)((br, st, d, sym, snap) => { br.numSteps = Mathf.Max(1, Mathf.RoundToInt((st.numSteps * st.stepHeight + d) / Mathf.Max(BrushPolyhedron.MinStepHeight, st.stepHeight))); })
+                    : (br, st, d, sym, snap) => { br.stepHeight = Mathf.Max(BrushPolyhedron.MinStepHeight, SnapStep(st.stepHeight + d / Mathf.Max(1, st.numSteps), snap)); },
                 label = br => spiral ? br.numSteps + " steps, " + Length(br.numSteps * br.stepHeight) : "step " + Length(br.stepHeight) + ", " + Length(br.numSteps * br.stepHeight) + " high",
             });
             if (!spiral)
@@ -460,7 +460,7 @@ namespace CsgBrush.Editor
         {
             int steps = BrushPolyhedron.StepCount(start.size.y, start.stepHeight);
             float rise = start.size.y / steps;
-            b.stepHeight = Mathf.Clamp(SnapStep(rise + distance, snap), 0.01f, Mathf.Max(0.01f, start.size.y));
+            b.stepHeight = Mathf.Clamp(SnapStep(rise + distance, snap), BrushPolyhedron.MinStepHeight, Mathf.Max(BrushPolyhedron.MinStepHeight, start.size.y));
         }
 
         /// <summary>Apply a drag of one handle to a brush: one call per change, from the brush's state when the drag began.</summary>

@@ -220,7 +220,7 @@ To give every new brush a module, turn the module on under **Modules** in the **
 
 ### Stairs
 
-You set the step height and draw the total height. The number of steps is the height divided by the step height, rounded, so the steps fill the height exactly.
+You set the step height and draw the total height. The number of steps is the height divided by the step height, rounded, so the steps fill the height exactly. A step is at least 0.1 m high, on every kind of stairs: much lower steps make so many blocks that building them takes too long.
 
 * **Linear Stairs** fill their size box. Each step runs the length divided by the number of steps.
 * **Curved Stairs** and **Spiral Stairs** use Unreal's parameters: inner radius, step width, step height, angle of the curve or steps per 360 degrees, add to first step, and counter clockwise. Spiral stairs also have step thickness, sloped floor, and sloped ceiling. You set a height instead of a number of steps, and the brush's size follows from the parameters.

@@ -270,7 +270,14 @@ namespace CsgBrush
         public const float MaxArcSegmentDegrees = 360f / 32f;
 
         /// <summary>How many steps of about <paramref name="stepHeight"/> fill <paramref name="height"/>: at least one.</summary>
-        public static int StepCount(float height, float stepHeight) => Mathf.Max(1, Mathf.RoundToInt(Mathf.Abs(height) / Mathf.Max(0.001f, stepHeight)));
+        /// <summary>
+        /// The lowest step a stair may have, metres. Each step is its own block for the CSG and the colliders, and a stair's
+        /// sides are split at every step level, so the cost grows with the square of the step count: steps of a few
+        /// millimetres made thousands of blocks and froze or crashed the editor.
+        /// </summary>
+        public const float MinStepHeight = 0.1f;
+
+        public static int StepCount(float height, float stepHeight) => Mathf.Max(1, Mathf.RoundToInt(Mathf.Abs(height) / Mathf.Max(MinStepHeight, stepHeight)));
 
         /// <summary>
         /// Curved stairs (Unreal's Curved Stair): steps wrapping around an inner column over an angle, each step a solid
@@ -284,7 +291,7 @@ namespace CsgBrush
             int n = Mathf.Max(1, p.numSteps);
             float a = Mathf.Max(1f, p.curveAngle) * Mathf.Deg2Rad / n * (p.counterClockwise ? 1f : -1f);
             int sub = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(a) * Mathf.Rad2Deg / MaxArcSegmentDegrees - 1e-4f));
-            float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(0.001f, p.stepHeight);
+            float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(MinStepHeight, p.stepHeight);
             var verts = new List<Vector3>(); var faces = new List<Face>();
             int group = 0;
             for (int k = 0; k < n; k++)
@@ -321,7 +328,7 @@ namespace CsgBrush
         {
             int n = Mathf.Max(1, p.numSteps);
             float a = Mathf.PI * 2f / Mathf.Max(1, p.stepsPer360) * (p.counterClockwise ? 1f : -1f);
-            float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(0.001f, p.stepHeight), th = Mathf.Max(0.001f, p.stepThickness);
+            float ri = Mathf.Max(0f, p.innerRadius), ro = ri + Mathf.Max(0.001f, p.stepWidth), h = Mathf.Max(MinStepHeight, p.stepHeight), th = Mathf.Max(0.001f, p.stepThickness);
             var verts = new List<Vector3>(); var faces = new List<Face>();
             for (int k = 0; k < n; k++)
             {

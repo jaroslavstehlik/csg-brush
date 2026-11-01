@@ -136,7 +136,7 @@ namespace CsgBrush
         [Min(3)] public int sides = 16;
         [Tooltip("Sphere: 1 is coarse, 5 is smooth.")]
         [Range(1, 5)] public int tessellation = 2;
-        [Tooltip("Stairs: height of a step, metres. The number of steps comes from the stairs' height.")]
+        [Tooltip("Stairs: height of a step, metres, at least 0.1. The number of steps comes from the stairs' height.")]
         public float stepHeight = 0.25f;
         [Tooltip("Curved and spiral stairs: radius of the inner column the steps wrap around, metres.")]
         public float innerRadius = 0.5f;
@@ -340,7 +340,7 @@ namespace CsgBrush
             if (size.y < 0f) size.y = 0f;
             if (size.z < 0f) size.z = 0f;
             if (wallThickness < 0f) wallThickness = 0f;
-            if (stepHeight < 0.001f) stepHeight = 0.001f;
+            if (stepHeight < BrushPolyhedron.MinStepHeight) stepHeight = BrushPolyhedron.MinStepHeight;
             if (innerRadius < 0f) innerRadius = 0f;
             if (stepWidth < 0.001f) stepWidth = 0.001f;
             if (stepThickness < 0.001f) stepThickness = 0.001f;

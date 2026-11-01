@@ -210,7 +210,7 @@ namespace CsgBrush.Editor
                 case BrushShape.Stairs:
                     DrawUnitsField(settings, stepHeightProp, "Step height");
                     var sz = sizeProp.vector3Value;
-                    int steps = Mathf.Max(1, Mathf.RoundToInt(sz.y / Mathf.Max(0.001f, stepHeightProp.floatValue)));
+                    int steps = Mathf.Max(1, Mathf.RoundToInt(sz.y / Mathf.Max(BrushPolyhedron.MinStepHeight, stepHeightProp.floatValue)));
                     EditorGUILayout.LabelField(" ", steps + " steps over " + settings.FormatUnits(sz.z) + " (" + settings.FormatUnits(sz.z / steps) + " each)", EditorStyles.miniLabel);
                     DrawSupportUnderSteps(settings);
                     break;
@@ -303,10 +303,10 @@ namespace CsgBrush.Editor
 
         void DrawStepsByHeight(BrushSettings settings)
         {
-            float stepHeight = Mathf.Max(0.001f, stepHeightProp.floatValue);
+            float stepHeight = Mathf.Max(BrushPolyhedron.MinStepHeight, stepHeightProp.floatValue);
             float height = numStepsProp.intValue * stepHeight;
             DrawUnitsField(settings, stepHeightProp, "Step height");
-            float newStep = Mathf.Max(0.001f, stepHeightProp.floatValue);
+            float newStep = Mathf.Max(BrushPolyhedron.MinStepHeight, stepHeightProp.floatValue);
             if (!Mathf.Approximately(newStep, stepHeight)) numStepsProp.intValue = BrushPolyhedron.StepCount(height, newStep);
             EditorGUI.showMixedValue = numStepsProp.hasMultipleDifferentValues || stepHeightProp.hasMultipleDifferentValues;
             EditorGUI.BeginChangeCheck();

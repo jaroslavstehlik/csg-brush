@@ -2,6 +2,8 @@
 
 ## 0.5.0 (unreleased)
 
+- Fixed: a very low step height (a few millimetres) made thousands of blocks and froze or crashed the editor. A step is
+  now at least 0.1 m high, however it is set: the Inspector, the shape handles, scripts, or an older scene.
 - Shape handles change a selected brush's shape directly, alongside the Move, Rotate or Scale tool, and the brush stays
   the shape it is:
   - Sides turned towards the camera are handles: a side lights up under the pointer and is grabbed anywhere on it.

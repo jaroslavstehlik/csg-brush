@@ -144,7 +144,7 @@ namespace CsgBrush.Editor
         public static void SetStairs(Brush brush, float stepHeightMeters)
         {
             Undo.RecordObject(brush, "Change stairs");
-            brush.stepHeight = stepHeightMeters;
+            brush.stepHeight = Mathf.Max(BrushPolyhedron.MinStepHeight, stepHeightMeters);
             BrushSync.Ensure(brush);
         }
 

@@ -92,7 +92,7 @@ namespace CsgBrush.Editor
 
 
         /// <summary>The step height of the next stairs, in metres.</summary>
-        public float NewStepHeightMeters => newStepHeight > 0f ? ToMeters(newStepHeight) : DefaultStepHeightMeters;
+        public float NewStepHeightMeters => Mathf.Max(BrushPolyhedron.MinStepHeight, newStepHeight > 0f ? ToMeters(newStepHeight) : DefaultStepHeightMeters);
 
         public float GridUnits => gridSizes != null && gridSizes.Length > 0 ? gridSizes[Mathf.Clamp(gridIndex, 0, gridSizes.Length - 1)] : 1f;
         public float GridMeters => ToMeters(GridUnits);

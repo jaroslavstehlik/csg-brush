@@ -168,6 +168,23 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void StepsAreNeverLowerThanTenCentimetres()
+        {
+            // Steps of a few millimetres made thousands of blocks and froze or crashed the editor.
+            Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 3f, 6f), Vector3.zero);
+            stairs.stepHeight = 0.25f;
+            Drag(stairs, "step", -1f);
+            Assert.AreEqual(BrushPolyhedron.MinStepHeight, stairs.stepHeight, 1e-4f, "the handle stops at 0.1 m");
+            stairs.stepHeight = 0.001f; // as a script or an old scene might leave it
+            Assert.AreEqual(30, BrushPolyhedron.StepCount(stairs.size.y, stairs.stepHeight), "3 m of stairs is at most 30 steps");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            BrushApi.ForceUpdate();
+            Assert.Less(sw.ElapsedMilliseconds, 5000, "builds in moments");
+            BrushApi.SetStairs(stairs, 0.02f);
+            Assert.AreEqual(BrushPolyhedron.MinStepHeight, stairs.stepHeight, 1e-4f, "scripts are held to it too");
+        }
+
+        [Test]
         public void AnArchsCrownSetsItsThickness()
         {
             Brush arch = Make(BrushShape.Arch, new Vector3(4f, 3f, 1f), Vector3.zero);
