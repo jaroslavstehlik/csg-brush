@@ -2,6 +2,8 @@
 
 ## 0.5.0 (unreleased)
 
+- With grid snapping off, or a new brush's **Grid snap** set to **Off**, a brush drawn on a slope sits square to the
+  slope. With snapping on, it stays square to the world, as before.
 - Wedges and linear stairs are drawn by direction: press at the low end, drag to the high end, click for the width
   (to the side the pointer is on; **Shift** centres it), then click for the height. The direction snaps to the
   rotation snap.

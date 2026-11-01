@@ -137,5 +137,37 @@ namespace CsgBrush.Tests
             var side = BrushDraw.SnapOnPlane(new Vector3(2.1f, 0.9f, 0.4f), Vector3.left, 0.5f);
             Assert.That(Vector3.Distance(new Vector3(2.1f, 1f, 0.5f), side), Is.LessThan(1e-5f), "on a side plane X is kept");
         }
+
+        [Test]
+        public void ABrushDrawnOnASlopeSitsSquareOnIt([Values(20f, 30f, 63.4f, 120f)] float tilt)
+        {
+            // a slope tilted about X, as a ramp rising towards +z; past 90 degrees it is an overhang
+            var normal = Quaternion.Euler(-tilt, 0f, 0f) * Vector3.up;
+            var rot = BrushDraw.SurfaceRotation(normal);
+            Assert.Less(Vector3.Angle(normal, rot * Vector3.up), 0.01f, "its up is the surface normal");
+            Assert.AreEqual(0f, (rot * Vector3.right).y, 1e-4f, "its width runs level along the slope");
+            var origin = new Vector3(1.3f, 0.7f, 2.1f);
+            var opposite = origin + rot * new Vector3(2f, 0f, 3f);
+            BrushDraw.Pose(origin, opposite, 1f, rot, 0f, out var centre, out var size, out var rotation);
+            Assert.AreEqual(new Vector3(2f, 1f, 3f).ToString("F3"), size.ToString("F3"));
+            float bottom = Vector3.Dot(centre - rotation * new Vector3(0f, size.y * 0.5f, 0f) - origin, normal);
+            Assert.AreEqual(0f, bottom, 1e-4f, "its base lies on the surface");
+        }
+
+        [Test]
+        public void ASurfaceFacingAWorldAxisKeepsTheUsualFrame()
+        {
+            foreach (var n in new[] { Vector3.up, Vector3.down, Vector3.left, Vector3.forward })
+                Assert.Less(Quaternion.Angle(BrushDraw.PlaneRotation(n), BrushDraw.SurfaceRotation(n)), 0.01f, n.ToString());
+        }
+
+        [Test]
+        public void ASnappedStartPointStaysOnTheSlope()
+        {
+            var normal = Quaternion.Euler(-30f, 0f, 0f) * Vector3.up;
+            var hit = new Vector3(0.4f, 1.1f, 1.9f);
+            var snapped = BrushDraw.OntoSurface(BrushDraw.SnapOnPlane(hit, normal, 0.5f), hit, normal);
+            Assert.AreEqual(0f, Vector3.Dot(snapped - hit, normal), 1e-5f);
+        }
     }
 }

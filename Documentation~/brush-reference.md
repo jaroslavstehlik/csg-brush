@@ -16,7 +16,7 @@ To draw a brush in the Scene view:
 
 Press **Esc** to cancel the brush, or to leave the tool.
 
-Everything snaps to the grid. If you start on a wall, the brush grows out of the wall. While you draw, the Scene view shows the width and depth of the base, then the height. To hide these sizes, turn off **Sizes** in the **Brushes** overlay.
+Everything snaps to the grid. If you start on a wall, the brush grows out of the wall. If you start on a slope, the brush stays square to the world, because the grid would turn it back. To draw a brush square to the slope, turn off **Snap to grid**, or set the new brush's **Grid snap** to **Off**. While you draw, the Scene view shows the width and depth of the base, then the height. To hide these sizes, turn off **Sizes** in the **Brushes** overlay.
 
 Some shapes are drawn differently:
 

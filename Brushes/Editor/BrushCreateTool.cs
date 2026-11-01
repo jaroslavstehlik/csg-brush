@@ -20,6 +20,28 @@ namespace CsgBrush.Editor
             return Quaternion.LookRotation(forward, normal);
         }
 
+        /// <summary>
+        /// Frame of a drawing plane on a surface at any angle: local Y is the surface normal itself. A sloped floor or
+        /// ceiling keeps X level (along the slope's contour) and Z up and down the slope; a steep wall keeps X level too.
+        /// A surface that faces a world axis gets the same frame as <see cref="PlaneRotation"/>.
+        /// </summary>
+        public static Quaternion SurfaceRotation(Vector3 normal)
+        {
+            normal = normal.normalized;
+            var cardinal = Cardinal(normal);
+            if (Vector3.Angle(normal, cardinal) < 0.01f) return PlaneRotation(cardinal);
+            Vector3 right = Mathf.Abs(normal.y) > 0.5f ? Vector3.Cross(Vector3.up, normal).normalized : Vector3.Cross(normal, Vector3.up).normalized;
+            Vector3 forward = Vector3.Cross(right, normal);
+            return Quaternion.LookRotation(forward, normal);
+        }
+
+        /// <summary>A snapped point put back onto the surface through <paramref name="onSurface"/>, along the surface normal.</summary>
+        public static Vector3 OntoSurface(Vector3 snapped, Vector3 onSurface, Vector3 normal)
+        {
+            normal = normal.normalized;
+            return snapped - normal * Vector3.Dot(snapped - onSurface, normal);
+        }
+
         /// <summary>The nearest world axis to a direction.</summary>
         public static Vector3 Cardinal(Vector3 n)
         {
@@ -218,6 +240,12 @@ namespace CsgBrush.Editor
 
         static float Grid => BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
 
+        /// <summary>
+        /// A new brush is drawn square to the surface it starts on, slopes included, unless it goes onto the grid: with
+        /// snapping on, it stays square to the world, as the grid would turn it back anyway.
+        /// </summary>
+        static bool AlignsToSurface => !BrushSettings.instance.snapToGrid || BrushSettings.instance.newGridSnap == GridSnap.Off;
+
         public override void OnToolGUI(EditorWindow window)
         {
             if (!(window is SceneView)) return;
@@ -243,7 +271,7 @@ namespace CsgBrush.Editor
                     if (e.type == EventType.MouseMove || e.type == EventType.MouseDown)
                     {
                         hoverValid = FindPlane(e.mousePosition, out var p, out var n);
-                        if (hoverValid) { hoverPoint = BrushDraw.SnapOnPlane(p, n, Grid); }
+                        if (hoverValid) { hoverPoint = BrushDraw.SnapOnPlane(p, n, Grid); if (AlignsToSurface) hoverPoint = BrushDraw.OntoSurface(hoverPoint, p, n); }
                         if (e.type == EventType.MouseMove) SceneView.RepaintAll();
                     }
                     if (e.type == EventType.MouseDown && e.button == 0 && hoverValid && HandleUtility.nearestControl == controlId)
@@ -252,8 +280,8 @@ namespace CsgBrush.Editor
                         FindPlane(e.mousePosition, out _, out normal);
                         var pressed = BrushHooks.PickBrushSurface(e.mousePosition, out _, out _);
                         wallPlan = pressed != null && Mathf.Abs(normal.y) < 0.5f ? pressed.generatedBy as FloorPlan : null; // drawn on a plan's wall: rides on it
-                        normal = BrushDraw.Cardinal(normal);
-                        planeRotation = BrushDraw.PlaneRotation(normal);
+                        normal = AlignsToSurface ? normal.normalized : BrushDraw.Cardinal(normal); // on the grid, a brush stays square to the world
+                        planeRotation = BrushDraw.SurfaceRotation(normal);
                         origin = hoverPoint; opposite = origin; height = 0f; side = 0f; centred = false; // a new brush starts at the default width, not the last one
                         state = State.Base; e.Use();
                     }
