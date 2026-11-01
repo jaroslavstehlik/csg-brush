@@ -119,6 +119,15 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ShapeEditGoesWithTheTransformToolsOnly()
+        {
+            foreach (var tool in new[] { UnityEditor.Tool.Move, UnityEditor.Tool.Rotate, UnityEditor.Tool.Scale, UnityEditor.Tool.Transform })
+                Assert.IsTrue(BrushShapeHandles.WorksWith(tool), tool.ToString());
+            foreach (var tool in new[] { UnityEditor.Tool.View, UnityEditor.Tool.Rect, UnityEditor.Tool.Custom, UnityEditor.Tool.None })
+                Assert.IsFalse(BrushShapeHandles.WorksWith(tool), tool + ": a create tool is a custom tool");
+        }
+
+        [Test]
         public void ShiftDragsBothSides()
         {
             Brush box = Make(BrushShape.Box, new Vector3(2f, 2f, 2f), Vector3.zero);

@@ -10,7 +10,7 @@
   rotation snap. Arches too: the line is the span, from foot to foot, and the click after it sets the depth.
 - Fixed: a very low step height (a few millimetres) made thousands of blocks and froze or crashed the editor. A step is
   now at least 0.1 m high, however it is set: the Inspector, the shape handles, scripts, or an older scene.
-- Shape handles change a selected brush's shape directly, alongside the Move, Rotate or Scale tool, and the brush stays
+- Shape handles change a selected brush's shape directly, alongside the Move, Rotate, Scale or Transform tool (never while drawing), and the brush stays
   the shape it is:
   - Sides turned towards the camera are handles: a side lights up under the pointer and is grabbed anywhere on it.
     A plain click still selects. A wedge's diagonal face grows or shrinks the ramp at the same steepness;

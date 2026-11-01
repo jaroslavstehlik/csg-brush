@@ -633,8 +633,14 @@ namespace CsgBrush.Editor
         static bool Showing()
         {
             var s = BrushSettings.instance;
-            return s.shapeHandles && !BrushEditContext.IsActive && !FloorPlanEditContext.IsActive && BrushCreateTool.Active == null && Tools.current != Tool.View;
+            return s.shapeHandles && !BrushEditContext.IsActive && !FloorPlanEditContext.IsActive && WorksWith(Tools.current);
         }
+
+        /// <summary>
+        /// The handles go with Unity's Move, Rotate, Scale and Transform tools only: never while a brush or floor plan is
+        /// drawn (a custom tool), so they can't take its clicks.
+        /// </summary>
+        public static bool WorksWith(Tool tool) => tool == Tool.Move || tool == Tool.Rotate || tool == Tool.Scale || tool == Tool.Transform;
 
         /// <summary>Is a side with this world normal and middle turned towards the camera: is its front seen at all?</summary>
         public static bool FacesCamera(Vector3 worldNormal, Vector3 worldMiddle, Camera camera)

@@ -46,7 +46,7 @@ The **Scale** tool also resizes the brush. When you release it, the scale goes i
 
 ### Shape handles
 
-A selected brush's shape can be changed directly in the Scene view: drag one of its sides, or one of its points, such as a cone's apex or a cylinder's radius. The handles stay with whichever tool is active, so you can move or rotate the brush and change its shape without switching tools. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
+A selected brush's shape can be changed directly in the Scene view: drag one of its sides, or one of its points, such as a cone's apex or a cylinder's radius. The handles stay with the Move, Rotate, Scale, and Transform tools, so you can move or rotate the brush and change its shape without switching tools. They're hidden while you draw a brush or a floor plan. The brush stays the shape it is; to edit vertices, edges, and faces freely, use [edit mode](#edit-a-brushs-shape) instead.
 
 Only the sides turned towards you are handles. A side shows a faint outline, and lights up when the pointer is on it; drag it anywhere to move it out or in, and the opposite side stays where it is. A plain click on a side still selects, as usual: a side only starts moving after a short drag. Where a part of the shape is an edge, such as a wedge's low end or a cylinder's rim, it's a line you grab anywhere along; where it's a point, such as a cone's apex, it's a dot. Where an edge runs along the border of a side, the edge takes the drag.
 
