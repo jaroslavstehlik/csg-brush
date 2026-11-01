@@ -219,7 +219,7 @@ A trigger brush made of several pieces still raises one enter and one exit per c
 
 A module carries the game-specific values of a surface, such as ice, water, or fall damage. A module is a `BrushModule` component on the brush, or on a parent GameObject, where it applies to every brush below it. Its values go onto each collider piece of the brush, and changing them rebuilds only those pieces. A module can also make a brush a trigger, for example for water.
 
-To give every new brush a module, turn the module on under **Modules** in the **Brushes** overlay while the Create tool is active. The Quake controller's module, `QuakeBrushSurface`, is part of the project, not of this package.
+To give every new brush a module, choose it from the **Modules** dropdown in the **Brushes** overlay while the Create tool is active. The dropdown lists every module; choose one again to turn it off, or choose **Nothing** to turn them all off. The Quake controller's module, `QuakeBrushSurface`, is part of the project, not of this package.
 
 ## Shape settings
 

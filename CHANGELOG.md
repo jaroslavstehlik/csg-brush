@@ -2,6 +2,7 @@
 
 ## 0.5.0 (unreleased)
 
+- The new brush's **Modules** in the Brushes overlay are one dropdown, however many modules there are.
 - With grid snapping off, or a new brush's **Grid snap** set to **Off**, a brush drawn on a slope sits square to the
   slope. With snapping on, it stays square to the world, as before.
 - Wedges and linear stairs are drawn by direction: press at the low end, drag to the high end, click for the width

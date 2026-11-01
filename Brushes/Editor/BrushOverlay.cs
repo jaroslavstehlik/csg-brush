@@ -34,14 +34,13 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>A row of buttons that wraps: before a button of this width, start a new row if it would not fit.</summary>
-        static void Wrap(ref float x, float width, float indent = 0f)
+        static void Wrap(ref float x, float width)
         {
-            if (x > indent && x + width > s_Width)
+            if (x > 0f && x + width > s_Width)
             {
                 EditorGUILayout.EndHorizontal();
                 EditorGUILayout.BeginHorizontal();
-                if (indent > 0f) GUILayout.Space(indent);
-                x = indent;
+                x = 0f;
             }
             x += width + Gap;
         }
@@ -161,6 +160,33 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>What the next brush of the active Create tool gets: operation, surface and the shape's parameters (Project Settings > Brushes holds them).</summary>
+        /// <summary>
+        /// The modules every new brush gets, as one dropdown however many there are: it shows Nothing, the one module, or how
+        /// many, and opens a checklist of all of them, as Unity's layer mask fields do.
+        /// </summary>
+        static void ModulesDropdown(BrushSettings s, System.Collections.Generic.List<System.Type> moduleTypes)
+        {
+            var chosen = moduleTypes.FindAll(t => s.newModules.Contains(t.FullName));
+            string summary = chosen.Count == 0 ? "Nothing" : chosen.Count == 1 ? ObjectNames.NicifyVariableName(chosen[0].Name) : chosen.Count + " modules";
+            var rect = EditorGUILayout.GetControlRect();
+            rect = EditorGUI.PrefixLabel(rect, new GUIContent("Modules", "The game's data every new brush gets, as components on it"));
+            if (!EditorGUI.DropdownButton(rect, new GUIContent(summary, string.Join(", ", chosen.ConvertAll(t => ObjectNames.NicifyVariableName(t.Name)))), FocusType.Keyboard)) return;
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Nothing"), chosen.Count == 0, () => { s.newModules.Clear(); s.NotifyChanged(); });
+            menu.AddSeparator("");
+            foreach (var t in moduleTypes)
+            {
+                string name = t.FullName;
+                bool on = s.newModules.Contains(name);
+                menu.AddItem(new GUIContent(ObjectNames.NicifyVariableName(t.Name)), on, () =>
+                {
+                    if (on) s.newModules.Remove(name); else s.newModules.Add(name);
+                    s.NotifyChanged();
+                });
+            }
+            menu.DropDown(rect);
+        }
+
         static void DrawNewBrush(BrushSettings s, BrushCreateTool tool)
         {
             var shape = tool.Shape;
@@ -173,21 +199,7 @@ namespace CsgBrush.Editor
                 s.newGridSnap = (GridSnap)EditorGUILayout.EnumPopup(new GUIContent("Grid snap", "What goes onto the grid: the outermost vertices, or the pivot"), s.newGridSnap);
             }
             var moduleTypes = BrushApi.ModuleTypes();
-            if (moduleTypes.Count > 0)
-            {
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.PrefixLabel(new GUIContent("Modules", "The game's data every new brush gets, as components on it"));
-                float indent = EditorGUIUtility.labelWidth + 2f, x = indent;
-                foreach (var t in moduleTypes)
-                {
-                    bool on = s.newModules.Contains(t.FullName);
-                    var label = new GUIContent(ObjectNames.NicifyVariableName(t.Name));
-                    Wrap(ref x, EditorStyles.miniButton.CalcSize(label).x, indent);
-                    bool want = GUILayout.Toggle(on, label, EditorStyles.miniButton);
-                    if (want != on) { if (want) s.newModules.Add(t.FullName); else s.newModules.Remove(t.FullName); }
-                }
-                EditorGUILayout.EndHorizontal();
-            }
+            if (moduleTypes.Count > 0) ModulesDropdown(s, moduleTypes);
             BrushCreateTool.NewBrushParameters(out float stepHeight, out float wall);
             switch (shape)
             {
