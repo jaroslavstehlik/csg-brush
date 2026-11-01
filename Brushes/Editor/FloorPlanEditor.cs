@@ -223,6 +223,7 @@ namespace CsgBrush.Editor
             s_Start = startPoint;
             ActiveEditorTracker.sharedTracker.ForceRebuild();
             ToolManager.SetActiveTool<FloorPlanDrawTool>();
+            if (ToolManager.activeToolType != typeof(FloorPlanDrawTool)) s_Start = -1; // the switch failed: no later activation may use it
         }
 
         /// <summary>The point (id) the next activation starts its first wall from, or -1.</summary>
@@ -381,17 +382,27 @@ namespace CsgBrush.Editor
         Vector3 m_Hover; bool m_HoverValid;
         /// <summary>The plan a click continues, and where: one of its points (index), one of its walls (index and spot), or its floor (spot).</summary>
         FloorPlan m_Plan; int m_PlanPoint = -1, m_PlanWall = -1; Vector3 m_PlanLocal;
+        /// <summary>The scene's plans, found again only when the hierarchy changes: the pointer looks for them at every move.</summary>
+        List<FloorPlan> m_Plans;
+
+        public override void OnActivated() { m_Plans = null; EditorApplication.hierarchyChanged += ForgetPlans; }
+        public override void OnWillBeDeactivated() => EditorApplication.hierarchyChanged -= ForgetPlans;
+        void ForgetPlans() => m_Plans = null;
 
         /// <summary>Which plan a press continues: one whose point or wall is under the pointer, the selected first; else the selected plan, pressed on its floor.</summary>
         void FindPlan(Vector2 mouse, bool onFloor, Vector3 floor)
         {
             m_Plan = null; m_PlanPoint = m_PlanWall = -1;
             var selected = Selection.activeGameObject != null ? Selection.activeGameObject.GetComponent<FloorPlan>() : null;
-            var plans = new List<FloorPlan>();
-            if (selected != null) plans.Add(selected);
-            foreach (var plan in Object.FindObjectsByType<FloorPlan>(FindObjectsSortMode.None)) if (plan != selected && plan.gameObject.scene.IsValid()) plans.Add(plan);
-            foreach (var plan in plans)
+            if (m_Plans == null)
             {
+                m_Plans = new List<FloorPlan>();
+                foreach (var plan in Object.FindObjectsByType<FloorPlan>(FindObjectsSortMode.None)) if (plan.gameObject.scene.IsValid()) m_Plans.Add(plan);
+            }
+            for (int i = -1; i < m_Plans.Count; i++)
+            {
+                var plan = i < 0 ? selected : m_Plans[i]; // the selected plan first
+                if (plan == null || (i >= 0 && plan == selected)) continue;
                 plan.EnsureGraph();
                 int point = FloorPlanTools.PointUnderMouse(plan, mouse);
                 if (point >= 0) { m_Plan = plan; m_PlanPoint = point; return; }

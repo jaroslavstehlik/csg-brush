@@ -527,16 +527,17 @@ namespace CsgBrush.Editor
         /// <summary>Apply a drag of one handle to a brush: one call per change, from the brush's state when the drag began.</summary>
         public static void Apply(Brush b, State start, string handleId, float distance, bool symmetric)
         {
-            foreach (var h in HandlesOf(b))
-            {
-                if (h.id != handleId) continue;
-                Undo.RecordObjects(new Object[] { b, b.transform }, "Change brush shape");
-                h.apply(b, start, distance, symmetric, Snaps(b));
-                BrushSnap.Accept(b); // placed by the handle: the grid pass must not move it again
-                BrushSync.NotifyTransformChanged(b);
-                BrushSync.Ensure(b);
-                return;
-            }
+            var h = Find(b, handleId);
+            if (h != null) Apply(b, h.Value, start, distance, symmetric);
+        }
+
+        static void Apply(Brush b, Handle h, State start, float distance, bool symmetric, bool record = true)
+        {
+            if (record) Undo.RecordObjects(new Object[] { b, b.transform }, "Change brush shape");
+            h.apply(b, start, distance, symmetric, Snaps(b));
+            BrushSnap.Accept(b); // placed by the handle: the grid pass must not move it again
+            BrushSync.NotifyTransformChanged(b);
+            BrushSync.Ensure(b);
         }
 
         /// <summary>
@@ -547,15 +548,21 @@ namespace CsgBrush.Editor
             ShapeEditSelection mode, Dictionary<Brush, State> starts)
         {
             if (!starts.TryGetValue(dragged, out var draggedStart)) return;
-            Apply(dragged, draggedStart, handleId, distance, symmetric);
+            var handle = Find(dragged, handleId);
+            if (handle == null) return;
+            Apply(dragged, handle.Value, draggedStart, distance, symmetric);
             if (mode == ShapeEditSelection.Single) return;
-            int measure = mode == ShapeEditSelection.Match ? Measured(dragged, draggedStart, handleId, distance, symmetric) : -1;
+            int measure = mode == ShapeEditSelection.Match ? Measured(starts, dragged, handle.Value, draggedStart, distance, symmetric) : -1;
+            float target = measure >= 0 ? Values(State.Of(dragged))[measure] : 0f;
             foreach (var other in brushes)
             {
                 if (other == dragged || other.shape != dragged.shape || !starts.TryGetValue(other, out var start)) continue;
-                if (mode == ShapeEditSelection.Offset) { Apply(other, start, handleId, distance, symmetric); continue; }
-                if (measure < 0) { Apply(other, start, handleId, 0f, symmetric); continue; }
-                Apply(other, start, handleId, DistanceTo(other, start, handleId, symmetric, measure, Values(State.Of(dragged))[measure]), symmetric);
+                var h = Find(other, handleId);
+                if (h == null) continue;
+                if (mode == ShapeEditSelection.Offset) { Apply(other, h.Value, start, distance, symmetric); continue; }
+                if (measure < 0) { Apply(other, h.Value, start, 0f, symmetric); continue; }
+                Undo.RecordObjects(new Object[] { other, other.transform }, "Change brush shape"); // before the trials change it
+                Apply(other, h.Value, start, DistanceTo(other, h.Value, start, symmetric, measure, target), symmetric, record: false);
             }
         }
 
@@ -568,28 +575,30 @@ namespace CsgBrush.Editor
             return null;
         }
 
-        /// <summary>Which of <see cref="Values"/> the handle changes: the first one that a drag of it (unsnapped) moves.</summary>
-        static int Measured(Brush b, State start, string handleId, float distance, bool symmetric)
+        /// <summary>The last drag's measured value: which drag (its starts), brush and handle, and the index found.</summary>
+        static (Dictionary<Brush, State> starts, Brush brush, string handle, int index) s_Measured;
+
+        /// <summary>
+        /// Which of <see cref="Values"/> the handle changes: the first one that a drag of it (unsnapped) moves. Found once
+        /// per drag; a drag that moves nothing (a side already at its smallest) is tried again at the next step.
+        /// </summary>
+        static int Measured(Dictionary<Brush, State> starts, Brush b, Handle h, State start, float distance, bool symmetric)
         {
-            var h = Find(b, handleId);
-            if (h == null) return -1;
+            if (s_Measured.starts == starts && s_Measured.brush == b && s_Measured.handle == h.id) return s_Measured.index;
             var now = State.Of(b);
             float probe = Mathf.Abs(distance) > 1e-3f ? distance : 1f;
-            h.Value.apply(b, start, probe, symmetric, false);
+            h.apply(b, start, probe, symmetric, false);
             float[] before = Values(start), after = Values(State.Of(b));
             Restore(b, now);
             for (int i = 0; i < before.Length; i++)
-                if (Mathf.Abs(after[i] - before[i]) > 1e-5f) return i;
+                if (Mathf.Abs(after[i] - before[i]) > 1e-5f) { s_Measured = (starts, b, h.id, i); return i; }
             return -1;
         }
 
         /// <summary>The drag distance that gives the brush the value <paramref name="target"/>: found by trying distances, as handles are not all linear.</summary>
-        static float DistanceTo(Brush b, State start, string handleId, bool symmetric, int measure, float target)
+        static float DistanceTo(Brush b, Handle h, State start, bool symmetric, int measure, float target)
         {
-            var h = Find(b, handleId);
-            if (h == null) return 0f;
-            Undo.RecordObjects(new Object[] { b, b.transform }, "Change brush shape"); // before the trials change it
-            float Value(float d) { h.Value.apply(b, start, d, symmetric, false); return Values(State.Of(b))[measure]; }
+            float Value(float d) { h.apply(b, start, d, symmetric, false); return Values(State.Of(b))[measure]; }
             float d0 = 0f, m0 = Values(start)[measure], d1 = target - m0, m1 = Value(d1);
             for (int i = 0; i < 6 && Mathf.Abs(m1 - target) > 1e-4f && Mathf.Abs(m1 - m0) > 1e-6f; i++)
             {
@@ -925,6 +934,7 @@ namespace CsgBrush.Editor
         {
             s_Dragging = true;
             s_Start.Clear();
+            s_Measured = default; // a new drag: the same handle may change something else now
             foreach (var b in brushes) s_Start[b] = State.Of(b);
             Undo.IncrementCurrentGroup();
             Undo.SetCurrentGroupName("Change brush shape");

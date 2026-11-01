@@ -45,6 +45,13 @@ namespace CsgBrush.Editor
             x += width + Gap;
         }
 
+        /// <summary>A fixed width for the next button of a wrapping row, counted along the row.</summary>
+        static GUILayoutOption Width(ref float x, float width)
+        {
+            x += width + Gap;
+            return GUILayout.Width(width);
+        }
+
         static readonly string[] SelectionIcons = { "ShapeEdit_Single", "ShapeEdit_Offset", "ShapeEdit_Match" };
         static readonly string[] SelectionNames = { "Single", "Offset", "Match" };
         static readonly string[] SelectionTips =
@@ -87,20 +94,20 @@ namespace CsgBrush.Editor
 
             // grid row: icon, size dropdown, snap toggle, view toggles, Shape Edit
             EditorGUILayout.BeginHorizontal();
+            float x = 0f;
             var gridIcon = EditorGUIUtility.IconContent("GridAxisY");
-            GUILayout.Label(gridIcon != null && gridIcon.image != null ? new GUIContent(gridIcon.image, "Grid size ([ and ] change it)") : new GUIContent("Grid"), GUILayout.Width(20), GUILayout.Height(18));
+            GUILayout.Label(gridIcon != null && gridIcon.image != null ? new GUIContent(gridIcon.image, "Grid size ([ and ] change it)") : new GUIContent("Grid"), Width(ref x, 20), GUILayout.Height(18));
             var names = System.Array.ConvertAll(s.gridSizes, g => g.ToString("0.###") + " " + s.unitLabel);
-            int idx = EditorGUILayout.Popup(Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names, GUILayout.Width(74));
+            int idx = EditorGUILayout.Popup(Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names, Width(ref x, 74));
             if (idx != s.gridIndex) s.SetGridIndex(idx);
             var snapIcon = EditorGUIUtility.IconContent("SceneViewSnap");
             var snapContent = snapIcon != null && snapIcon.image != null ? new GUIContent(snapIcon.image, "Snap to grid: position, size, rotation, and vertices when editing") : new GUIContent("Snap");
-            bool snap = GUILayout.Toggle(s.snapToGrid, snapContent, EditorStyles.miniButton, GUILayout.Width(26), GUILayout.Height(18));
+            bool snap = GUILayout.Toggle(s.snapToGrid, snapContent, EditorStyles.miniButton, Width(ref x, 26), GUILayout.Height(18));
             if (snap != s.snapToGrid) { s.snapToGrid = snap; s.NotifyChanged(); }
-            bool cuts = GUILayout.Toggle(s.showCuts, new GUIContent("Cuts", "Show subtract brushes as translucent red volumes, so they can be seen and selected where they have carved everything away"), EditorStyles.miniButton, GUILayout.Width(40), GUILayout.Height(18));
+            bool cuts = GUILayout.Toggle(s.showCuts, new GUIContent("Cuts", "Show subtract brushes as translucent red volumes, so they can be seen and selected where they have carved everything away"), EditorStyles.miniButton, Width(ref x, 40), GUILayout.Height(18));
             if (cuts != s.showCuts) { s.showCuts = cuts; s.NotifyChanged(); SceneView.RepaintAll(); }
-            bool sizes = GUILayout.Toggle(s.showDimensions, new GUIContent("Sizes", "Show the dimensions of a brush or wall while it is drawn"), EditorStyles.miniButton, GUILayout.Width(44), GUILayout.Height(18));
+            bool sizes = GUILayout.Toggle(s.showDimensions, new GUIContent("Sizes", "Show the dimensions of a brush or wall while it is drawn"), EditorStyles.miniButton, Width(ref x, 44), GUILayout.Height(18));
             if (sizes != s.showDimensions) { s.showDimensions = sizes; s.NotifyChanged(); SceneView.RepaintAll(); }
-            float x = 20f + 74f + 26f + 40f + 44f + 5 * Gap;
             DrawShapeEdit(s, ref x);
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();

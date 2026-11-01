@@ -90,6 +90,22 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void TheSameValueHoldsThroughoutADrag()
+        {
+            Brush dragged = Make(BrushShape.Cylinder, new Vector3(2f, 2f, 2f), Vector3.zero);
+            Brush other = Make(BrushShape.Cylinder, new Vector3(2f, 4f, 2f), new Vector3(5f, 0f, 0f));
+            var brushes = new List<Brush> { dragged, other };
+            var starts = new Dictionary<Brush, BrushShapeHandles.State>();
+            foreach (var b in brushes) starts[b] = BrushShapeHandles.State.Of(b);
+            foreach (float distance in new[] { 0f, 0.5f, 1.5f, -1f, 0.25f }) // one drag: the pointer moves on from the same start
+            {
+                BrushShapeHandles.ApplyToSelection(brushes, dragged, "+y", distance, false, ShapeEditSelection.Match, starts);
+                Assert.AreEqual(2f + distance, dragged.size.y, 1e-4f);
+                Assert.AreEqual(dragged.size.y, other.size.y, 1e-3f, "as tall as the dragged one after " + distance + " m");
+            }
+        }
+
+        [Test]
         public void TheSameValueWorksForRadiiAndSlopes()
         {
             Brush a = Make(BrushShape.Cylinder, new Vector3(2f, 2f, 2f), Vector3.zero);
