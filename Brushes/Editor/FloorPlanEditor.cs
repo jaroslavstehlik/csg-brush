@@ -218,11 +218,15 @@ namespace CsgBrush.Editor
         /// plan selected just now has no draw tool yet: the editors are rebuilt first, else the switch fails and the Create
         /// tool stays active, starting a new plan at every click.
         /// </summary>
-        public static void Begin()
+        public static void Begin(int startPoint = -1)
         {
+            s_Start = startPoint;
             ActiveEditorTracker.sharedTracker.ForceRebuild();
             ToolManager.SetActiveTool<FloorPlanDrawTool>();
         }
+
+        /// <summary>The point (id) the next activation starts its first wall from, or -1.</summary>
+        static int s_Start = -1;
 
         /// <summary>The point the next wall starts from, or -1 between strokes (for tests).</summary>
         public int LastPoint => m_Last;
@@ -230,7 +234,13 @@ namespace CsgBrush.Editor
         public override void OnActivated()
         {
             m_Last = -1; m_Stroke.Clear();
-            if (target is FloorPlan plan) { plan.EnsureGraph(); if (plan.walls.Count == 0 && plan.points.Count == 1) { m_Last = plan.pointIds[0]; m_Stroke.Add(m_Last); } }
+            int start = s_Start; s_Start = -1;
+            if (target is FloorPlan plan)
+            {
+                plan.EnsureGraph();
+                if (start >= 0 && plan.PointIndex(start) >= 0) { m_Last = start; m_Stroke.Add(start); }
+                else if (plan.walls.Count == 0 && plan.points.Count == 1) { m_Last = plan.pointIds[0]; m_Stroke.Add(m_Last); }
+            }
         }
 
         public override void OnToolGUI(EditorWindow window)
@@ -357,7 +367,11 @@ namespace CsgBrush.Editor
         }
     }
 
-    /// <summary>The Create tool's Floor Plan: click on a floor to start a plan there, then click its corners.</summary>
+    /// <summary>
+    /// The Create tool's Floor Plan: click on a floor to start a plan there, then click its corners. A click on a plan's
+    /// point or wall continues that plan from there (the selected plan first), and a click on the selected plan's floor
+    /// adds walls to it, so new walls join its walls as when it was first drawn.
+    /// </summary>
     [EditorTool("Floor Plan", variantGroup = typeof(BrushCreateTool), variantPriority = 11)]
     public sealed class CreateFloorPlanTool : EditorTool
     {
@@ -365,6 +379,47 @@ namespace CsgBrush.Editor
         [MenuItem("Tools/CSG Brush/Create/Floor Plan", false, 12)] static void Menu() => ToolManager.SetActiveTool<CreateFloorPlanTool>();
 
         Vector3 m_Hover; bool m_HoverValid;
+        /// <summary>The plan a click continues, and where: one of its points (index), one of its walls (index and spot), or its floor (spot).</summary>
+        FloorPlan m_Plan; int m_PlanPoint = -1, m_PlanWall = -1; Vector3 m_PlanLocal;
+
+        /// <summary>Which plan a press continues: one whose point or wall is under the pointer, the selected first; else the selected plan, pressed on its floor.</summary>
+        void FindPlan(Vector2 mouse, bool onFloor, Vector3 floor)
+        {
+            m_Plan = null; m_PlanPoint = m_PlanWall = -1;
+            var selected = Selection.activeGameObject != null ? Selection.activeGameObject.GetComponent<FloorPlan>() : null;
+            var plans = new List<FloorPlan>();
+            if (selected != null) plans.Add(selected);
+            foreach (var plan in Object.FindObjectsByType<FloorPlan>(FindObjectsSortMode.None)) if (plan != selected && plan.gameObject.scene.IsValid()) plans.Add(plan);
+            foreach (var plan in plans)
+            {
+                plan.EnsureGraph();
+                int point = FloorPlanTools.PointUnderMouse(plan, mouse);
+                if (point >= 0) { m_Plan = plan; m_PlanPoint = point; return; }
+                int wall = FloorPlanTools.WallUnderMouse(plan, mouse, out var local);
+                if (wall < 0) continue;
+                plan.WallPoints(wall, out int a, out int b);
+                m_Plan = plan;
+                if ((local - plan.points[a]).sqrMagnitude < 1e-8f) m_PlanPoint = a;
+                else if ((local - plan.points[b]).sqrMagnitude < 1e-8f) m_PlanPoint = b;
+                else { m_PlanWall = wall; m_PlanLocal = local; }
+                return;
+            }
+            if (selected != null && onFloor && Mathf.Abs(FloorPlanTools.Floor(selected).GetDistanceToPoint(floor)) < 0.01f)
+            {
+                m_Plan = selected; m_PlanLocal = FloorPlanTools.SnapLocal(selected, floor);
+            }
+        }
+
+        /// <summary>Continue <see cref="m_Plan"/> from the found spot: select it and draw on it from there.</summary>
+        void ContinuePlan()
+        {
+            var plan = m_Plan;
+            Undo.RecordObject(plan, "Draw floor plan");
+            int start = m_PlanPoint >= 0 ? plan.pointIds[m_PlanPoint] : m_PlanWall >= 0 ? plan.SplitWall(m_PlanWall, m_PlanLocal) : plan.AddPoint(m_PlanLocal);
+            BrushGenerators.MarkDirty(plan);
+            Selection.activeGameObject = plan.gameObject;
+            EditorApplication.delayCall += () => { if (plan != null && Selection.activeGameObject == plan.gameObject) FloorPlanDrawTool.Begin(start); };
+        }
 
         static float Grid => BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
 
@@ -381,19 +436,27 @@ namespace CsgBrush.Editor
                 // a floor only: a plan's walls stand up from where it is started
                 m_HoverValid = BrushCreateTool.FindPlane(e.mousePosition, out var p, out var n) && n.y > 0.7f;
                 if (m_HoverValid) m_Hover = BrushDraw.SnapOnPlane(p, Vector3.up, Grid);
+                FindPlan(e.mousePosition, m_HoverValid, p);
+                if (m_Plan != null)
+                {
+                    m_HoverValid = true;
+                    m_Hover = FloorPlanTools.World(m_Plan, m_PlanPoint >= 0 ? m_Plan.points[m_PlanPoint] : m_PlanLocal);
+                }
                 if (e.type == EventType.MouseMove) SceneView.RepaintAll();
             }
             if (e.type == EventType.MouseDown && e.button == 0 && m_HoverValid && HandleUtility.nearestControl == id)
             {
-                FloorPlanMenu.Create(m_Hover, null, true);
+                if (m_Plan != null) ContinuePlan();
+                else FloorPlanMenu.Create(m_Hover, null, true);
                 m_HoverValid = false;
                 BrushHooks.TakeClick();
                 e.Use();
             }
             if (e.type == EventType.Repaint && m_HoverValid)
             {
-                Handles.color = FloorPlanTools.Line;
-                Handles.DotHandleCap(-1, m_Hover, Quaternion.identity, HandleUtility.GetHandleSize(m_Hover) * 0.06f, EventType.Repaint);
+                bool joining = m_Plan != null && (m_PlanPoint >= 0 || m_PlanWall >= 0); // white and larger on a plan's point or wall, as when drawing
+                Handles.color = joining ? Color.white : FloorPlanTools.Line;
+                Handles.DotHandleCap(-1, m_Hover, Quaternion.identity, HandleUtility.GetHandleSize(m_Hover) * (joining ? 0.09f : 0.06f), EventType.Repaint);
             }
         }
     }

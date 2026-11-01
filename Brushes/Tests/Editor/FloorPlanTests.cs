@@ -830,5 +830,29 @@ namespace CsgBrush.Tests
                 Selection.activeGameObject = null;
             }
         }
+
+        [Test]
+        public void DrawingCanContinueAPlanFromAnyOfItsPoints()
+        {
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var go = new GameObject("Floor Plan");
+            var plan = go.AddComponent<FloorPlan>();
+            int a = plan.AddPoint(Vector3.zero), b = plan.AddPoint(new Vector3(4f, 0f, 0f)), c = plan.AddPoint(new Vector3(4f, 0f, 4f));
+            plan.AddWall(a, b); plan.AddWall(b, c);
+            int middle = plan.SplitWall(0, new Vector3(2f, 0f, 0f)); // a new wall starting on an existing one
+            Selection.activeGameObject = go;
+            try
+            {
+                FloorPlanDrawTool.Begin(middle);
+                var tools = Resources.FindObjectsOfTypeAll<FloorPlanDrawTool>();
+                Assert.IsTrue(System.Array.Exists(tools, t => t.target == plan && t.LastPoint == middle), "the next wall starts on the wall that was clicked");
+                Assert.AreEqual(3, plan.walls.Count, "the wall was split in two where the new one starts");
+            }
+            finally
+            {
+                UnityEditor.EditorTools.ToolManager.RestorePreviousPersistentTool();
+                Selection.activeGameObject = null;
+            }
+        }
     }
 }

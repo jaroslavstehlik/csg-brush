@@ -2,6 +2,8 @@
 
 ## 0.5.0 (unreleased)
 
+- The Create tool's **Floor Plan** continues an existing plan when you start on one of its points or walls, or on the
+  selected plan's floor, so new walls join its walls. The wall being drawn is a solid line, easier to see.
 - Fixed: a click that adds a floor plan's point, or places a door or window, also selected the brush under the
   pointer, so the floor plan tool lost its plan and a single click never started one.
 - Fixed: starting a floor plan with the Create tool could leave the Create tool active, so every click started a new

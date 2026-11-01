@@ -14,10 +14,10 @@ To draw a floor plan:
 
     ![The Create tool dropdown with Door Brush, Window Brush, and Floor Plan at the end of the list.](images/create-tool-dropdown.png)
 
-2. Click on the floor where the first corner goes. This creates a Floor Plan GameObject and starts drawing.
+2. Click on the floor where the first corner goes. This creates a Floor Plan GameObject and starts drawing. If you click a point or a wall of an existing Floor Plan instead, drawing continues that plan from there.
 3. Click to place each following corner. Each click adds a wall from the previous corner.
 
-    ![Drawing a floor plan. A dotted line and its length show the next wall.](images/floor-plan-draw.png)
+    ![Drawing a floor plan. A line and its length show the next wall.](images/floor-plan-draw.png)
 
 4. To close the room, click the first corner. Clicking an existing point or wall joins the new wall to it and ends the stroke.
 5. To add an interior wall, click a point on a wall (the wall is split there), then click where the interior wall ends, on another wall or anywhere on the floor.
@@ -32,7 +32,7 @@ While you draw:
 * Points and walls under the pointer are highlighted with a larger white marker. Clicking them joins the new wall to the plan.
 * Press **Backspace** to remove the last wall of the stroke.
 
-To continue drawing an existing Floor Plan, select it and click **Draw** in the Inspector.
+To continue drawing an existing Floor Plan, select it and click **Draw** in the Inspector. You can also use the **Create** tool's **Floor Plan**: click one of the plan's points or walls, or, with the plan selected, anywhere on its floor. The new walls belong to that plan, so they join its walls.
 
 ## Floor Plan component reference
 
