@@ -157,14 +157,14 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void TheFirstStepSetsTheStepHeight()
+        public void TheFirstRiserMakesTheStairsLongerAndTheStepHeightStaysInTheInspector()
         {
             Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 2f, 4f), Vector3.zero);
-            stairs.stepHeight = 0.25f;
-            Assert.AreEqual(8, BrushPolyhedron.StepCount(stairs.size.y, stairs.stepHeight));
-            Drag(stairs, "step", 0.25f);
-            Assert.AreEqual(0.5f, stairs.stepHeight, 1e-4f);
-            Assert.AreEqual(4, BrushPolyhedron.StepCount(stairs.size.y, stairs.stepHeight), "fewer, taller steps");
+            float back = WorldBox(stairs).max.z;
+            Drag(stairs, "-z", 2f);
+            Assert.AreEqual(6f, stairs.size.z, 1e-4f, "longer");
+            Assert.AreEqual(back, WorldBox(stairs).max.z, 1e-4f, "the top stays");
+            Assert.IsFalse(BrushShapeHandles.HandlesOf(stairs).Exists(h => h.id == "step"), "no step height handle next to the first riser");
         }
 
         [Test]
@@ -173,8 +173,6 @@ namespace CsgBrush.Tests
             // Steps of a few millimetres made thousands of blocks and froze or crashed the editor.
             Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 3f, 6f), Vector3.zero);
             stairs.stepHeight = 0.25f;
-            Drag(stairs, "step", -1f);
-            Assert.AreEqual(BrushPolyhedron.MinStepHeight, stairs.stepHeight, 1e-4f, "the handle stops at 0.1 m");
             stairs.stepHeight = 0.001f; // as a script or an old scene might leave it
             Assert.AreEqual(30, BrushPolyhedron.StepCount(stairs.size.y, stairs.stepHeight), "3 m of stairs is at most 30 steps");
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -226,7 +224,6 @@ namespace CsgBrush.Tests
             Assert.IsTrue(Edge(wedge, "+y"), "so is its high top edge");
             Assert.IsTrue(Face(wedge, "+z"), "its high end is a side");
             Brush stairs = Make(BrushShape.Stairs, new Vector3(2f, 2f, 4f), new Vector3(15f, 0f, 0f));
-            Assert.IsTrue(Edge(stairs, "step"), "the step height is the first step's front edge");
             Assert.IsTrue(Face(stairs, "+x"), "a stair's side is its stepped side");
             Brush arch = Make(BrushShape.Arch, new Vector3(4f, 3f, 1f), new Vector3(20f, 0f, 0f));
             Assert.IsTrue(Edge(arch, "thickness") && Edge(arch, "+y") && Edge(arch, "+x"), "an arch's crowns and feet are edges");

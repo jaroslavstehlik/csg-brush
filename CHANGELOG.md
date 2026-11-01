@@ -10,7 +10,9 @@
     A plain click still selects. A wedge's diagonal face grows or shrinks the ramp at the same steepness;
     a cylinder's round side, a cone's sloped side and a sphere's surface change the radius, dragged away from the
     axis or centre.
-  - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, a stair's first step (the step height), an arch's feet, crown and inner crown.
+  - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, an arch's feet, crown and inner
+    crown. A stair's step height is set in the Inspector only, so the first riser, which sets the stair's length, is
+    easy to grab.
   - Real points stay dots: a cone's apex, and curved and spiral stairs' column, width, height and angle.
   - Unity's own tool handles always take the drag first.
   - Shift drags both sides. Sizes follow the grid. One drag is one undo step, and it changes all selected brushes.

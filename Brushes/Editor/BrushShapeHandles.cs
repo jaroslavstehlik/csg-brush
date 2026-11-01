@@ -9,7 +9,7 @@ namespace CsgBrush.Editor
     /// Shape handles: a selected procedural brush's flat sides and its points (an apex, a radius, a step) change its
     /// shape directly in the Scene view, alongside whichever tool is active (Move, Rotate, Scale), as Godot does for its
     /// CSG shapes and TrenchBroom for its brushes. Drag a box's side and it extends while the opposite side stays; drag a
-    /// cylinder's rim and its radius changes; drag a stair's first step and its step height changes. The brush stays the
+    /// cylinder's rim and its radius changes; drag a stair's first riser and it gets longer. The brush stays the
     /// shape it is (unlike the Edit Brush mode, which makes it Custom).
     ///
     /// Only sides turned towards the camera are shown; a side lights up under the pointer and is grabbed anywhere on it.
@@ -171,13 +171,6 @@ namespace CsgBrush.Editor
                             columns[k] = Rect(min.z + run * k, min.z + run * (k + 1), min.y, min.y + rise * (k + 1), x, 0);
                         Side(sx > 0 ? "+x" : "-x", new Vector3(x, c.y, c.z), 0, sx, columns);
                     }
-                    list.Add(new Handle
-                    {
-                        id = "step", local = new Vector3(c.x, min.y + rise, min.z), direction = Vector3.up,       // the first step's front edge
-                        edge = new[] { new Vector3(min.x, min.y + rise, min.z), new Vector3(max.x, min.y + rise, min.z) },
-                        apply = (br, st, d, sym, snap) => SetStepHeight(br, st, d, snap),
-                        label = br => "step " + Length(br.ClampedSize.y / BrushPolyhedron.StepCount(br.ClampedSize.y, br.stepHeight)) + ", " + BrushPolyhedron.StepCount(br.ClampedSize.y, br.stepHeight) + " steps",
-                    });
                     break;
                 case BrushShape.Arch: // the ring between an outer ellipse and one a thickness in, on the box's floor
                     Edge("+x", 0, 1, new Vector3(max.x, min.y, min.z), new Vector3(max.x, min.y, max.z));   // the feet: the width
@@ -454,13 +447,6 @@ namespace CsgBrush.Editor
             Vector3 shift = b.PivotShiftFor(size);
             b.size = size;
             b.transform.position = start.position + start.rotation * (centre - shift);
-        }
-
-        static void SetStepHeight(Brush b, State start, float distance, bool snap)
-        {
-            int steps = BrushPolyhedron.StepCount(start.size.y, start.stepHeight);
-            float rise = start.size.y / steps;
-            b.stepHeight = Mathf.Clamp(SnapStep(rise + distance, snap), BrushPolyhedron.MinStepHeight, Mathf.Max(BrushPolyhedron.MinStepHeight, start.size.y));
         }
 
         /// <summary>Apply a drag of one handle to a brush: one call per change, from the brush's state when the drag began.</summary>
