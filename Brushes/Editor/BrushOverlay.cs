@@ -38,15 +38,15 @@ namespace CsgBrush.Editor
             if (cuts != s.showCuts) { s.showCuts = cuts; s.NotifyChanged(); SceneView.RepaintAll(); }
             bool sizes = GUILayout.Toggle(s.showDimensions, new GUIContent("Sizes", "Show the dimensions of a brush or wall while it is drawn"), EditorStyles.miniButton, GUILayout.Width(44), GUILayout.Height(18));
             if (sizes != s.showDimensions) { s.showDimensions = sizes; s.NotifyChanged(); SceneView.RepaintAll(); }
-            bool shapes = GUILayout.Toggle(s.shapeHandles, new GUIContent("Shape", "Dots on selected brushes change their shape directly, with any tool: drag a side, a radius, a step (B)"), EditorStyles.miniButton, GUILayout.Width(46), GUILayout.Height(18));
-            if (shapes != s.shapeHandles) { s.shapeHandles = shapes; s.NotifyChanged(); SceneView.RepaintAll(); }
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
             if (BrushCreateTool.Active != null) DrawNewBrush(s, BrushCreateTool.Active);
 
-            // edit mode: one row, Edit brush toggle then Vertex / Edge / Face
+            // edit mode: one row, Shape Edit and Edit brush toggles
             EditorGUILayout.BeginHorizontal();
+            bool shapes = GUILayout.Toggle(s.shapeHandles, new GUIContent("Shape Edit", "Drag a selected brush's sides to change its shape (B)"), EditorStyles.miniButton);
+            if (shapes != s.shapeHandles) { s.shapeHandles = shapes; s.NotifyChanged(); SceneView.RepaintAll(); }
             bool editing = BrushEditContext.IsActive;
             bool editable = false;
             foreach (var go in Selection.gameObjects)
@@ -67,6 +67,14 @@ namespace CsgBrush.Editor
                 if (wantEditing != editing) { if (wantEditing) BrushEditContext.Enter(); else BrushEditContext.Exit(); }
             }
             EditorGUILayout.EndHorizontal();
+            if (s.shapeHandles && !editing)
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label(new GUIContent("Other selected", "What a shape edit does to the other selected brushes"), EditorStyles.miniLabel, GUILayout.Width(84));
+                var selection = (ShapeEditSelection)EditorGUILayout.EnumPopup(s.shapeEditSelection);
+                if (selection != s.shapeEditSelection) { s.shapeEditSelection = selection; s.NotifyChanged(); }
+                EditorGUILayout.EndHorizontal();
+            }
             if (editing) BrushExtrude.DrawPanel();
 
             // lint: parents that rotate or scale brushes off the grid

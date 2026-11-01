@@ -20,8 +20,10 @@
     height, and the last step's end turns the stairs further (curved) or adds steps (spiral).
   - Real points stay dots: a cone's apex.
   - Unity's own tool handles always take the drag first.
-  - Shift drags both sides. Sizes follow the grid. One drag is one undo step, and it changes all selected brushes.
-  - Toggle them with **Shape** in the Brushes overlay or **B**.
+  - Shift drags both sides. Sizes follow the grid. One drag is one undo step.
+  - Toggle them with **Shape Edit** in the Brushes overlay or **B**.
+  - **Other selected** sets what a drag does to the other selected brushes: nothing (the default), the same change
+    to brushes of the same shape, or the same value on them.
 - Build levels from scripts (new manual page):
   - `BrushApi.CreateBox(min, max)` places a box exactly between two corners.
   - `BrushApi.Create` takes `snap`. The new **Grid snap** value **Off** keeps a brush exactly where it was placed.

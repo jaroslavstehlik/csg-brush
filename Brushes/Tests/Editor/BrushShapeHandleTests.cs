@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CsgBrush.Editor;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
@@ -46,6 +47,66 @@ namespace CsgBrush.Tests
             Drag(box, "-y", 0.5f);
             Assert.AreEqual(before.min.y - 0.5f, WorldBox(box).min.y, 1e-4f, "the bottom moved down");
             Assert.AreEqual(before.max.y, WorldBox(box).max.y, 1e-4f, "the top stayed");
+        }
+
+        /// <summary>Two cylinders of different heights and a box, all selected; the first cylinder's top is dragged up 1 m.</summary>
+        static (Brush dragged, Brush other, Brush box) DragTopOfSelection(ShapeEditSelection mode)
+        {
+            Brush dragged = Make(BrushShape.Cylinder, new Vector3(2f, 2f, 2f), Vector3.zero);
+            Brush other = Make(BrushShape.Cylinder, new Vector3(2f, 4f, 2f), new Vector3(5f, 0f, 0f));
+            Brush box = Make(BrushShape.Box, new Vector3(2f, 2f, 2f), new Vector3(-5f, 0f, 0f));
+            var brushes = new List<Brush> { dragged, other, box };
+            var starts = new Dictionary<Brush, BrushShapeHandles.State>();
+            foreach (var b in brushes) starts[b] = BrushShapeHandles.State.Of(b);
+            BrushShapeHandles.ApplyToSelection(brushes, dragged, "+y", 1f, false, mode, starts);
+            return (dragged, other, box);
+        }
+
+        [Test]
+        public void OnlyTheDraggedBrushChanges()
+        {
+            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.OnlyThisBrush);
+            Assert.AreEqual(3f, dragged.size.y, 1e-4f);
+            Assert.AreEqual(4f, other.size.y, 1e-4f, "the other cylinder stays");
+            Assert.AreEqual(2f, box.size.y, 1e-4f, "the box stays");
+        }
+
+        [Test]
+        public void SameShapesChangeByTheSameAmount()
+        {
+            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.SameShapesBySameAmount);
+            Assert.AreEqual(3f, dragged.size.y, 1e-4f);
+            Assert.AreEqual(5f, other.size.y, 1e-4f, "1 m taller too");
+            Assert.AreEqual(2f, box.size.y, 1e-4f, "another shape stays");
+        }
+
+        [Test]
+        public void SameShapesChangeToTheSameValue()
+        {
+            var (dragged, other, box) = DragTopOfSelection(ShapeEditSelection.SameShapesToSameValue);
+            Assert.AreEqual(3f, dragged.size.y, 1e-4f);
+            Assert.AreEqual(3f, other.size.y, 1e-4f, "as tall as the dragged one");
+            Assert.AreEqual(2f, box.size.y, 1e-4f, "another shape stays");
+        }
+
+        [Test]
+        public void TheSameValueWorksForRadiiAndSlopes()
+        {
+            Brush a = Make(BrushShape.Cylinder, new Vector3(2f, 2f, 2f), Vector3.zero);
+            Brush b = Make(BrushShape.Cylinder, new Vector3(6f, 2f, 6f), new Vector3(10f, 0f, 0f));
+            Brush c = Make(BrushShape.Wedge, new Vector3(2f, 1f, 2f), new Vector3(0f, 0f, 10f));
+            Brush d = Make(BrushShape.Wedge, new Vector3(2f, 2f, 4f), new Vector3(10f, 0f, 10f));
+            foreach (var (dragged, other, handle) in new[] { (a, b, "side"), (c, d, "slope") })
+            {
+                var brushes = new List<Brush> { dragged, other };
+                var starts = new Dictionary<Brush, BrushShapeHandles.State>();
+                foreach (var x in brushes) starts[x] = BrushShapeHandles.State.Of(x);
+                BrushShapeHandles.ApplyToSelection(brushes, dragged, handle, 0.5f, false, ShapeEditSelection.SameShapesToSameValue, starts);
+                Assert.AreNotEqual(starts[dragged].size.x + starts[dragged].size.z, dragged.size.x + dragged.size.z, handle + " changed the dragged brush");
+                Assert.AreEqual(dragged.size.x, other.size.x, 1e-3f, handle + ": the same width");
+                if (handle == "side") Assert.AreEqual(dragged.size.z, other.size.z, 1e-3f, "the same diameter");
+                else Assert.AreEqual(dragged.size.z, other.size.z, 1e-3f, "the same ramp length");
+            }
         }
 
         [Test]

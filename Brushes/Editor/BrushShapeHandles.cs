@@ -507,6 +507,73 @@ namespace CsgBrush.Editor
             }
         }
 
+        /// <summary>
+        /// Apply a drag of <paramref name="dragged"/>'s handle, and to the other brushes as <paramref name="mode"/> says:
+        /// none, those of the same shape by the same distance, or those of the same shape to the dragged brush's new value.
+        /// </summary>
+        public static void ApplyToSelection(List<Brush> brushes, Brush dragged, string handleId, float distance, bool symmetric,
+            ShapeEditSelection mode, Dictionary<Brush, State> starts)
+        {
+            if (!starts.TryGetValue(dragged, out var draggedStart)) return;
+            Apply(dragged, draggedStart, handleId, distance, symmetric);
+            if (mode == ShapeEditSelection.OnlyThisBrush) return;
+            int measure = mode == ShapeEditSelection.SameShapesToSameValue ? Measured(dragged, draggedStart, handleId, distance, symmetric) : -1;
+            foreach (var other in brushes)
+            {
+                if (other == dragged || other.shape != dragged.shape || !starts.TryGetValue(other, out var start)) continue;
+                if (mode == ShapeEditSelection.SameShapesBySameAmount) { Apply(other, start, handleId, distance, symmetric); continue; }
+                if (measure < 0) { Apply(other, start, handleId, 0f, symmetric); continue; }
+                Apply(other, start, handleId, DistanceTo(other, start, handleId, symmetric, measure, Values(State.Of(dragged))[measure]), symmetric);
+            }
+        }
+
+        /// <summary>The values a handle can change, in a fixed order: the size, then the stair and arch settings.</summary>
+        static float[] Values(State s) => new[] { s.size.x, s.size.y, s.size.z, s.innerRadius, s.stepWidth, s.curveAngle, s.numSteps, s.wallThickness, s.stepHeight };
+
+        static Handle? Find(Brush b, string handleId)
+        {
+            foreach (var h in HandlesOf(b)) if (h.id == handleId) return h;
+            return null;
+        }
+
+        /// <summary>Which of <see cref="Values"/> the handle changes: the first one that a drag of it (unsnapped) moves.</summary>
+        static int Measured(Brush b, State start, string handleId, float distance, bool symmetric)
+        {
+            var h = Find(b, handleId);
+            if (h == null) return -1;
+            var now = State.Of(b);
+            float probe = Mathf.Abs(distance) > 1e-3f ? distance : 1f;
+            h.Value.apply(b, start, probe, symmetric, false);
+            float[] before = Values(start), after = Values(State.Of(b));
+            Restore(b, now);
+            for (int i = 0; i < before.Length; i++)
+                if (Mathf.Abs(after[i] - before[i]) > 1e-5f) return i;
+            return -1;
+        }
+
+        /// <summary>The drag distance that gives the brush the value <paramref name="target"/>: found by trying distances, as handles are not all linear.</summary>
+        static float DistanceTo(Brush b, State start, string handleId, bool symmetric, int measure, float target)
+        {
+            var h = Find(b, handleId);
+            if (h == null) return 0f;
+            Undo.RecordObjects(new Object[] { b, b.transform }, "Change brush shape"); // before the trials change it
+            float Value(float d) { h.Value.apply(b, start, d, symmetric, false); return Values(State.Of(b))[measure]; }
+            float d0 = 0f, m0 = Values(start)[measure], d1 = target - m0, m1 = Value(d1);
+            for (int i = 0; i < 6 && Mathf.Abs(m1 - target) > 1e-4f && Mathf.Abs(m1 - m0) > 1e-6f; i++)
+            {
+                float d2 = d1 + (target - m1) * (d1 - d0) / (m1 - m0);
+                d0 = d1; m0 = m1; d1 = d2; m1 = Value(d1);
+            }
+            return d1;
+        }
+
+        static void Restore(Brush b, State s)
+        {
+            b.size = s.size; b.transform.position = s.position; b.transform.rotation = s.rotation; b.pivot = s.pivot;
+            b.stepHeight = s.stepHeight; b.innerRadius = s.innerRadius; b.stepWidth = s.stepWidth; b.curveAngle = s.curveAngle;
+            b.wallThickness = s.wallThickness; b.numSteps = s.numSteps;
+        }
+
         // ---- the Scene view
 
         /// <summary>
@@ -606,8 +673,7 @@ namespace CsgBrush.Editor
                                 if (!s_Dragging && h.IsFace && (e.mousePosition - s_DownMouse).sqrMagnitude < DragThreshold * DragThreshold) { e.Use(); break; }
                                 if (!s_Dragging) Begin(brushes);
                                 float distance = HandleUtility.CalcLineTranslation(s_DownMouse, e.mousePosition, s_StartWorld, s_StartDirection);
-                                foreach (var other in brushes)
-                                    if (s_Start.TryGetValue(other, out var start)) Apply(other, start, s_HotId, distance, e.shift);
+                                ApplyToSelection(brushes, s_HotBrush, s_HotId, distance, e.shift, BrushSettings.instance.shapeEditSelection, s_Start);
                                 e.Use();
                             }
                             break;

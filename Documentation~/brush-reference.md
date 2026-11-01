@@ -62,9 +62,19 @@ Only the sides turned towards you are handles. A side shows a faint outline, and
 | Spiral stairs | The inner and the outer face, as on curved stairs. The top step's tread and the last step's end: more steps, going round further. | | |
 | Door, window | The sides, the top, and the bottom. | | |
 
-Unity's own Move, Rotate, and Scale handles always come first: where one of them is under the pointer, it takes the drag. While you drag, the handle shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo. With several brushes selected, dragging a handle changes the same handle on all of them.
+Unity's own Move, Rotate, and Scale handles always come first: where one of them is under the pointer, it takes the drag. While you drag, the handle shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo.
 
-To show or hide the handles, use **Shape** in the **Brushes** overlay, or press **B** in the Scene view.
+To turn the handles on or off, use **Shape Edit** in the **Brushes** overlay, or press **B** in the Scene view.
+
+While **Shape Edit** is on, **Other selected** in the overlay sets what a drag does to the other selected brushes:
+
+| **Setting** | **What happens** |
+| :--- | :--- |
+| **Only this brush** (default) | Only the brush you drag changes. |
+| **Same shapes, by the same amount** | Selected brushes of the same shape change by the same amount: drag one cylinder's top up 1 m, and every selected cylinder gets 1 m taller. |
+| **Same shapes, to the same value** | Selected brushes of the same shape take the dragged brush's new value: every selected cylinder becomes as tall as the one you drag. |
+
+Brushes of other shapes never change.
 
 ### Grid snapping
 

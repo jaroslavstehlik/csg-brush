@@ -9,6 +9,17 @@ namespace CsgBrush.Editor
     /// Project-wide world preset: units per metre, grid and defaults. Geometry is always stored in metres; the preset
     /// only changes how sizes are displayed and snapped.
     /// </summary>
+    /// <summary>What dragging a shape handle does to the other selected brushes.</summary>
+    public enum ShapeEditSelection
+    {
+        /// <summary>Only the brush whose handle is dragged changes.</summary>
+        [InspectorName("Only this brush")] OnlyThisBrush = 0,
+        /// <summary>Selected brushes of the same shape change by the same amount.</summary>
+        [InspectorName("Same shapes, by the same amount")] SameShapesBySameAmount = 1,
+        /// <summary>Selected brushes of the same shape take the dragged brush's new value.</summary>
+        [InspectorName("Same shapes, to the same value")] SameShapesToSameValue = 2,
+    }
+
     [FilePath("ProjectSettings/BrushSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     public sealed class BrushSettings : ScriptableSingleton<BrushSettings>
     {
@@ -60,8 +71,10 @@ namespace CsgBrush.Editor
         public bool showCuts = false;
         [Tooltip("Show the width, depth and height of a brush or wall while it is drawn.")]
         public bool showDimensions = true;
-        [Tooltip("Show dots on selected brushes that change their shape directly: a box's sides, a cylinder's radius, a stair's steps.")]
+        [Tooltip("Drag a selected brush's sides to change its shape.")]
         public bool shapeHandles = true;
+        [Tooltip("What a shape edit does to the other selected brushes.")]
+        public ShapeEditSelection shapeEditSelection = ShapeEditSelection.OnlyThisBrush;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]
         public bool snapToGrid = true;
 
