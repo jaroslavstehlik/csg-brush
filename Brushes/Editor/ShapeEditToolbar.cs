@@ -15,6 +15,13 @@ namespace CsgBrush.Editor
     public sealed class ShapeEditToolbar : ToolbarOverlay
     {
         ShapeEditToolbar() : base(ShapeEditToggle.Id, ShapeEditSelectionDropdown.Id) { }
+
+        /// <summary>Set a button's icon now, and again every half second until it is there (it may not be imported yet).</summary>
+        internal static void LoadIcon(VisualElement button, System.Action load, System.Func<bool> loaded)
+        {
+            load();
+            if (!loaded()) button.schedule.Execute(load).Every(500).Until(loaded);
+        }
     }
 
     [EditorToolbarElement(Id, typeof(SceneView))]
@@ -24,7 +31,7 @@ namespace CsgBrush.Editor
 
         public ShapeEditToggle()
         {
-            icon = BrushIcons.Get("ShapeEdit");
+            ShapeEditToolbar.LoadIcon(this, () => icon = BrushIcons.Get("ShapeEdit"), () => icon != null);
             tooltip = "Shape Edit: drag a selected brush's sides to change its shape (B)";
             RegisterCallback<AttachToPanelEvent>(evt => { BrushSettings.Changed += Refresh; Refresh(); });
             RegisterCallback<DetachFromPanelEvent>(evt => BrushSettings.Changed -= Refresh);
@@ -74,7 +81,7 @@ namespace CsgBrush.Editor
             };
             RegisterCallback<AttachToPanelEvent>(evt => { BrushSettings.Changed += Refresh; Refresh(); });
             RegisterCallback<DetachFromPanelEvent>(evt => BrushSettings.Changed -= Refresh);
-            Refresh();
+            ShapeEditToolbar.LoadIcon(this, Refresh, () => icon != null);
         }
 
         void Refresh()

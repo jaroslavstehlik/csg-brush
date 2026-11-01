@@ -503,7 +503,16 @@ namespace CsgBrush.Editor
     static class BrushIcons
     {
         public const string Folder = "Packages/digital.dream.csgbrush/Brushes/Editor/Icons/";
-        public static Texture2D Get(string name) => EditorGUIUtility.IconContent(Folder + name + ".png").image as Texture2D;
+        /// <summary>
+        /// The icon, or null while it isn't imported yet: after a package update, the scripts can reload before new icons
+        /// are imported. Null without an error, so the caller can try again.
+        /// </summary>
+        public static Texture2D Get(string name)
+        {
+            string path = Folder + name + ".png";
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) == null) return null;
+            return EditorGUIUtility.IconContent(path).image as Texture2D;
+        }
     }
 
     [EditorTool("Box Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 0)]
