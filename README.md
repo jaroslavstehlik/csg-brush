@@ -9,6 +9,27 @@ grid, and colliders are made of convex pieces.
 
 ![A floor plan room with a door and a window cut into its walls.](Documentation~/images/doors-and-windows.png)
 
+## In the Scene view
+
+<table>
+<tr>
+<td width="50%"><img src="Documentation~/images/draw-add.gif" alt="Draw a brush: its base, then its height."><br>Draw a brush: its base, then its height.</td>
+<td width="50%"><img src="Documentation~/images/draw-subtract.gif" alt="A subtract brush carves a tunnel; Cuts shows it in red."><br>A subtract brush carves a tunnel; Cuts shows it in red.</td>
+</tr>
+<tr>
+<td width="50%"><img src="Documentation~/images/shape-edit-box.gif" alt="Shape Edit: drag a box's sides to resize it."><br>Shape Edit: drag a box's sides to resize it.</td>
+<td width="50%"><img src="Documentation~/images/shape-edit-round.gif" alt="Drag a cylinder's round side for its radius, its top for its height."><br>Drag a cylinder's round side for its radius, its top for its height.</td>
+</tr>
+<tr>
+<td width="50%"><img src="Documentation~/images/shape-edit-arch.gif" alt="Drag an arch's curve for its height, its front for its depth."><br>Drag an arch's curve for its height, its front for its depth.</td>
+<td width="50%"><img src="Documentation~/images/shape-edit-selection.gif" alt="With several brushes, Offset changes them by the same amount and Match gives them the same size."><br>With several brushes, Offset changes them by the same amount and Match gives them the same size.</td>
+</tr>
+<tr>
+<td width="50%"><img src="Documentation~/images/floor-plan-draw.gif" alt="Click a floor plan's corners; its walls follow."><br>Click a floor plan's corners; its walls follow.</td>
+<td width="50%"><img src="Documentation~/images/doors-windows.gif" alt="Doors and windows cut openings where they are placed on a wall."><br>Doors and windows cut openings where they are placed on a wall.</td>
+</tr>
+</table>
+
 ## Features
 
 - Brush shapes: box, wedge, cylinder, cone, sphere, arch, and linear, curved and spiral stairs, drawn in the Scene view
