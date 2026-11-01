@@ -443,18 +443,6 @@ namespace CsgBrush.Editor
                 for (int i = 0; i < face.indices.Length; i++)
                     Handles.DrawLine(m.MultiplyPoint3x4(poly.vertices[face.indices[i]]), m.MultiplyPoint3x4(poly.vertices[face.indices[(i + 1) % face.indices.Length]]), 2f);
             if (BrushSettings.instance.showDimensions) DrawDimensions(poly, m, state == State.Height);
-            if (IsDirected(Shape))
-            {
-                // which way it rises: an arrow from the low end to the high end, along the middle of the base
-                var b = poly.Bounds();
-                Vector3 from = m.MultiplyPoint3x4(new Vector3(b.center.x, b.min.y, b.min.z)), to = m.MultiplyPoint3x4(new Vector3(b.center.x, b.min.y, b.max.z));
-                Handles.color = Color.white;
-                Handles.DrawLine(from, to, 3f);
-                float head = HandleUtility.GetHandleSize(to) * 0.12f;
-                Vector3 back = (from - to).normalized * head, across = m.MultiplyVector(Vector3.right).normalized * head * 0.6f;
-                Handles.DrawLine(to, to + back + across, 3f);
-                Handles.DrawLine(to, to + back - across, 3f);
-            }
         }
 
         /// <summary>The drawn brush's width and depth along two edges of its base, and its height once it has one, as the floor plan shows a wall's length.</summary>
