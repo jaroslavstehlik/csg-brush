@@ -156,6 +156,12 @@ namespace CsgBrush.Editor
         static Vector2 s_MouseDown; static bool s_MouseDownValid;
 
         /// <summary>
+        /// A tool that acts on a mouse press without holding the mouse (a floor plan's points, a door or window) calls this,
+        /// so the release isn't taken as a click that selects the brush under the pointer.
+        /// </summary>
+        public static void TakeClick() => s_MouseDownValid = false;
+
+        /// <summary>
         /// Outside edit mode: clicking a brush's surface selects the brush. Unity's own picking would hit the generated
         /// mesh, which belongs to the model and cannot tell which brush was meant, so brushes are picked here by
         /// their own geometry (subtractive ones only while cuts are shown). Only when the level is what the click hits:

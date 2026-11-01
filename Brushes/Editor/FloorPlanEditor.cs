@@ -232,6 +232,7 @@ namespace CsgBrush.Editor
             if (e.type == EventType.MouseMove) SceneView.RepaintAll();
             if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && HandleUtility.nearestControl == id && m_Kind != Hover.None)
             {
+                BrushHooks.TakeClick();
                 e.Use();
                 if (e.clickCount == 2) { EndStroke(); return; }
                 Undo.RecordObject(plan, "Draw floor plan");
@@ -369,6 +370,7 @@ namespace CsgBrush.Editor
             {
                 FloorPlanMenu.Create(m_Hover, null, true);
                 m_HoverValid = false;
+                BrushHooks.TakeClick();
                 e.Use();
             }
             if (e.type == EventType.Repaint && m_HoverValid)

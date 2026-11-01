@@ -2,6 +2,8 @@
 
 ## 0.5.0 (unreleased)
 
+- Fixed: a click that adds a floor plan's point, or places a door or window, also selected the brush under the
+  pointer, so the floor plan tool lost its plan and a single click never started one.
 - The new brush's **Modules** in the Brushes overlay are one dropdown, however many modules there are.
 - With grid snapping off, or a new brush's **Grid snap** set to **Off**, a brush drawn on a slope sits square to the
   slope. With snapping on, it stays square to the world, as before.
