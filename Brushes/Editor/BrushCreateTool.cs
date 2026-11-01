@@ -254,7 +254,7 @@ namespace CsgBrush.Editor
                         wallPlan = pressed != null && Mathf.Abs(normal.y) < 0.5f ? pressed.generatedBy as FloorPlan : null; // drawn on a plan's wall: rides on it
                         normal = BrushDraw.Cardinal(normal);
                         planeRotation = BrushDraw.PlaneRotation(normal);
-                        origin = hoverPoint; opposite = origin; height = 0f;
+                        origin = hoverPoint; opposite = origin; height = 0f; side = 0f; centred = false; // a new brush starts at the default width, not the last one
                         state = State.Base; e.Use();
                     }
                     if (e.type == EventType.Repaint && hoverValid)
