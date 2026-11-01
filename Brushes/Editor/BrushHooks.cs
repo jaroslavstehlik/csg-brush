@@ -259,7 +259,7 @@ namespace CsgBrush.Editor
         public static Brush PickBrushSurface(Ray ray, out Vector3 point, out Vector3 normal)
         {
             bool cuts = BrushSettings.instance.showCuts;
-            Brush bestAdd = null, bestSub = null; float tAdd = float.MaxValue, tSub = float.MaxValue;
+            Brush bestAdd = null, bestSub = null; float tAdd = float.MaxValue, tSub = float.MaxValue, sizeAdd = 0f, sizeSub = 0f;
             Vector3 pAdd = Vector3.zero, nAdd = Vector3.up, pSub = Vector3.zero, nSub = Vector3.up;
             var stage = PrefabStageUtility.GetCurrentPrefabStage();
             var stageScene = stage != null ? stage.scene : default;
@@ -288,8 +288,9 @@ namespace CsgBrush.Editor
                     var worldPoint = e.toWorld.MultiplyPoint3x4(lo + ld * tt);
                     float world = (worldPoint - ray.origin).magnitude;
                     var worldNormal = (e.rotation * n).normalized;
-                    if (brush.operation == BrushOperation.Subtract) { if (world < tSub) { tSub = world; bestSub = brush; pSub = worldPoint; nSub = worldNormal; } }
-                    else if (world < tAdd) { tAdd = world; bestAdd = brush; pAdd = worldPoint; nAdd = worldNormal; }
+                    float size = (e.max - e.min).sqrMagnitude;
+                    if (brush.operation == BrushOperation.Subtract) { if (Nearer(world, brush, size, tSub, bestSub, sizeSub)) { tSub = world; bestSub = brush; sizeSub = size; pSub = worldPoint; nSub = worldNormal; } }
+                    else if (Nearer(world, brush, size, tAdd, bestAdd, sizeAdd)) { tAdd = world; bestAdd = brush; sizeAdd = size; pAdd = worldPoint; nAdd = worldNormal; }
                 }
             }
             if (bestAdd != null && (bestSub == null || tAdd <= tSub)) { point = pAdd; normal = nAdd; return bestAdd; }
@@ -297,6 +298,21 @@ namespace CsgBrush.Editor
         }
 
 
+
+        /// <summary>Faces this close along the ray are one surface seen: a floor plan's floor on the brush it stands on.</summary>
+        const float SameSurface = 1e-3f;
+
+        /// <summary>
+        /// Is a hit at <paramref name="t"/> a better pick than the best so far? The nearer one, and where two faces lie in
+        /// one surface, the thing standing on the other: a floor plan's piece, else the smaller brush.
+        /// </summary>
+        static bool Nearer(float t, Brush brush, float size, float bestT, Brush best, float bestSize)
+        {
+            if (best == null || t < bestT - SameSurface) return true;
+            if (t > bestT + SameSurface) return false;
+            if (brush.IsGenerated != best.IsGenerated) return brush.IsGenerated;
+            return size < bestSize;
+        }
 
         /// <summary>Keys compared by reference: UnityEngine.Object's own hashing and equality call into Unity, which costs more than the lookup.</summary>
         sealed class ByReference : IEqualityComparer<Brush>

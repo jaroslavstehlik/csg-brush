@@ -30,6 +30,22 @@ namespace CsgBrush.Tests
         static bool Solid(Vector3 p) => Physics.OverlapBox(p, Vector3.one * 0.02f, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length > 0;
 
         [Test]
+        public void ClickingAPlansFloorOnABrushPicksThePlan([Values(true, false)] bool groundFirst)
+        {
+            // the plan's floor slab ends exactly on the ground's top: one surface, and the plan is what stands on it
+            Brush ground = null;
+            if (groundFirst) ground = BrushApi.CreateBox(new Vector3(-10f, -2f, -10f), new Vector3(10f, 0f, 10f), name: "Ground");
+            var plan = Room(FourByThree);
+            if (!groundFirst) ground = BrushApi.CreateBox(new Vector3(-10f, -2f, -10f), new Vector3(10f, 0f, 10f), name: "Ground");
+            BrushApi.ForceUpdate();
+            var hit = BrushHooks.PickBrushSurface(new Ray(new Vector3(2f, 10f, 1.5f), Vector3.down), out _, out _);
+            Assert.IsNotNull(hit);
+            Assert.AreEqual(plan, hit.generatedBy, "the plan's floor, not the ground under it");
+            hit = BrushHooks.PickBrushSurface(new Ray(new Vector3(8f, 10f, 8f), Vector3.down), out _, out _);
+            Assert.AreEqual(ground, hit, "outside the plan, the ground");
+        }
+
+        [Test]
         public void AClosedOutlineBecomesWallsAroundTheDrawnRoom()
         {
             var plan = Room(FourByThree);

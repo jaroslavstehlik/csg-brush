@@ -2,6 +2,9 @@
 
 ## 0.5.0 (unreleased)
 
+- Fixed: clicking a floor plan's floor where the plan stands on a brush often selected the brush below, as the two
+  surfaces lie in one plane. Where faces meet in one surface, the click now picks what stands on the other: a floor
+  plan, else the smaller brush.
 - The Create tool's **Floor Plan** continues an existing plan when you start on one of its points or walls, or on the
   selected plan's floor, so new walls join its walls. The wall being drawn is a solid line, easier to see.
 - Fixed: a click that adds a floor plan's point, or places a door or window, also selected the brush under the
