@@ -162,10 +162,9 @@ namespace CsgBrush.Editor
         public static void TakeClick() => s_MouseDownValid = false;
 
         /// <summary>
-        /// Outside edit mode: clicking a brush's surface selects the brush. Unity's own picking would hit the generated
-        /// mesh, which belongs to the model and cannot tell which brush was meant, so brushes are picked here by
-        /// their own geometry (subtractive ones only while cuts are shown). Only when the level is what the click hits:
-        /// a scene object in front of it is left to Unity's picking.
+        /// Outside edit mode: clicking the level selects the brush seen there. Unity's own picking finds what is under the
+        /// pointer, as for any object; where that is a brush group's generated mesh, the brush that made the triangle under
+        /// the pointer is selected instead (see <see cref="BrushUnder"/>). Anything else is left to Unity's selection.
         /// Also draws the concave feedback for selected Custom shapes with the normal tools.
         /// </summary>
         static void OnSceneGUI(SceneView view)
@@ -185,9 +184,8 @@ namespace CsgBrush.Editor
             if (e.type != EventType.MouseUp || e.button != 0 || !s_MouseDownValid) return;
             s_MouseDownValid = false;
             if (GUIUtility.hotControl != 0 || (e.mousePosition - s_MouseDown).sqrMagnitude > 16f) return; // a drag or a gizmo
-            var hit = PickBrushSurface(e.mousePosition, out var hitPoint, out _);
-            if (hit == null) return; // let Unity handle empty space and other objects
-            if (OtherObjectInFront(e.mousePosition, hit, hitPoint)) return; // Unity selects it as usual
+            var hit = BrushUnder(HandleUtility.GUIPointToWorldRay(e.mousePosition), HandleUtility.PickGameObject(e.mousePosition, false));
+            if (hit == null) return; // Unity selects as usual: another object, or empty space
             var picked = BrushGenerators.SelectionTarget(hit);
             if (e.shift) { var list = new List<Object>(Selection.objects); if (!list.Contains(picked)) list.Add(picked); Selection.objects = list.ToArray(); }
             else if (e.control || e.command) { var list = new List<Object>(Selection.objects); if (!list.Remove(picked)) list.Add(picked); Selection.objects = list.ToArray(); }
@@ -196,25 +194,47 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>
-        /// Does a scene object other than the level cover the brush under the mouse? Unity's picking (a render pass) only
-        /// says which other object is under the pointer, with the level left out: whether it can pick the level's own
-        /// meshes differs between graphics APIs, so it isn't asked which is in front. That is measured along the ray instead,
-        /// the same on every platform (see <see cref="InFrontOfBrush"/>).
+        /// The brush a click selects, given what Unity's picking found under the pointer (<paramref name="front"/>):
+        /// <list type="bullet">
+        /// <item>on a brush group's mesh, the brush that made the triangle under the pointer (a carved face's, the cutter);
+        /// where another brush's face lies in that same surface, the one standing on the other (see <see cref="Nearer"/>);</item>
+        /// <item>a cut shown with Cuts, or a door or window, in front of what Unity found: they are drawn over the scene;</item>
+        /// <item>where Unity found nothing, a brush that has no mesh to see, by its shape.</item>
+        /// </list>
+        /// Null when Unity's selection should take it: another scene object, or empty space.
         /// </summary>
-        static bool OtherObjectInFront(Vector2 mouse, Brush hit, Vector3 hitPoint)
+        public static Brush BrushUnder(Ray ray, GameObject front)
         {
-            var other = HandleUtility.PickGameObject(mouse, false, LevelRenderers());
-            if (other == null || IsLevelObject(other)) return false;
-            var ray = HandleUtility.GUIPointToWorldRay(mouse);
-            return InFrontOfBrush(other, ray, (hitPoint - ray.origin).magnitude);
+            Brush brush = null;
+            float distance = float.PositiveInfinity;
+            if (front != null && IsLevelObject(front))
+            {
+                var t = front.transform;
+                if (t.TryGetComponent<Brush>(out var own)) brush = own;
+                else if (t.parent != null && Brush.IsGeneratedChildName(t.name) && t.parent.TryGetComponent<Brush>(out var parent)) brush = parent;
+                else brush = BrushOnMesh(t, ray, out distance);
+                var surface = PickBrushSurface(ray, out var point, out _);
+                float surfaceDistance = surface != null ? (point - ray.origin).magnitude : float.PositiveInfinity;
+                if (brush == null) { brush = surface; distance = surfaceDistance; } // the mesh's table isn't there yet (a scene just loaded)
+                else if (surface != null && Mathf.Abs(surfaceDistance - distance) <= SameSurface) brush = surface; // faces in one surface
+            }
+            else if (front != null) distance = DistanceAlong(front, ray);
+            var cut = PickBrushSurface(ray, out var cutPoint, out _, cutsOnly: true);
+            if (cut != null && (cutPoint - ray.origin).magnitude <= distance + SameSurface) return cut;
+            if (front == null) return PickBrushSurface(ray, out _, out _); // nothing Unity can see: a brush without a mesh, if any
+            return brush;
         }
 
-        /// <summary>
-        /// Is <paramref name="other"/> in front of a brush face <paramref name="brushDistance"/> along the ray? Its meshes
-        /// are hit by the ray (renderer bounds where it has none); an object lying on the face counts as in front, as it
-        /// stands on it.
-        /// </summary>
-        public static bool InFrontOfBrush(GameObject other, Ray ray, float brushDistance) => DistanceAlong(other, ray) <= brushDistance + SameSurface;
+        /// <summary>The brush that made the triangle of a group's mesh the ray hits first, and how far along the ray; null if none.</summary>
+        static Brush BrushOnMesh(Transform meshObject, Ray ray, out float distance)
+        {
+            distance = float.PositiveInfinity;
+            var table = BrushCsg.TriangleBrushes(meshObject);
+            if (table == null || !meshObject.TryGetComponent<MeshFilter>(out var filter) || filter.sharedMesh == null) return null;
+            if (!IntersectRayMesh(ray, filter.sharedMesh, meshObject.localToWorldMatrix, out var hit)) return null;
+            distance = hit.distance;
+            return hit.triangleIndex >= 0 && hit.triangleIndex < table.Length ? table[hit.triangleIndex] : null;
+        }
 
         /// <summary>How far along the ray it is to the object's surface: its meshes, else its renderers' bounds; infinity if missed.</summary>
         public static float DistanceAlong(GameObject go, Ray ray)
@@ -225,7 +245,7 @@ namespace CsgBrush.Editor
             {
                 if (filter.sharedMesh == null) continue;
                 anyMesh = true;
-                if (IntersectRayMesh(ray, filter.sharedMesh, filter.transform.localToWorldMatrix, out float t)) best = Mathf.Min(best, t);
+                if (IntersectRayMesh(ray, filter.sharedMesh, filter.transform.localToWorldMatrix, out var hit)) best = Mathf.Min(best, hit.distance);
             }
             if (anyMesh) return best;
             foreach (var r in go.GetComponents<Renderer>())
@@ -236,35 +256,17 @@ namespace CsgBrush.Editor
         static System.Reflection.MethodInfo s_IntersectRayMesh;
 
         /// <summary>Unity's own ray and mesh test (the one its handles use), found once; false when Unity no longer has it.</summary>
-        public static bool IntersectRayMesh(Ray ray, Mesh mesh, Matrix4x4 matrix, out float distance)
+        public static bool IntersectRayMesh(Ray ray, Mesh mesh, Matrix4x4 matrix, out RaycastHit hit)
         {
-            distance = 0f;
+            hit = default;
             if (s_IntersectRayMesh == null)
                 s_IntersectRayMesh = typeof(HandleUtility).GetMethod("IntersectRayMesh", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public,
                     null, new[] { typeof(Ray), typeof(Mesh), typeof(Matrix4x4), typeof(RaycastHit).MakeByRefType() }, null);
             if (s_IntersectRayMesh == null) return false;
             var args = new object[] { ray, mesh, matrix, null };
             if (!(bool)s_IntersectRayMesh.Invoke(null, args)) return false;
-            distance = ((RaycastHit)args[3]).distance;
+            hit = (RaycastHit)args[3];
             return true;
-        }
-
-        /// <summary>The level's visible meshes (groups' meshes, brushes' generated children), left out when Unity picks other objects.</summary>
-        static GameObject[] LevelRenderers()
-        {
-            var list = new List<GameObject>();
-            foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsSortMode.None))
-                foreach (Transform child in group.transform)
-                    if (BrushSync.IsGenerated(child)) list.Add(child.gameObject);
-            var active = Brush.Active;
-            for (int i = 0; i < active.Count; i++)
-            {
-                var brush = active[i];
-                list.Add(brush.gameObject);
-                foreach (Transform child in brush.transform)
-                    if (Brush.IsGeneratedChildName(child.name)) list.Add(child.gameObject);
-            }
-            return list.ToArray();
         }
 
         /// <summary>A brush, a generated piece of one, or a group's generated mesh or colliders: what clicking the level hits.</summary>
@@ -310,7 +312,13 @@ namespace CsgBrush.Editor
         public static Brush PickBrushSurface(Vector2 mouse, out Vector3 point, out Vector3 normal) => PickBrushSurface(HandleUtility.GUIPointToWorldRay(mouse), out point, out normal);
 
         /// <summary>Nearest brush along a world ray (see the mouse overload).</summary>
-        public static Brush PickBrushSurface(Ray ray, out Vector3 point, out Vector3 normal)
+        public static Brush PickBrushSurface(Ray ray, out Vector3 point, out Vector3 normal) => PickBrushSurface(ray, out point, out normal, false);
+
+        /// <summary>
+        /// Nearest brush along a world ray by its shape; with <paramref name="cutsOnly"/> only what is drawn over the scene:
+        /// subtract brushes while Cuts are shown, and doors and windows.
+        /// </summary>
+        public static Brush PickBrushSurface(Ray ray, out Vector3 point, out Vector3 normal, bool cutsOnly)
         {
             bool cuts = BrushSettings.instance.showCuts;
             Brush bestAdd = null, bestSub = null; float tAdd = float.MaxValue, tSub = float.MaxValue, sizeAdd = 0f, sizeSub = 0f;
@@ -324,6 +332,7 @@ namespace CsgBrush.Editor
             {
                 var brush = active[i]; // registered brushes are alive: OnDisable always runs before a brush is destroyed
                 if (brush.operation == BrushOperation.Subtract && !cuts && !brush.IsOpening) continue; // an invisible cut is not clickable; a door or window always is
+                if (cutsOnly && brush.operation != BrushOperation.Subtract) continue;
                 var e = BrushCache.Of(brush);
                 if (!e.pickReady) MeasureForPicking(brush, e);
                 if (e.polyhedron == null || !RayHitsBox(o, inv, e.min, e.max)) continue; // most brushes end here, without a call into Unity
