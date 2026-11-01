@@ -196,21 +196,75 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>
-        /// Does a scene object other than the level cover the brush under the mouse? Unity's own picking finds the
-        /// frontmost object by depth: when that is a group's generated mesh (or a brush), the level is in front and the
-        /// brush is meant. Cuts are drawn over the scene, not into its depth, so a cut wins only when it is nearer than
-        /// the other object's bounds.
+        /// Does a scene object other than the level cover the brush under the mouse? Unity's picking (a render pass) only
+        /// says which other object is under the pointer, with the level left out: whether it can pick the level's own
+        /// meshes differs between graphics APIs, so it isn't asked which is in front. That is measured along the ray instead,
+        /// the same on every platform (see <see cref="InFrontOfBrush"/>).
         /// </summary>
         static bool OtherObjectInFront(Vector2 mouse, Brush hit, Vector3 hitPoint)
         {
-            var front = HandleUtility.PickGameObject(mouse, false);
-            if (front == null || IsLevelObject(front)) return false;
-            if (hit.operation != BrushOperation.Subtract) return true;
+            var other = HandleUtility.PickGameObject(mouse, false, LevelRenderers());
+            if (other == null || IsLevelObject(other)) return false;
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
-            float brushDistance = (hitPoint - ray.origin).magnitude;
-            bool any = false; var bounds = default(Bounds);
-            foreach (var r in front.GetComponentsInChildren<Renderer>()) { if (any) bounds.Encapsulate(r.bounds); else { bounds = r.bounds; any = true; } }
-            return !any || !bounds.IntersectRay(ray, out float objectDistance) || objectDistance <= brushDistance;
+            return InFrontOfBrush(other, ray, (hitPoint - ray.origin).magnitude);
+        }
+
+        /// <summary>
+        /// Is <paramref name="other"/> in front of a brush face <paramref name="brushDistance"/> along the ray? Its meshes
+        /// are hit by the ray (renderer bounds where it has none); an object lying on the face counts as in front, as it
+        /// stands on it.
+        /// </summary>
+        public static bool InFrontOfBrush(GameObject other, Ray ray, float brushDistance) => DistanceAlong(other, ray) <= brushDistance + SameSurface;
+
+        /// <summary>How far along the ray it is to the object's surface: its meshes, else its renderers' bounds; infinity if missed.</summary>
+        public static float DistanceAlong(GameObject go, Ray ray)
+        {
+            float best = float.PositiveInfinity;
+            bool anyMesh = false;
+            foreach (var filter in go.GetComponents<MeshFilter>())
+            {
+                if (filter.sharedMesh == null) continue;
+                anyMesh = true;
+                if (IntersectRayMesh(ray, filter.sharedMesh, filter.transform.localToWorldMatrix, out float t)) best = Mathf.Min(best, t);
+            }
+            if (anyMesh) return best;
+            foreach (var r in go.GetComponents<Renderer>())
+                if (r.bounds.IntersectRay(ray, out float t)) best = Mathf.Min(best, Mathf.Max(0f, t));
+            return best;
+        }
+
+        static System.Reflection.MethodInfo s_IntersectRayMesh;
+
+        /// <summary>Unity's own ray and mesh test (the one its handles use), found once; false when Unity no longer has it.</summary>
+        public static bool IntersectRayMesh(Ray ray, Mesh mesh, Matrix4x4 matrix, out float distance)
+        {
+            distance = 0f;
+            if (s_IntersectRayMesh == null)
+                s_IntersectRayMesh = typeof(HandleUtility).GetMethod("IntersectRayMesh", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public,
+                    null, new[] { typeof(Ray), typeof(Mesh), typeof(Matrix4x4), typeof(RaycastHit).MakeByRefType() }, null);
+            if (s_IntersectRayMesh == null) return false;
+            var args = new object[] { ray, mesh, matrix, null };
+            if (!(bool)s_IntersectRayMesh.Invoke(null, args)) return false;
+            distance = ((RaycastHit)args[3]).distance;
+            return true;
+        }
+
+        /// <summary>The level's visible meshes (groups' meshes, brushes' generated children), left out when Unity picks other objects.</summary>
+        static GameObject[] LevelRenderers()
+        {
+            var list = new List<GameObject>();
+            foreach (var group in Object.FindObjectsByType<BrushGroup>(FindObjectsSortMode.None))
+                foreach (Transform child in group.transform)
+                    if (BrushSync.IsGenerated(child)) list.Add(child.gameObject);
+            var active = Brush.Active;
+            for (int i = 0; i < active.Count; i++)
+            {
+                var brush = active[i];
+                list.Add(brush.gameObject);
+                foreach (Transform child in brush.transform)
+                    if (Brush.IsGeneratedChildName(child.name)) list.Add(child.gameObject);
+            }
+            return list.ToArray();
         }
 
         /// <summary>A brush, a generated piece of one, or a group's generated mesh or colliders: what clicking the level hits.</summary>

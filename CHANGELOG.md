@@ -2,6 +2,9 @@
 
 ## 0.5.0 (unreleased)
 
+- Fixed: where a brush and an ordinary mesh overlap on screen, which one a click selected depended on the platform's
+  graphics API, so on some machines brushes behind meshes, or meshes in front of brushes, couldn't be selected. The
+  nearer one is now measured along the pointer's ray.
 - Fixed: clicking a floor plan's floor where the plan stands on a brush often selected the brush below, as the two
   surfaces lie in one plane. Where faces meet in one surface, the click now picks what stands on the other: a floor
   plan, else the smaller brush.
