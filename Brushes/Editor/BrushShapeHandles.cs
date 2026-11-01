@@ -194,57 +194,100 @@ namespace CsgBrush.Editor
             return list;
         }
 
-        /// <summary>Curved and spiral stairs: the column, the steps' width, the height, and (curved) the angle they cover.</summary>
+        /// <summary>
+        /// Curved and spiral stairs, all faces: the inner face (the side towards the column) and the outer face move their own
+        /// edge with the other fixed; the top step's tread sets the height; the last step's end face turns the stairs
+        /// further (curved) or adds steps round the turn (spiral). The start stays where the brush is.
+        /// </summary>
         static void AddRoundStairs(Brush b, List<Handle> list)
         {
             bool spiral = b.shape == BrushShape.SpiralStairs;
             float sign = b.counterClockwise ? 1f : -1f;
-            float ri = Mathf.Max(0f, b.innerRadius), ro = ri + Mathf.Max(0.001f, b.stepWidth), h = Mathf.Max(0.001f, b.stepHeight);
+            float ri = Mathf.Max(0f, b.innerRadius), ro = ri + Mathf.Max(0.001f, b.stepWidth), h = Mathf.Max(BrushPolyhedron.MinStepHeight, b.stepHeight);
             int n = Mathf.Max(1, b.numSteps);
             float total = spiral ? Mathf.PI * 2f / Mathf.Max(1, b.stepsPer360) * n : Mathf.Max(1f, b.curveAngle) * Mathf.Deg2Rad;
             float stepAngle = total / n;
+            int sub = Mathf.Max(1, Mathf.CeilToInt(stepAngle * Mathf.Rad2Deg / 10f));   // pieces per step, so curved faces stay close to the steps
+            bool slab = spiral || !b.supportUnderSteps;
+            float thickness = Mathf.Max(0.001f, b.stepThickness);
             Vector3 At(float radius, float angle, float y) => new Vector3(radius * Mathf.Cos(angle * sign), y, radius * Mathf.Sin(angle * sign));
-            float firstTop = b.addToFirstStep + h, lastTop = b.addToFirstStep + n * h;
-            float mid = stepAngle * 0.5f;
+            float Top(int k) => b.addToFirstStep + (k + 1) * h;
+            float Bottom(int k) => slab ? Mathf.Max(0f, Top(k) - thickness) : 0f;
+
+            // the inner and outer faces: one strip per piece of each step, facing away from (outer) or towards (inner) the axis
+            Vector3[][] Wall(float radius, bool inner, out Vector3[] normals)
+            {
+                var polygons = new List<Vector3[]>(); var faceNormals = new List<Vector3>();
+                for (int k = 0; k < n; k++)
+                    for (int j = 0; j < sub; j++)
+                    {
+                        float t0 = (k + (float)j / sub) * stepAngle, t1 = (k + (float)(j + 1) / sub) * stepAngle, tm = (t0 + t1) * 0.5f;
+                        polygons.Add(new[] { At(radius, t0, Bottom(k)), At(radius, t1, Bottom(k)), At(radius, t1, Top(k)), At(radius, t0, Top(k)) });
+                        faceNormals.Add(At(inner ? -1f : 1f, tm, 0f));
+                    }
+                normals = faceNormals.ToArray();
+                return polygons.ToArray();
+            }
+            var innerFaces = Wall(ri, true, out var innerNormals);
+            var outerFaces = Wall(ro, false, out var outerNormals);
             list.Add(new Handle
             {
-                id = "inner", local = At(ri, mid, firstTop), direction = At(1f, mid, 0f),
-                apply = (br, st, d, sym, snap) => { br.innerRadius = Mathf.Max(0f, SnapLength(br, st.innerRadius + d, snap)); },
-                label = br => "column " + Length(br.innerRadius),
+                id = "inner", local = Vector3.zero, direction = At(1f, stepAngle * 0.5f, 0f), faces = innerFaces, faceNormals = innerNormals, radial = true,
+                // the inner edge moves (away from the axis is positive); the outer edge stays
+                apply = (br, st, d, sym, snap) =>
+                {
+                    float outer = st.innerRadius + st.stepWidth;
+                    br.innerRadius = Mathf.Clamp(SnapLength(br, st.innerRadius + d, snap), 0f, outer - 0.05f);
+                    br.stepWidth = outer - br.innerRadius;
+                },
+                label = br => "column " + Length(br.innerRadius) + ", steps " + Length(br.stepWidth) + " wide",
             });
             list.Add(new Handle
             {
-                id = "outer", local = At(ro, mid, firstTop), direction = At(1f, mid, 0f),
-                apply = (br, st, d, sym, snap) => { br.stepWidth = Mathf.Max(0.01f, SnapLength(br, st.stepWidth + d, snap)); },
+                id = "outer", local = Vector3.zero, direction = At(1f, stepAngle * 0.5f, 0f), faces = outerFaces, faceNormals = outerNormals, radial = true,
+                apply = (br, st, d, sym, snap) => { br.stepWidth = Mathf.Max(0.05f, SnapLength(br, st.stepWidth + d, snap)); },
                 label = br => "steps " + Length(br.stepWidth) + " wide",
             });
-            float lastMid = total - mid;
+
+            // the top step's tread: the height
+            var tread = new Vector3[sub][];
+            for (int j = 0; j < sub; j++)
+            {
+                float t0 = (n - 1 + (float)j / sub) * stepAngle, t1 = (n - 1 + (float)(j + 1) / sub) * stepAngle;
+                tread[j] = new[] { At(ri, t0, Top(n - 1)), At(ro, t0, Top(n - 1)), At(ro, t1, Top(n - 1)), At(ri, t1, Top(n - 1)) };
+            }
             list.Add(new Handle
             {
-                id = "height", local = At((ri + ro) * 0.5f, lastMid, lastTop), direction = Vector3.up,
+                id = "height", local = At((ri + ro) * 0.5f, total - stepAngle * 0.5f, Top(n - 1)), direction = Vector3.up, faces = tread,
                 // curved: the height spreads over the same steps; spiral: more height is more steps, going round further
                 apply = spiral
                     ? (System.Action<Brush, State, float, bool, bool>)((br, st, d, sym, snap) => { br.numSteps = Mathf.Max(1, Mathf.RoundToInt((st.numSteps * st.stepHeight + d) / Mathf.Max(BrushPolyhedron.MinStepHeight, st.stepHeight))); })
                     : (br, st, d, sym, snap) => { br.stepHeight = Mathf.Max(BrushPolyhedron.MinStepHeight, SnapStep(st.stepHeight + d / Mathf.Max(1, st.numSteps), snap)); },
                 label = br => spiral ? br.numSteps + " steps, " + Length(br.numSteps * br.stepHeight) : "step " + Length(br.stepHeight) + ", " + Length(br.numSteps * br.stepHeight) + " high",
             });
-            if (!spiral)
+
+            // the last step's end face: further round (curved), or more steps (spiral)
+            Vector3 onward = (At(1f, total + 0.01f, 0f) - At(1f, total, 0f)).normalized;
+            list.Add(new Handle
             {
-                float end = total;
-                list.Add(new Handle
+                id = "angle", local = At((ri + ro) * 0.5f, total, (Bottom(n - 1) + Top(n - 1)) * 0.5f), direction = onward,
+                faces = new[] { new[] { At(ri, total, Bottom(n - 1)), At(ro, total, Bottom(n - 1)), At(ro, total, Top(n - 1)), At(ri, total, Top(n - 1)) } },
+                apply = (br, st, d, sym, snap) =>
                 {
-                    id = "angle", local = At(ro, end, lastTop * 0.5f), direction = At(1f, end + Mathf.PI * 0.5f, 0f),
-                    apply = (br, st, d, sym, snap) =>
+                    float radius = Mathf.Max(0.01f, st.innerRadius + st.stepWidth * 0.5f);   // the middle of the steps
+                    if (spiral)
                     {
-                        float radius = Mathf.Max(0.01f, st.innerRadius + st.stepWidth);
-                        float degrees = st.curveAngle + d / radius * Mathf.Rad2Deg;
-                        float stepDegrees = BrushSettings.instance.rotationSnapDegrees;
-                        if (snap && stepDegrees > 0f) degrees = Mathf.Round(degrees / stepDegrees) * stepDegrees;
-                        br.curveAngle = Mathf.Clamp(degrees, 1f, 3600f);
-                    },
-                    label = br => br.curveAngle.ToString("0.#") + "°",
-                });
-            }
+                        float perStep = Mathf.PI * 2f / Mathf.Max(1, br.stepsPer360) * radius;
+                        br.numSteps = Mathf.Max(1, st.numSteps + Mathf.RoundToInt(d / perStep));
+                        return;
+                    }
+                    float degrees = st.curveAngle + d / radius * Mathf.Rad2Deg;
+                    float stepDegrees = BrushSettings.instance.rotationSnapDegrees;
+                    if (snap && stepDegrees > 0f) degrees = Mathf.Round(degrees / stepDegrees) * stepDegrees;
+                    br.curveAngle = Mathf.Clamp(degrees, 1f, 3600f);
+                },
+                label = br => spiral ? br.numSteps + " steps" : br.curveAngle.ToString("0.#") + "\u00b0",
+            });
         }
 
         static Vector3 Axis(int axis) => axis == 0 ? Vector3.right : axis == 1 ? Vector3.up : Vector3.forward;

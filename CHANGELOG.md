@@ -13,7 +13,9 @@
   - Edges are lines, grabbed anywhere along them: a wedge's low end and high top edge, an arch's feet, crown and inner
     crown. A stair's step height is set in the Inspector only, so the first riser, which sets the stair's length, is
     easy to grab.
-  - Real points stay dots: a cone's apex, and curved and spiral stairs' column, width, height and angle.
+  - Curved and spiral stairs are all faces: the inner and outer faces move their own edge, the top tread sets the
+    height, and the last step's end turns the stairs further (curved) or adds steps (spiral).
+  - Real points stay dots: a cone's apex.
   - Unity's own tool handles always take the drag first.
   - Shift drags both sides. Sizes follow the grid. One drag is one undo step, and it changes all selected brushes.
   - Toggle them with **Shape** in the Brushes overlay or **B**.

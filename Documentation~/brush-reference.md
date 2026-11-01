@@ -57,8 +57,8 @@ Only the sides turned towards you are handles. A side shows a faint outline, and
 | Sphere | The surface: the radius. Only the part facing you lights up; drag it out or in, away from the centre. A round sphere stays round; a stretched one keeps its proportions. | | |
 | Linear stairs | The stepped sides, the first riser (the start), the back wall, the top tread (the height), and the bottom. Set the step height in the Inspector. | | |
 | Arch | The front and the back. | The feet (the width), the crown (the height), and the inner crown (the thickness). | |
-| Curved stairs | | | The column's radius, the steps' width, the height, and the end of the stairs (the angle they cover). |
-| Spiral stairs | | | The column's radius, the steps' width, and the height: more height is more steps. |
+| Curved stairs | The inner face (towards the column) and the outer face: each moves its own edge, and the other stays. The top step's tread: the height, spread over the same steps. The last step's end: the angle the stairs cover. | | |
+| Spiral stairs | The inner and the outer face, as on curved stairs. The top step's tread and the last step's end: more steps, going round further. | | |
 | Door, window | The sides, the top, and the bottom. | | |
 
 Unity's own Move, Rotate, and Scale handles always come first: where one of them is under the pointer, it takes the drag. While you drag, the handle shows the new size. Hold **Shift** to move both sides at once, about the middle. Sizes snap to the grid when snapping is on and the brush's **Grid snap** isn't **Off**; step heights snap to centimetres and angles to the rotation snap. One drag is one step to undo. With several brushes selected, dragging a handle changes the same handle on all of them.

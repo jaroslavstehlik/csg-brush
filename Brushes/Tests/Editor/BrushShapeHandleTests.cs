@@ -196,11 +196,17 @@ namespace CsgBrush.Tests
         {
             Brush curved = Make(BrushShape.CurvedStairs, Vector3.one, Vector3.zero);
             curved.innerRadius = 1f; curved.stepWidth = 1f; curved.curveAngle = 90f;
-            // a quarter of the outer circle (radius 2 m) more along the end of the stairs
-            Drag(curved, "angle", Mathf.PI * 2f * 2f / 4f);
+            foreach (var h in BrushShapeHandles.HandlesOf(curved)) Assert.IsTrue(h.IsFace, "curved stairs are all faces: " + h.id);
+            // a quarter of the circle through the middle of the steps (radius 1.5 m) more along the end of the stairs
+            Drag(curved, "angle", Mathf.PI * 2f * 1.5f / 4f);
             Assert.AreEqual(180f, curved.curveAngle, 0.5f);
             Drag(curved, "outer", 0.5f);
-            Assert.AreEqual(1.5f, curved.stepWidth, 1e-4f);
+            Assert.AreEqual(1.5f, curved.stepWidth, 1e-4f, "the outer face moved out");
+            Assert.AreEqual(1f, curved.innerRadius, 1e-4f, "the inner edge stayed");
+            Drag(curved, "inner", 0.5f);
+            Assert.AreEqual(1.5f, curved.innerRadius, 1e-4f, "the inner face moved away from the column");
+            Assert.AreEqual(1f, curved.stepWidth, 1e-4f, "so the steps got narrower");
+            Assert.AreEqual(2.5f, curved.innerRadius + curved.stepWidth, 1e-4f, "and the outer edge stayed");
             Brush spiral = Make(BrushShape.SpiralStairs, Vector3.one, new Vector3(10f, 0f, 0f));
             spiral.stepHeight = 0.25f; spiral.numSteps = 8;
             Drag(spiral, "height", 1f);
