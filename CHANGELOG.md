@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 (unreleased)
+## 0.5.0 (2026-11-01)
 
 - Clicking the level selects the brush you see there. Unity's picking finds what is under the pointer, as for any
   object; on a brush group's mesh, the brush that made that triangle is selected (a doorway's sides select the
