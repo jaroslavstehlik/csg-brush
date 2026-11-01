@@ -210,19 +210,26 @@ namespace CsgBrush.Editor
             if (front != null && IsLevelObject(front))
             {
                 var t = front.transform;
-                if (t.TryGetComponent<Brush>(out var own)) brush = own;
-                else if (t.parent != null && Brush.IsGeneratedChildName(t.name) && t.parent.TryGetComponent<Brush>(out var parent)) brush = parent;
+                if (t.TryGetComponent<Brush>(out var own)) { brush = own; distance = Found(front, ray); }
+                else if (t.parent != null && Brush.IsGeneratedChildName(t.name) && t.parent.TryGetComponent<Brush>(out var parent)) { brush = parent; distance = Found(front, ray); }
                 else brush = BrushOnMesh(t, ray, out distance);
                 var surface = PickBrushSurface(ray, out var point, out _);
                 float surfaceDistance = surface != null ? (point - ray.origin).magnitude : float.PositiveInfinity;
                 if (brush == null) { brush = surface; distance = surfaceDistance; } // the mesh's table isn't there yet (a scene just loaded)
                 else if (surface != null && Mathf.Abs(surfaceDistance - distance) <= SameSurface) brush = surface; // faces in one surface
             }
-            else if (front != null) distance = DistanceAlong(front, ray);
+            else if (front != null) distance = Found(front, ray);
             var cut = PickBrushSurface(ray, out var cutPoint, out _, cutsOnly: true);
             if (cut != null && (cutPoint - ray.origin).magnitude <= distance + SameSurface) return cut;
             if (front == null) return PickBrushSurface(ray, out _, out _); // nothing Unity can see: a brush without a mesh, if any
             return brush;
+        }
+
+        /// <summary>How far along the ray an object Unity found is; one it can't measure (a light's icon) is right in front.</summary>
+        static float Found(GameObject front, Ray ray)
+        {
+            float d = DistanceAlong(front, ray);
+            return float.IsInfinity(d) ? 0f : d;
         }
 
         /// <summary>The brush that made the triangle of a group's mesh the ray hits first, and how far along the ray; null if none.</summary>

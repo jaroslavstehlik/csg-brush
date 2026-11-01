@@ -326,7 +326,8 @@ namespace CsgBrush.Editor
                     break;
 
                 case State.Width:
-                    if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag)
+                    // also on the release: Shift pressed or let go without moving the mouse still counts
+                    if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag || (e.type == EventType.MouseUp && e.button == 0))
                     {
                         var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
                         var plane = new Plane(normal, origin);
@@ -337,7 +338,7 @@ namespace CsgBrush.Editor
                             centred = e.shift;
                             side = centred ? Mathf.Abs(offset) * 2f : offset;
                         }
-                        e.Use(); SceneView.RepaintAll();
+                        if (e.type != EventType.MouseUp) { e.Use(); SceneView.RepaintAll(); }
                     }
                     if (e.type == EventType.MouseDown && e.button == 0) { GUIUtility.hotControl = controlId; e.Use(); }
                     if (e.type == EventType.MouseUp && e.button == 0) { GUIUtility.hotControl = 0; state = State.Height; height = 0f; e.Use(); }
@@ -525,7 +526,6 @@ namespace CsgBrush.Editor
         }
     }
 
-    /// <summary>Toolbar icons drawn in code from small pixel-art strings ('#' opaque), so the package needs no image assets.</summary>
     /// <summary>
     /// The package's icons (Brushes/Editor/Icons, drawn by Tools~/icons/generate_icons.py): the d_ variant on the dark theme.
     /// </summary>
@@ -538,9 +538,15 @@ namespace CsgBrush.Editor
         /// </summary>
         public static Texture2D Get(string name)
         {
-            var icon = EditorGUIUtility.isProSkin ? AssetDatabase.LoadAssetAtPath<Texture2D>(Folder + "d_" + name + ".png") : null;
-            return icon != null ? icon : AssetDatabase.LoadAssetAtPath<Texture2D>(Folder + name + ".png");
+            string key = (EditorGUIUtility.isProSkin ? "d_" : "") + name;
+            if (s_Loaded.TryGetValue(key, out var icon) && icon != null) return icon; // asked for on every repaint
+            icon = EditorGUIUtility.isProSkin ? AssetDatabase.LoadAssetAtPath<Texture2D>(Folder + "d_" + name + ".png") : null;
+            if (icon == null) icon = AssetDatabase.LoadAssetAtPath<Texture2D>(Folder + name + ".png");
+            if (icon != null) s_Loaded[key] = icon;
+            return icon;
         }
+
+        static readonly System.Collections.Generic.Dictionary<string, Texture2D> s_Loaded = new System.Collections.Generic.Dictionary<string, Texture2D>();
     }
 
     [EditorTool("Box Brush", variantGroup = typeof(BrushCreateTool), variantPriority = 0)]

@@ -159,7 +159,6 @@ namespace CsgBrush.Editor
             return EditorGUI.EndChangeCheck() ? Mathf.Max(0f, v) : units;
         }
 
-        /// <summary>What the next brush of the active Create tool gets: operation, surface and the shape's parameters (Project Settings > Brushes holds them).</summary>
         /// <summary>
         /// The modules every new brush gets, as one dropdown however many there are: it shows Nothing, the one module, or how
         /// many, and opens a checklist of all of them, as Unity's layer mask fields do.
@@ -187,6 +186,7 @@ namespace CsgBrush.Editor
             menu.DropDown(rect);
         }
 
+        /// <summary>What the next brush of the active Create tool gets: operation, surface and the shape's parameters (Project Settings > Brushes holds them).</summary>
         static void DrawNewBrush(BrushSettings s, BrushCreateTool tool)
         {
             var shape = tool.Shape;

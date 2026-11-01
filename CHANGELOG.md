@@ -4,7 +4,7 @@
 
 - Clicking the level selects the brush you see there. Unity's picking finds what is under the pointer, as for any
   object; on a brush group's mesh, the brush that made that triangle is selected (a doorway's sides select the
-  doorway). Before, brushes were picked by their own shapes and Unity was asked whether another object covered them,
+  doorway). A click on a shape handle's side selects the same way. Before, brushes were picked by their own shapes and Unity was asked whether another object covered them,
   which differed between graphics APIs: on some machines brushes behind meshes, or meshes in front of brushes, couldn't
   be selected, and parts of brushes carved away could still be clicked.
 - Fixed: clicking a floor plan's floor where the plan stands on a brush often selected the brush below, as the two

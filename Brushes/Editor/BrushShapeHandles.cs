@@ -402,7 +402,6 @@ namespace CsgBrush.Editor
             return points;
         }
 
-        /// <summary>An arch's front or back at depth <paramref name="z"/>: one quad per segment of its ring.</summary>
         /// <summary>
         /// An arch's curved faces between its front and back, one quad per segment, with each one's outward normal: the outer
         /// face (the top of the arch), or the inner face (the underside of the opening), whose outside looks into the opening.
@@ -427,6 +426,7 @@ namespace CsgBrush.Editor
             }
         }
 
+        /// <summary>An arch's front or back at depth <paramref name="z"/>: one quad per segment of its ring.</summary>
         static Vector3[][] Ring(Brush b, Vector3 min, Vector3 max, float z)
         {
             int n = Mathf.Max(1, b.sides);
@@ -942,8 +942,10 @@ namespace CsgBrush.Editor
         /// <summary>A press on a side that never became a drag is a click: select what is under the pointer, as Unity would.</summary>
         static void Click(Event e)
         {
-            Brush brush = BrushHooks.PickBrushSurface(e.mousePosition, out _, out _);
-            GameObject picked = brush != null ? brush.gameObject : HandleUtility.PickGameObject(e.mousePosition, false);
+            // the same as a click anywhere else: see BrushHooks
+            var front = HandleUtility.PickGameObject(e.mousePosition, false);
+            Brush brush = BrushHooks.BrushUnder(HandleUtility.GUIPointToWorldRay(e.mousePosition), front);
+            GameObject picked = brush != null ? BrushGenerators.SelectionTarget(brush) : front;
             if (e.shift || EditorGUI.actionKey)
             {
                 if (picked == null) return;

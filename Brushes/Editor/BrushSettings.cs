@@ -5,10 +5,6 @@ using UnityEngine;
 
 namespace CsgBrush.Editor
 {
-    /// <summary>
-    /// Project-wide world preset: units per metre, grid and defaults. Geometry is always stored in metres; the preset
-    /// only changes how sizes are displayed and snapped.
-    /// </summary>
     /// <summary>What dragging a shape handle does to the other selected brushes.</summary>
     public enum ShapeEditSelection
     {
@@ -20,6 +16,10 @@ namespace CsgBrush.Editor
         [InspectorName("Match")] Match = 2,
     }
 
+    /// <summary>
+    /// Project-wide world preset: units per metre, grid and defaults. Geometry is always stored in metres; the preset
+    /// only changes how sizes are displayed and snapped.
+    /// </summary>
     [FilePath("ProjectSettings/BrushSettings.asset", FilePathAttribute.Location.ProjectFolder)]
     public sealed class BrushSettings : ScriptableSingleton<BrushSettings>
     {

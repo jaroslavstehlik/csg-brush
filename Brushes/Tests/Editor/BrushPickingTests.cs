@@ -133,6 +133,24 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ACutBehindWhatUnityFoundIsNotSelected()
+        {
+            bool cuts = BrushSettings.instance.showCuts;
+            try
+            {
+                BrushSettings.instance.showCuts = true;
+                var wall = BrushApi.CreateBox(new Vector3(-3f, 0f, 0f), new Vector3(3f, 3f, 1f), name: "Wall");
+                BrushApi.CreateBox(new Vector3(-1f, 0f, 3f), new Vector3(1f, 2f, 4f), name: "Cut", operation: BrushOperation.Subtract);
+                var light = new GameObject("Light", typeof(Light));
+                light.transform.position = new Vector3(0f, 1f, -5f);
+                BrushApi.ForceUpdate();
+                Assert.AreEqual(wall, BrushHooks.BrushUnder(LookingAtTheWall, wall.gameObject), "the brush itself, in front of the cut");
+                Assert.IsNull(BrushHooks.BrushUnder(LookingAtTheWall, light), "a light's icon has no surface to measure: it is in front");
+            }
+            finally { BrushSettings.instance.showCuts = cuts; }
+        }
+
+        [Test]
         public void AFloorPlansFloorOnTheGroundSelectsThePlan([Values(true, false)] bool groundFirst)
         {
             Brush ground = null;
