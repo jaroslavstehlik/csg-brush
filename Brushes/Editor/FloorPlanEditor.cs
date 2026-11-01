@@ -9,7 +9,6 @@ namespace CsgBrush.Editor
     public static class FloorPlanTools
     {
         public static readonly Color Line = new Color(1f, 0.78f, 0.2f, 1f);
-        public static readonly Color Preview = new Color(1f, 0.78f, 0.2f, 0.6f);
 
         static float Grid => BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
 
@@ -316,8 +315,12 @@ namespace CsgBrush.Editor
             int last = m_Last >= 0 ? plan.PointIndex(m_Last) : -1;
             if (last < 0) return;
             var from = FloorPlanTools.World(plan, plan.points[last]);
-            Handles.color = FloorPlanTools.Preview;
-            Handles.DrawDottedLine(from, hover, 4f);
+            // the wall being drawn: solid and bold over a dark edge, so it shows on a light floor as on a dark one
+            Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
+            Handles.color = new Color(0f, 0f, 0f, 0.6f);
+            Handles.DrawAAPolyLine(6f, from, hover);
+            Handles.color = FloorPlanTools.Line;
+            Handles.DrawAAPolyLine(3f, from, hover);
             float length = new Vector2(m_Hover.x - plan.points[last].x, m_Hover.z - plan.points[last].z).magnitude;
             if (BrushSettings.instance.showDimensions) Handles.Label((from + hover) * 0.5f, BrushSettings.instance.FormatUnits(length), EditorStyles.whiteMiniLabel);
         }
