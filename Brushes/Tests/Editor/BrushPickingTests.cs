@@ -18,12 +18,17 @@ namespace CsgBrush.Tests
 
         static readonly Ray LookingAtTheWall = new Ray(new Vector3(0f, 1f, -10f), Vector3.forward);
 
-        /// <summary>What Unity's picking finds: the rendered mesh nearest along the ray.</summary>
-        static GameObject UnityPick(Ray ray)
+        /// <summary>
+        /// What Unity's picking finds: the rendered mesh nearest along the ray. Unity's Scene view picking skips objects
+        /// hidden in the Hierarchy, as a group's mesh is while Show generated objects is off: then it finds what lies
+        /// behind the level, or nothing. <paramref name="seesHidden"/> stands in for Show generated objects on.
+        /// </summary>
+        static GameObject UnityPick(Ray ray, bool seesHidden = false)
         {
             GameObject best = null; float bestDistance = float.PositiveInfinity;
             foreach (var renderer in Object.FindObjectsByType<MeshRenderer>(FindObjectsSortMode.None))
             {
+                if (!seesHidden && (renderer.gameObject.hideFlags & HideFlags.HideInHierarchy) != 0) continue;
                 float d = BrushHooks.DistanceAlong(renderer.gameObject, ray);
                 if (d < bestDistance) { bestDistance = d; best = renderer.gameObject; }
             }
@@ -65,8 +70,30 @@ namespace CsgBrush.Tests
         public void ABrushOnTheGroupsMeshIsSelected([Values(true, false)] bool brushFirst)
         {
             var (wall, _) = WallAndCube(4f, brushFirst); // the cube behind the wall
-            Assert.IsTrue(BrushCsg.TriangleBrushes(UnityPick(LookingAtTheWall).transform) != null, "Unity finds the group's mesh");
-            Assert.AreEqual(wall, Click(LookingAtTheWall));
+            Assert.IsTrue(BrushCsg.TriangleBrushes(UnityPick(LookingAtTheWall, seesHidden: true).transform) != null, "Unity finds the group's mesh while it is shown");
+            Assert.AreEqual(wall, BrushHooks.BrushUnder(LookingAtTheWall, UnityPick(LookingAtTheWall, seesHidden: true)));
+            Assert.AreEqual(wall, Click(LookingAtTheWall), "with the group's mesh hidden from Unity's picking");
+        }
+
+        [Test]
+        public void AMeshBehindTheLevelDoesNotTakeTheClick([Values(true, false)] bool brushFirst)
+        {
+            // Unity can't pick the hidden group mesh, so it reports the cube behind the wall
+            var (wall, cube) = WallAndCube(4f, brushFirst);
+            Assert.AreEqual(wall, BrushHooks.BrushUnder(LookingAtTheWall, cube), "the wall is nearer than what Unity found");
+            Assert.IsNull(BrushHooks.BrushUnder(new Ray(new Vector3(0f, 1f, 10f), Vector3.back), cube), "from behind, the cube is nearer: Unity's");
+        }
+
+        [Test]
+        public void AWindowBehindTheLevelIsNotSelected()
+        {
+            // a window is drawn over the scene and always clickable, but not through the wall in front of it
+            var wall = BrushApi.CreateBox(new Vector3(-3f, 0f, 0f), new Vector3(3f, 3f, 1f), name: "Wall");
+            var window = BrushApi.Create(BrushShape.Window, new Vector3(0f, 1.5f, 5f), new Vector3(1.2f, 1.2f, 0.3f), Quaternion.identity, snap: false);
+            BrushApi.ForceUpdate();
+            var ray = new Ray(new Vector3(0f, 2f, -10f), Vector3.forward); // through the window whether its position is its centre or its sill
+            Assert.AreEqual(window, BrushHooks.BrushUnder(new Ray(new Vector3(0f, 2f, 10f), Vector3.back), null), "seen from behind, the window");
+            Assert.AreEqual(wall, BrushHooks.BrushUnder(ray, null), "Unity found nothing: the wall in front of the window");
         }
 
         [Test]

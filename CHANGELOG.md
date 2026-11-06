@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 (2026-11-06)
+
+- Fixed: clicking a brush with an ordinary mesh behind it selected the mesh, and clicking a brush with a door or window
+  behind it selected the door or window. Unity's picking can't see a group's mesh while it is hidden in the Hierarchy
+  (Show generated objects off), so it reported what lies behind the level, or nothing. The level's own hit is now
+  measured on its meshes, and whichever is nearer along the ray, the brush or the object Unity found, is selected.
+
 ## 0.5.0 (2026-11-01)
 
 - Clicking the level selects the brush you see there. Unity's picking finds what is under the pointer, as for any

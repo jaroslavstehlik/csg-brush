@@ -201,28 +201,78 @@ namespace CsgBrush.Editor
         /// <item>a cut shown with Cuts, or a door or window, in front of what Unity found: they are drawn over the scene;</item>
         /// <item>where Unity found nothing, a brush that has no mesh to see, by its shape.</item>
         /// </list>
+        /// Unity's picking can't see a group's mesh while it is hidden in the Hierarchy (Show generated objects off), so
+        /// it then reports what lies behind the level, or nothing: the level's own hit is found here (see
+        /// <see cref="LevelMeshUnder"/>) and whichever of the two is nearer along the ray is selected.
         /// Null when Unity's selection should take it: another scene object, or empty space.
         /// </summary>
         public static Brush BrushUnder(Ray ray, GameObject front)
         {
             Brush brush = null;
             float distance = float.PositiveInfinity;
-            if (front != null && IsLevelObject(front))
+            bool onLevel = front != null && IsLevelObject(front);
+            if (onLevel)
             {
                 var t = front.transform;
                 if (t.TryGetComponent<Brush>(out var own)) { brush = own; distance = Found(front, ray); }
                 else if (t.parent != null && Brush.IsGeneratedChildName(t.name) && t.parent.TryGetComponent<Brush>(out var parent)) { brush = parent; distance = Found(front, ray); }
                 else brush = BrushOnMesh(t, ray, out distance);
+            }
+            else
+            {
+                float frontDistance = front != null ? Found(front, ray) : float.PositiveInfinity;
+                onLevel = LevelMeshUnder(ray, out brush, out distance) && distance < frontDistance; // the level in front of what Unity found
+                if (!onLevel) { brush = null; distance = frontDistance; }
+            }
+            if (onLevel)
+            {
                 var surface = PickBrushSurface(ray, out var point, out _);
                 float surfaceDistance = surface != null ? (point - ray.origin).magnitude : float.PositiveInfinity;
                 if (brush == null) { brush = surface; distance = surfaceDistance; } // the mesh's table isn't there yet (a scene just loaded)
                 else if (surface != null && Mathf.Abs(surfaceDistance - distance) <= SameSurface) brush = surface; // faces in one surface
             }
-            else if (front != null) distance = Found(front, ray);
             var cut = PickBrushSurface(ray, out var cutPoint, out _, cutsOnly: true);
             if (cut != null && (cutPoint - ray.origin).magnitude <= distance + SameSurface) return cut;
-            if (front == null) return PickBrushSurface(ray, out _, out _); // nothing Unity can see: a brush without a mesh, if any
+            if (front == null && !onLevel) return PickBrushSurface(ray, out _, out _); // nothing to see: a brush without a mesh, if any
             return brush;
+        }
+
+        static readonly List<Brush> s_InView = new List<Brush>();
+        static readonly HashSet<BrushGroup> s_Groups = new HashSet<BrushGroup>();
+
+        /// <summary>
+        /// The nearest hit along the ray on the generated meshes of the groups in view, measured here because Unity's
+        /// picking skips them while they are hidden in the Hierarchy. <paramref name="brush"/> is the brush that made the
+        /// triangle hit, null while the mesh's table isn't there yet (a scene just loaded). False when no mesh is hit.
+        /// </summary>
+        static bool LevelMeshUnder(Ray ray, out Brush brush, out float distance)
+        {
+            brush = null; distance = float.PositiveInfinity;
+            BrushesInView(s_InView);
+            s_Groups.Clear();
+            foreach (var b in s_InView)
+            {
+                var group = b.GetComponentInParent<BrushGroup>(true);
+                if (group == null) group = BrushCsg.DefaultModel(b.gameObject.scene, false);
+                if (group != null) s_Groups.Add(group);
+            }
+            bool hit = false;
+            var visibility = SceneVisibilityManager.instance;
+            foreach (var group in s_Groups)
+                foreach (Transform t in group.transform)
+                {
+                    if (!BrushGroup.IsMeshChildName(t.name) || !t.gameObject.activeInHierarchy) continue;
+                    var go = t.gameObject;
+                    if (visibility.IsHidden(go) || visibility.IsPickingDisabled(go) || visibility.IsHidden(group.gameObject) || visibility.IsPickingDisabled(group.gameObject)) continue;
+                    if (!t.TryGetComponent<MeshRenderer>(out var renderer) || !renderer.enabled || !renderer.bounds.IntersectRay(ray)) continue; // most end here
+                    if (!t.TryGetComponent<MeshFilter>(out var filter) || filter.sharedMesh == null) continue;
+                    if (!IntersectRayMesh(ray, filter.sharedMesh, t.localToWorldMatrix, out var h) || h.distance >= distance) continue;
+                    hit = true; distance = h.distance;
+                    var table = BrushCsg.TriangleBrushes(t);
+                    brush = table != null && h.triangleIndex >= 0 && h.triangleIndex < table.Length ? table[h.triangleIndex] : null;
+                }
+            s_Groups.Clear(); s_InView.Clear();
+            return hit;
         }
 
         /// <summary>How far along the ray an object Unity found is; one it can't measure (a light's icon) is right in front.</summary>
