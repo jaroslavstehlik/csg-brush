@@ -341,6 +341,7 @@ namespace CsgBrush.Editor
 
         static void HandleKeys(Event e)
         {
+            if (Tools.viewToolActive) return; // flying (right mouse held) or orbiting: W A S D Q E move the view, S is not Smooth
             // Delete removes the selected points or walls instead of the plan
             if ((e.type == EventType.ValidateCommand || e.type == EventType.ExecuteCommand) && (e.commandName == "Delete" || e.commandName == "SoftDelete") && CanDelete())
             {
@@ -657,7 +658,7 @@ namespace CsgBrush.Editor
                 marquee = true; marqueeStart = e.mousePosition;
                 GUIUtility.hotControl = passive; e.Use();
             }
-            else if (e.type == EventType.MouseUp && e.button == 1 && GUIUtility.hotControl == 0)
+            else if (e.type == EventType.ContextClick && GUIUtility.hotControl == 0) // a right click, not the end of a fly-through (right drag)
             {
                 var menu = new GenericMenu();
                 menu.AddItem(new GUIContent("Select All"), false, () => { foreach (var p in SelectedPlans()) SelectAll(p); SceneView.RepaintAll(); });

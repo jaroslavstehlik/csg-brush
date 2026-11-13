@@ -118,7 +118,7 @@ namespace CsgBrush.Editor
 
         static void HandleKeys(Event e)
         {
-            if (e.type != EventType.KeyDown) return;
+            if (e.type != EventType.KeyDown || Tools.viewToolActive) return; // flying (right mouse held) or orbiting: the keys move the view
             if (e.keyCode == KeyCode.Alpha1) { Mode = BrushEditMode.Vertex; e.Use(); SceneView.RepaintAll(); }
             else if (e.keyCode == KeyCode.Alpha2) { Mode = BrushEditMode.Edge; e.Use(); SceneView.RepaintAll(); }
             else if (e.keyCode == KeyCode.Alpha3) { Mode = BrushEditMode.Face; e.Use(); SceneView.RepaintAll(); }
@@ -218,7 +218,7 @@ namespace CsgBrush.Editor
                 marquee = true; marqueeStart = e.mousePosition;
                 GUIUtility.hotControl = passive; e.Use();
             }
-            else if (e.type == EventType.MouseUp && e.button == 1 && GUIUtility.hotControl == 0)
+            else if (e.type == EventType.ContextClick && GUIUtility.hotControl == 0) // a right click, not the end of a fly-through (right drag)
             {
                 var menu = new GenericMenu();
                 menu.AddItem(new GUIContent("Select All"), false, SelectAll);
