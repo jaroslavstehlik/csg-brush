@@ -351,6 +351,36 @@ namespace CsgBrush.Tests
             finally { s.snapToGrid = snap; }
         }
 
+        /// <summary>Plans saved before the point graph kept their links under the name "walls".</summary>
+        [Test]
+        public void APlanSavedWithWallsLoadsItsLinks()
+        {
+            const string folder = "Assets/__FloorPlanSaveTest", path = folder + "/Plan.prefab";
+            try
+            {
+                if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder("Assets", "__FloorPlanSaveTest");
+                var go = new GameObject("Floor Plan");
+                var made = go.AddComponent<FloorPlan>();
+                made.points = new List<Vector3> { Vector3.zero, new Vector3(4f, 0f, 0f), new Vector3(4f, 0f, 3f) };
+                made.pointIds = new List<int> { 1, 2, 3 }; made.nextPointId = 4;
+                made.links = new List<PointGraph.Link> { new PointGraph.Link(1, 2), new PointGraph.Link(2, 3, 0.5f) };
+                PrefabUtility.SaveAsPrefabAsset(go, path);
+                Object.DestroyImmediate(go);
+                // written as before the point graph: the links under the name "walls"
+                var file = System.IO.Path.GetFullPath(path);
+                var text = System.IO.File.ReadAllText(file);
+                StringAssert.Contains("  links:", text);
+                System.IO.File.WriteAllText(file, text.Replace("  links:", "  walls:"));
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                var plan = AssetDatabase.LoadAssetAtPath<GameObject>(path).GetComponent<FloorPlan>();
+                Assert.AreEqual(2, plan.links.Count, "the saved walls are the links");
+                Assert.AreEqual(0.5f, plan.links[1].thickness);
+                var walls = new List<FloorPlan.Wall>(); plan.Walls(walls);
+                Assert.AreEqual(2, walls.Count);
+            }
+            finally { AssetDatabase.DeleteAsset(folder); }
+        }
+
         [Test]
         public void MovingADoorPutsItOnTheNearestWallOrFreesIt()
         {

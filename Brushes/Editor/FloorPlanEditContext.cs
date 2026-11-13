@@ -24,7 +24,7 @@ namespace CsgBrush.Editor
         public static void Enter()
         {
             if (IsActive) return;
-            foreach (var go in Selection.gameObjects) if (go.GetComponent<FloorPlan>() != null) { ToolManager.SetActiveContext<FloorPlanEditContext>(); return; }
+            foreach (var go in Selection.gameObjects) if (go.GetComponent<PointGraph>() != null) { ToolManager.SetActiveContext<FloorPlanEditContext>(); return; }
         }
         public static void Exit() { if (IsActive) ToolManager.SetActiveContext<GameObjectToolContext>(); }
 
@@ -64,13 +64,13 @@ namespace CsgBrush.Editor
             public HashSet<int> vertices = new HashSet<int>(), edges = new HashSet<int>(), rooms = new HashSet<int>();
             public void Clear() { vertices.Clear(); edges.Clear(); rooms.Clear(); }
         }
-        static readonly Dictionary<FloorPlan, Selection> s_Selection = new Dictionary<FloorPlan, Selection>();
+        static readonly Dictionary<PointGraph, Selection> s_Selection = new Dictionary<PointGraph, Selection>();
 
         /// <summary>A plan's selection, without indices the plan no longer has (after an undo, say).</summary>
-        public static Selection Sel(FloorPlan plan)
+        public static Selection Sel(PointGraph plan)
         {
             if (!s_Selection.TryGetValue(plan, out var s)) { s = new Selection(); s_Selection[plan] = s; }
-            int n = plan.points.Count, walls = plan.walls.Count, rooms = RoomsOf(plan).Count;
+            int n = plan.points.Count, walls = plan.links.Count, rooms = RoomsOf(plan).Count;
             s.vertices.RemoveWhere(i => i >= n); s.edges.RemoveWhere(i => i >= walls); s.rooms.RemoveWhere(i => i >= rooms);
             return s;
         }
@@ -78,24 +78,24 @@ namespace CsgBrush.Editor
         static readonly List<FloorPlan.Room> s_Rooms = new List<FloorPlan.Room>();
 
         /// <summary>The plan's rooms (shared list: copy it to keep it).</summary>
-        public static List<FloorPlan.Room> RoomsOf(FloorPlan plan) { plan.Rooms(s_Rooms); return s_Rooms; }
+        public static List<FloorPlan.Room> RoomsOf(PointGraph plan) { if (plan is FloorPlan fp) fp.Rooms(s_Rooms); else s_Rooms.Clear(); return s_Rooms; }
 
         /// <summary>Each wall's two point indices, in the order of <see cref="FloorPlan.walls"/>.</summary>
-        public static (int a, int b)[] WallEnds(FloorPlan plan)
+        public static (int a, int b)[] WallEnds(PointGraph plan)
         {
             plan.EnsureGraph();
-            var ends = new (int, int)[plan.walls.Count];
-            for (int w = 0; w < ends.Length; w++) { plan.WallPoints(w, out int a, out int b); ends[w] = (a, b); }
+            var ends = new (int, int)[plan.links.Count];
+            for (int w = 0; w < ends.Length; w++) { plan.LinkPoints(w, out int a, out int b); ends[w] = (a, b); }
             return ends;
         }
 
         public static void ClearSelection() { s_Selection.Clear(); SceneView.RepaintAll(); }
 
 
-        public static IEnumerable<FloorPlan> SelectedPlans()
+        public static IEnumerable<PointGraph> SelectedPlans()
         {
             foreach (var go in UnityEditor.Selection.gameObjects)
-                if (go.TryGetComponent<FloorPlan>(out var plan)) yield return plan;
+                if (go.TryGetComponent<PointGraph>(out var plan)) yield return plan;
         }
 
         // ------------------------------------------------------------------ selection rules
@@ -155,32 +155,32 @@ namespace CsgBrush.Editor
             return (a + ab * t - p).magnitude;
         }
 
-        public static void SelectAll(FloorPlan plan)
+        public static void SelectAll(PointGraph plan)
         {
             var sel = Sel(plan);
             for (int v = 0; v < plan.points.Count; v++) sel.vertices.Add(v);
-            for (int w = 0; w < plan.walls.Count; w++) sel.edges.Add(w);
+            for (int w = 0; w < plan.links.Count; w++) sel.edges.Add(w);
             for (int r = 0; r < RoomsOf(plan).Count; r++) sel.rooms.Add(r);
         }
 
-        public static void Invert(FloorPlan plan)
+        public static void Invert(PointGraph plan)
         {
             var sel = Sel(plan);
             var set = Mode == BrushEditMode.Edge ? sel.edges : Mode == BrushEditMode.Face ? sel.rooms : sel.vertices;
-            int count = Mode == BrushEditMode.Edge ? plan.walls.Count : Mode == BrushEditMode.Face ? RoomsOf(plan).Count : plan.points.Count;
+            int count = Mode == BrushEditMode.Edge ? plan.links.Count : Mode == BrushEditMode.Face ? RoomsOf(plan).Count : plan.points.Count;
             for (int i = 0; i < count; i++) if (!set.Remove(i)) set.Add(i);
         }
 
         // ------------------------------------------------------------------ transforming the selection
 
         /// <summary>The points a transform moves: the selected points, both ends of every selected wall, or every point around a selected room.</summary>
-        public static HashSet<int> MovingPoints(FloorPlan plan, Selection sel, BrushEditMode mode)
+        public static HashSet<int> MovingPoints(PointGraph plan, Selection sel, BrushEditMode mode)
         {
             if (mode == BrushEditMode.Vertex) return new HashSet<int>(sel.vertices);
             var set = new HashSet<int>();
             if (mode == BrushEditMode.Edge)
             {
-                foreach (var w in sel.edges) { if (w >= plan.walls.Count) continue; plan.WallPoints(w, out int a, out int b); set.Add(a); set.Add(b); }
+                foreach (var w in sel.edges) { if (w >= plan.links.Count) continue; plan.LinkPoints(w, out int a, out int b); set.Add(a); set.Add(b); }
                 return set;
             }
             var rooms = RoomsOf(plan);
@@ -198,14 +198,14 @@ namespace CsgBrush.Editor
         /// The moving points of the plan as they were at <paramref name="start"/>, transformed on the plan's floor (in its
         /// local space) and rounded to the grid when snapping is on. Undoable; the walls follow.
         /// </summary>
-        public static void TransformPoints(FloorPlan plan, IList<Vector3> start, HashSet<int> moving, Func<Vector3, Vector3> local)
+        public static void TransformPoints(PointGraph plan, IList<Vector3> start, HashSet<int> moving, Func<Vector3, Vector3> local)
         {
             var s = BrushSettings.instance; float g = s.snapToGrid ? s.GridMeters : 0f;
             bool recorded = false;
             foreach (var i in moving)
             {
                 if (i >= start.Count || i >= plan.points.Count) continue;
-                var p = local(start[i]); p.y = 0f;
+                var p = local(start[i]); if (plan.Flat) p.y = 0f;
                 if (g > 0f) { p.x = Mathf.Round(p.x / g) * g; p.z = Mathf.Round(p.z / g) * g; }
                 if (p == plan.points[i]) continue;
                 if (!recorded) { Undo.RecordObject(plan, "Edit floor plan"); recorded = true; }
@@ -215,7 +215,7 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>Gizmo yaw on the plan's floor, in degrees about its up axis: world X, the plan's X, or along the selected wall.</summary>
-        public static float HandleYaw(FloorPlan plan, Selection sel, BrushHandleOrientation orientation, BrushEditMode mode)
+        public static float HandleYaw(PointGraph plan, Selection sel, BrushHandleOrientation orientation, BrushEditMode mode)
         {
             Vector3 d;
             switch (orientation)
@@ -228,10 +228,10 @@ namespace CsgBrush.Editor
                     else if (mode == BrushEditMode.Vertex)
                     {
                         int v = -1; foreach (var i in sel.vertices) if (v < 0 || i < v) v = i;
-                        if (v >= 0) { int id = plan.pointIds[v]; for (int w = 0; w < plan.walls.Count && s < 0; w++) if (plan.walls[w].start == id || plan.walls[w].end == id) s = w; }
+                        if (v >= 0) { int id = plan.pointIds[v]; for (int w = 0; w < plan.links.Count && s < 0; w++) if (plan.links[w].start == id || plan.links[w].end == id) s = w; }
                     }
-                    if (s < 0 || s >= plan.walls.Count) return 0f;
-                    plan.WallPoints(s, out int ia, out int ib);
+                    if (s < 0 || s >= plan.links.Count) return 0f;
+                    plan.LinkPoints(s, out int ia, out int ib);
                     d = plan.points[ib] - plan.points[ia];
                     break;
                 }
@@ -241,14 +241,14 @@ namespace CsgBrush.Editor
             return d.sqrMagnitude < 1e-8f ? 0f : -Mathf.Atan2(d.z, d.x) * Mathf.Rad2Deg;
         }
 
-        public static Quaternion HandleRotation(FloorPlan plan, Selection sel) => plan.transform.rotation * Quaternion.Euler(0f, HandleYaw(plan, sel, BrushEditState.Orientation, Mode), 0f);
+        public static Quaternion HandleRotation(PointGraph plan, Selection sel) => plan.transform.rotation * Quaternion.Euler(0f, HandleYaw(plan, sel, BrushEditState.Orientation, Mode), 0f);
 
         // drag state shared by the tools: the plan's points when the drag began
-        public static FloorPlan dragPlan; public static List<Vector3> dragStart; public static HashSet<int> dragMoving; public static Vector3 dragCentre;
-        public static bool Dragging(FloorPlan plan) => dragPlan == plan && dragStart != null;
+        public static PointGraph dragPlan; public static List<Vector3> dragStart; public static HashSet<int> dragMoving; public static Vector3 dragCentre;
+        public static bool Dragging(PointGraph plan) => dragPlan == plan && dragStart != null;
 
         /// <summary>Start a drag of the plan's moving points; only while a handle holds the mouse, so a stray change never starts one.</summary>
-        public static void BeginDrag(FloorPlan plan, HashSet<int> moving)
+        public static void BeginDrag(PointGraph plan, HashSet<int> moving)
         {
             if (Dragging(plan) || GUIUtility.hotControl == 0) return;
             dragPlan = plan; dragStart = new List<Vector3>(plan.points); dragMoving = moving; dragCentre = Centre(plan.points, moving);
@@ -278,7 +278,7 @@ namespace CsgBrush.Editor
             if (e.rawType == EventType.MouseUp) EndDrag();
         }
 
-        static Vector2[] Screen(FloorPlan plan)
+        static Vector2[] Screen(PointGraph plan)
         {
             var pts = new Vector2[plan.points.Count];
             for (int i = 0; i < pts.Length; i++) pts[i] = HandleUtility.WorldToGUIPoint(FloorPlanTools.World(plan, plan.points[i]));
@@ -317,7 +317,7 @@ namespace CsgBrush.Editor
         {
             if (Mode == BrushEditMode.Vertex) { DeleteSelectedPoints(); return; }
             if (Mode != BrushEditMode.Edge) return;
-            foreach (var plan in new List<FloorPlan>(SelectedPlans()))
+            foreach (var plan in new List<PointGraph>(SelectedPlans()))
             {
                 var sel = Sel(plan);
                 if (sel.edges.Count == 0) continue;
@@ -330,14 +330,14 @@ namespace CsgBrush.Editor
         /// Remove walls from a plan, and the points no other wall uses. A room opens where one of its walls goes; doors and
         /// windows on a removed wall stay where they are. Refused when no wall would be left. Undoable.
         /// </summary>
-        public static bool DeleteWalls(FloorPlan plan, ICollection<int> walls)
+        public static bool DeleteWalls(PointGraph plan, ICollection<int> walls)
         {
             plan.EnsureGraph();
-            if (walls.Count >= plan.walls.Count) { bool all = true; for (int w = 0; w < plan.walls.Count; w++) if (!walls.Contains(w)) all = false; if (all) return false; }
+            if (walls.Count >= plan.links.Count) { bool all = true; for (int w = 0; w < plan.links.Count; w++) if (!walls.Contains(w)) all = false; if (all) return false; }
             Undo.RecordObject(plan, "Delete floor plan walls");
-            var keep = new List<FloorPlan.WallLink>();
-            for (int w = 0; w < plan.walls.Count; w++) if (!walls.Contains(w)) keep.Add(plan.walls[w]);
-            plan.walls = keep;
+            var keep = new List<PointGraph.Link>();
+            for (int w = 0; w < plan.links.Count; w++) if (!walls.Contains(w)) keep.Add(plan.links[w]);
+            plan.links = keep;
             plan.RemoveLonePoints();
             BrushGenerators.MarkDirty(plan);
             return true;
@@ -347,11 +347,11 @@ namespace CsgBrush.Editor
         /// Remove points from a plan. A point between exactly two walls joins them into one; any other point takes its walls
         /// with it. Refused when no wall would be left. Undoable.
         /// </summary>
-        public static bool DeletePoints(FloorPlan plan, ICollection<int> pointIndices)
+        public static bool DeletePoints(PointGraph plan, ICollection<int> pointIndices)
         {
             plan.EnsureGraph();
             var ids = new List<int>(); foreach (var i in pointIndices) if (i < plan.points.Count) ids.Add(plan.pointIds[i]);
-            var walls = new List<FloorPlan.WallLink>(plan.walls);
+            var walls = new List<PointGraph.Link>(plan.links);
             foreach (var id in ids)
             {
                 var touching = walls.FindAll(w => w.start == id || w.end == id);
@@ -361,11 +361,11 @@ namespace CsgBrush.Editor
                 int a = w0.end == id ? w0.start : w0.end, b = w1.start == id ? w1.end : w1.start; // a to b, the way the first wall ran
                 if (w0.start == id) { int t = a; a = b; b = t; }
                 if (a == b || walls.Exists(w => (w.start == a && w.end == b) || (w.start == b && w.end == a))) continue;
-                walls.Add(new FloorPlan.WallLink(a, b, w0.thickness));
+                walls.Add(new PointGraph.Link(a, b, w0.thickness));
             }
             if (walls.Count == 0) return false;
             Undo.RecordObject(plan, "Remove floor plan points");
-            plan.walls = walls;
+            plan.links = walls;
             plan.RemoveLonePoints();
             BrushGenerators.MarkDirty(plan);
             return true;
@@ -385,7 +385,7 @@ namespace CsgBrush.Editor
 
         static readonly Color RoomColor = new Color(1f, 0.85f, 0.2f, 0.18f), RoomOutlineColor = new Color(1f, 1f, 1f, 0.35f);
 
-        static void Draw(FloorPlan plan, Selection sel)
+        static void Draw(PointGraph plan, Selection sel)
         {
             if (Event.current.type != EventType.Repaint) return;
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
@@ -465,7 +465,7 @@ namespace CsgBrush.Editor
         /// Vertex mode: pressing a point selects it and drags it (a point of the selection drags the selection); pressing a +
         /// adds a point there and drags it. Both come before the gizmo under the mouse.
         /// </summary>
-        static void PointControls(FloorPlan plan, Selection sel, Event e)
+        static void PointControls(PointGraph plan, Selection sel, Event e)
         {
             // one control holds the mouse for every point drag; made first, so a point added mid-press keeps its id
             int dragId = GUIUtility.GetControlID(s_DragHash, FocusType.Passive);
@@ -502,7 +502,7 @@ namespace CsgBrush.Editor
                         if (e.button == 0 && !e.alt && HandleUtility.nearestControl == id)
                         {
                             Undo.RecordObject(plan, "Add floor plan point");
-                            plan.SplitWall(w, FloorPlanTools.SnapLocal(plan, mid));
+                            plan.SplitLink(w, FloorPlanTools.SnapLocal(plan, mid));
                             int added = plan.points.Count - 1;
                             sel.Clear(); sel.vertices.Add(added);
                             BrushGenerators.MarkDirty(plan);
@@ -526,7 +526,7 @@ namespace CsgBrush.Editor
             }
         }
 
-        static void StartPointDrag(FloorPlan plan, Selection sel, Event e, int dragId, int pressed)
+        static void StartPointDrag(PointGraph plan, Selection sel, Event e, int dragId, int pressed)
         {
             if (!FloorPlanTools.MouseOnFloor(plan, e.mousePosition, out s_Grab)) return;
             GUIUtility.hotControl = dragId;
@@ -534,7 +534,7 @@ namespace CsgBrush.Editor
             BeginDrag(plan, new HashSet<int>(sel.vertices));
         }
 
-        static void DragControl(FloorPlan plan, Selection sel, Event e, int dragId)
+        static void DragControl(PointGraph plan, Selection sel, Event e, int dragId)
         {
             switch (e.GetTypeForControl(dragId))
             {
@@ -558,7 +558,7 @@ namespace CsgBrush.Editor
             }
         }
 
-        static void HandlePicking(FloorPlan plan, Event e, int passive)
+        static void HandlePicking(PointGraph plan, Event e, int passive)
         {
             if (dragStart != null || e.alt) return;
             if (GUIUtility.hotControl != 0 && GUIUtility.hotControl != passive) return; // a gizmo owns the mouse
@@ -629,7 +629,7 @@ namespace CsgBrush.Editor
     public abstract class FloorPlanSelectionTool : EditorTool
     {
         /// <summary>For each selected plan with something selected: the points it moves and the gizmo's place and axes.</summary>
-        protected static IEnumerable<(FloorPlan plan, HashSet<int> moving, Vector3 centre, Quaternion frame)> Targets()
+        protected static IEnumerable<(PointGraph plan, HashSet<int> moving, Vector3 centre, Quaternion frame)> Targets()
         {
             foreach (var plan in FloorPlanEditState.SelectedPlans())
             {
@@ -728,7 +728,7 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>The mouse on the plan's floor through the centre, as a direction from the centre.</summary>
-        static bool OnFloor(FloorPlan plan, Vector3 centre, Vector2 mouse, out Vector3 fromCentre)
+        static bool OnFloor(PointGraph plan, Vector3 centre, Vector2 mouse, out Vector3 fromCentre)
         {
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
             var floor = new Plane(plan.transform.up, centre);

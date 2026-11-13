@@ -13,15 +13,15 @@ namespace CsgBrush.Editor
         static float Grid => BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
 
         /// <summary>The plan's floor as a world plane.</summary>
-        public static Plane Floor(FloorPlan plan) => new Plane(plan.transform.up, plan.transform.position);
+        public static Plane Floor(PointGraph plan) => new Plane(plan.transform.up, plan.transform.position);
 
-        public static Vector3 World(FloorPlan plan, Vector3 local) => plan.transform.TransformPoint(new Vector3(local.x, 0f, local.z));
+        public static Vector3 World(PointGraph plan, Vector3 local) => plan.transform.TransformPoint(plan.Flat ? new Vector3(local.x, 0f, local.z) : local);
 
         /// <summary>A world point on the plan's floor, snapped to the grid in the plan's own axes, as a local point.</summary>
-        public static Vector3 SnapLocal(FloorPlan plan, Vector3 world)
+        public static Vector3 SnapLocal(PointGraph plan, Vector3 world)
         {
             var local = plan.transform.InverseTransformPoint(world);
-            local.y = 0f;
+            if (plan.Flat) local.y = 0f;
             float g = Grid;
             if (g > 0f) { local.x = Mathf.Round(local.x / g) * g; local.z = Mathf.Round(local.z / g) * g; }
             return local;
@@ -44,27 +44,27 @@ namespace CsgBrush.Editor
             return new Vector3(from.x + dir.x * g * steps, 0f, from.z + dir.y * g * steps);
         }
 
-        public static bool MouseOnFloor(FloorPlan plan, Vector2 mouse, out Vector3 world)
+        public static bool MouseOnFloor(PointGraph plan, Vector2 mouse, out Vector3 world)
         {
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
             if (Floor(plan).Raycast(ray, out float t) && t > 0f) { world = ray.GetPoint(t); return true; }
             world = default; return false;
         }
 
-        public static void DrawOutline(FloorPlan plan)
+        public static void DrawOutline(PointGraph plan)
         {
             plan.EnsureGraph();
             Handles.color = Line;
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
-            for (int w = 0; w < plan.walls.Count; w++)
+            for (int w = 0; w < plan.links.Count; w++)
             {
-                plan.WallPoints(w, out int a, out int b);
+                plan.LinkPoints(w, out int a, out int b);
                 Handles.DrawAAPolyLine(3f, World(plan, plan.points[a]), World(plan, plan.points[b]));
             }
         }
 
         /// <summary>The point nearest the mouse within 12 pixels, or -1.</summary>
-        public static int PointUnderMouse(FloorPlan plan, Vector2 mouse)
+        public static int PointUnderMouse(PointGraph plan, Vector2 mouse)
         {
             int best = -1; float bestD = 12f;
             for (int i = 0; i < plan.points.Count; i++) { float d = (HandleUtility.WorldToGUIPoint(World(plan, plan.points[i])) - mouse).magnitude; if (d < bestD) { bestD = d; best = i; } }
@@ -72,18 +72,18 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>The wall nearest the mouse within 10 pixels, or -1, with the spot on it (local, on the grid along the wall when snapping).</summary>
-        public static int WallUnderMouse(FloorPlan plan, Vector2 mouse, out Vector3 local)
+        public static int WallUnderMouse(PointGraph plan, Vector2 mouse, out Vector3 local)
         {
             local = default;
             int best = -1; float bestD = 10f;
-            for (int w = 0; w < plan.walls.Count; w++)
+            for (int w = 0; w < plan.links.Count; w++)
             {
-                plan.WallPoints(w, out int a, out int b);
+                plan.LinkPoints(w, out int a, out int b);
                 float d = HandleUtility.DistancePointLine(mouse, HandleUtility.WorldToGUIPoint(World(plan, plan.points[a])), HandleUtility.WorldToGUIPoint(World(plan, plan.points[b])));
                 if (d < bestD) { bestD = d; best = w; }
             }
             if (best < 0 || !MouseOnFloor(plan, mouse, out var world)) return -1;
-            plan.WallPoints(best, out int ia, out int ib);
+            plan.LinkPoints(best, out int ia, out int ib);
             Vector3 pa = plan.points[ia], pb = plan.points[ib], ab = pb - pa;
             float len = ab.magnitude;
             var m = plan.transform.InverseTransformPoint(world); m.y = 0f;
@@ -108,7 +108,7 @@ namespace CsgBrush.Editor
             var plan = (FloorPlan)target;
             DrawDefaultInspector();
             plan.EnsureGraph();
-            EditorGUILayout.LabelField("Plan", plan.points.Count + " points, " + plan.walls.Count + " walls, " + FloorPlanEditState.RoomsOf(plan).Count + " rooms");
+            EditorGUILayout.LabelField("Plan", plan.points.Count + " points, " + plan.links.Count + " walls, " + FloorPlanEditState.RoomsOf(plan).Count + " rooms");
             EditorGUILayout.BeginHorizontal();
             bool editing = FloorPlanEditContext.IsActive;
             if (GUILayout.Toggle(editing, new GUIContent("Edit", "Move, Rotate and Scale act on the selected points or walls (1, 2)"), EditorStyles.miniButton) != editing)
@@ -134,7 +134,7 @@ namespace CsgBrush.Editor
                 EditorGUILayout.Space();
                 EditorGUILayout.LabelField("Selected walls (" + sel.edges.Count + ")", EditorStyles.boldLabel);
                 float first = -1f; bool mixed = false;
-                foreach (var w in sel.edges) { float t = plan.walls[w].thickness; if (first < 0f) first = t; else if (!Mathf.Approximately(first, t)) mixed = true; }
+                foreach (var w in sel.edges) { float t = plan.links[w].thickness; if (first < 0f) first = t; else if (!Mathf.Approximately(first, t)) mixed = true; }
                 EditorGUI.showMixedValue = mixed;
                 EditorGUI.BeginChangeCheck();
                 float value = EditorGUILayout.FloatField(new GUIContent("Thickness", "Metres; 0 uses the plan's outside or interior thickness."), first);
@@ -142,7 +142,7 @@ namespace CsgBrush.Editor
                 if (EditorGUI.EndChangeCheck())
                 {
                     Undo.RecordObject(plan, "Wall thickness");
-                    foreach (var w in sel.edges) { var link = plan.walls[w]; link.thickness = Mathf.Max(0f, value); plan.walls[w] = link; }
+                    foreach (var w in sel.edges) { var link = plan.links[w]; link.thickness = Mathf.Max(0f, value); plan.links[w] = link; }
                     BrushGenerators.MarkDirty(plan);
                 }
             }
@@ -236,17 +236,17 @@ namespace CsgBrush.Editor
         {
             m_Last = -1; m_Stroke.Clear();
             int start = s_Start; s_Start = -1;
-            if (target is FloorPlan plan)
+            if (target is PointGraph plan)
             {
                 plan.EnsureGraph();
                 if (start >= 0 && plan.PointIndex(start) >= 0) { m_Last = start; m_Stroke.Add(start); }
-                else if (plan.walls.Count == 0 && plan.points.Count == 1) { m_Last = plan.pointIds[0]; m_Stroke.Add(m_Last); }
+                else if (plan.links.Count == 0 && plan.points.Count == 1) { m_Last = plan.pointIds[0]; m_Stroke.Add(m_Last); }
             }
         }
 
         public override void OnToolGUI(EditorWindow window)
         {
-            var plan = target as FloorPlan;
+            var plan = target as PointGraph;
             if (plan == null || !(window is SceneView)) return;
             var e = Event.current;
             int id = GUIUtility.GetControlID(FocusType.Passive);
@@ -262,10 +262,10 @@ namespace CsgBrush.Editor
                 Undo.RecordObject(plan, "Draw floor plan");
                 int point; bool joined = m_Kind != Hover.Free;
                 if (m_Kind == Hover.Point) point = plan.pointIds[m_HoverPoint];
-                else if (m_Kind == Hover.Wall) point = plan.SplitWall(m_HoverWall, m_Hover);
+                else if (m_Kind == Hover.Wall) point = plan.SplitLink(m_HoverWall, m_Hover);
                 else point = plan.AddPoint(m_Hover);
                 bool started = m_Last >= 0;
-                if (started && point != m_Last) plan.AddWall(m_Last, point);
+                if (started && point != m_Last) plan.AddLink(m_Last, point);
                 BrushGenerators.MarkDirty(plan);
                 if (joined && started && point != m_Last) EndStroke(); // joined the plan: this stroke is done
                 else { m_Last = point; m_Stroke.Add(point); }
@@ -276,7 +276,7 @@ namespace CsgBrush.Editor
                 {
                     Undo.RecordObject(plan, "Remove floor plan wall");
                     int last = m_Stroke[m_Stroke.Count - 1], prev = m_Stroke[m_Stroke.Count - 2];
-                    plan.walls.RemoveAll(w => (w.start == prev && w.end == last) || (w.start == last && w.end == prev));
+                    plan.links.RemoveAll(w => (w.start == prev && w.end == last) || (w.start == last && w.end == prev));
                     plan.RemoveLonePoints();
                     m_Stroke.RemoveAt(m_Stroke.Count - 1); m_Last = prev;
                     BrushGenerators.MarkDirty(plan); e.Use();
@@ -289,13 +289,13 @@ namespace CsgBrush.Editor
 
         void EndStroke()
         {
-            var plan = target as FloorPlan;
+            var plan = target as PointGraph;
             // a lone start point (clicked, then ended) is not kept
-            if (plan != null && m_Stroke.Count == 1) { int lone = m_Stroke[0]; if (!plan.walls.Exists(w => w.start == lone || w.end == lone)) { Undo.RecordObject(plan, "Draw floor plan"); plan.RemoveLonePoints(); } }
+            if (plan != null && m_Stroke.Count == 1) { int lone = m_Stroke[0]; if (!plan.links.Exists(w => w.start == lone || w.end == lone)) { Undo.RecordObject(plan, "Draw floor plan"); plan.RemoveLonePoints(); } }
             m_Last = -1; m_Stroke.Clear(); SceneView.RepaintAll();
         }
 
-        void FindHover(FloorPlan plan, Event e)
+        void FindHover(PointGraph plan, Event e)
         {
             m_Kind = Hover.None; m_HoverPoint = m_HoverWall = -1;
             int point = FloorPlanTools.PointUnderMouse(plan, e.mousePosition);
@@ -303,7 +303,7 @@ namespace CsgBrush.Editor
             int wall = FloorPlanTools.WallUnderMouse(plan, e.mousePosition, out var onWall);
             if (wall >= 0)
             {
-                plan.WallPoints(wall, out int a, out int b);
+                plan.LinkPoints(wall, out int a, out int b);
                 if ((onWall - plan.points[a]).sqrMagnitude < 1e-8f) { m_Kind = Hover.Point; m_HoverPoint = a; m_Hover = plan.points[a]; return; }
                 if ((onWall - plan.points[b]).sqrMagnitude < 1e-8f) { m_Kind = Hover.Point; m_HoverPoint = b; m_Hover = plan.points[b]; return; }
                 m_Kind = Hover.Wall; m_HoverWall = wall; m_Hover = onWall; return;
@@ -315,7 +315,7 @@ namespace CsgBrush.Editor
             if (last >= 0) m_Hover = FloorPlanTools.Constrain(plan.points[last], m_Hover, e.shift);
         }
 
-        void DrawPreview(FloorPlan plan)
+        void DrawPreview(PointGraph plan)
         {
             FloorPlanTools.DrawOutline(plan);
             if (m_Kind == Hover.None) return;
@@ -408,7 +408,7 @@ namespace CsgBrush.Editor
                 if (point >= 0) { m_Plan = plan; m_PlanPoint = point; return; }
                 int wall = FloorPlanTools.WallUnderMouse(plan, mouse, out var local);
                 if (wall < 0) continue;
-                plan.WallPoints(wall, out int a, out int b);
+                plan.LinkPoints(wall, out int a, out int b);
                 m_Plan = plan;
                 if ((local - plan.points[a]).sqrMagnitude < 1e-8f) m_PlanPoint = a;
                 else if ((local - plan.points[b]).sqrMagnitude < 1e-8f) m_PlanPoint = b;
@@ -426,7 +426,7 @@ namespace CsgBrush.Editor
         {
             var plan = m_Plan;
             Undo.RecordObject(plan, "Draw floor plan");
-            int start = m_PlanPoint >= 0 ? plan.pointIds[m_PlanPoint] : m_PlanWall >= 0 ? plan.SplitWall(m_PlanWall, m_PlanLocal) : plan.AddPoint(m_PlanLocal);
+            int start = m_PlanPoint >= 0 ? plan.pointIds[m_PlanPoint] : m_PlanWall >= 0 ? plan.SplitLink(m_PlanWall, m_PlanLocal) : plan.AddPoint(m_PlanLocal);
             BrushGenerators.MarkDirty(plan);
             Selection.activeGameObject = plan.gameObject;
             EditorApplication.delayCall += () => { if (plan != null && Selection.activeGameObject == plan.gameObject) FloorPlanDrawTool.Begin(start); };

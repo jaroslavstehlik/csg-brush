@@ -15,23 +15,13 @@ namespace CsgBrush
     [AddComponentMenu("CSG Brush/Floor Plan")]
     [Icon("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/FloorPlan.png")]
     [DisallowMultipleComponent]
-    public sealed class FloorPlan : BrushGenerator
+    public sealed class FloorPlan : PointGraph
     {
         public enum Side
         {
             [Tooltip("Outside walls stand outside the line: the line is the rooms' inner face.")] Outside,
             [Tooltip("Outside walls are centred on the line.")] Centered,
             [Tooltip("Outside walls stand inside the line.")] Inside,
-        }
-
-        /// <summary>A wall between two points, by their ids.</summary>
-        [Serializable]
-        public struct WallLink
-        {
-            public int start, end;
-            /// <summary>Metres; 0 uses the plan's outside or interior thickness.</summary>
-            public float thickness;
-            public WallLink(int start, int end, float thickness = 0f) { this.start = start; this.end = end; this.thickness = thickness; }
         }
 
         /// <summary>
@@ -49,13 +39,10 @@ namespace CsgBrush
             public Material ceilingMaterial;
         }
 
-        /// <summary>The points, on the floor of this object (y is ignored). Edit through the point and wall methods, which keep the ids in step.</summary>
-        [HideInInspector] public List<Vector3> points = new List<Vector3>();
-        /// <summary>One id per point that stays with the point while others are added or removed. Never reused.</summary>
-        [HideInInspector] public List<int> pointIds = new List<int>();
-        [HideInInspector] public int nextPointId = 1;
-        /// <summary>The walls, by the ids of their two points.</summary>
-        [HideInInspector] public List<WallLink> walls = new List<WallLink>();
+        /// <summary>The walls, by the ids of their two points (the graph's links).</summary>
+        public List<Link> walls { get => links; set => links = value; }
+        /// <summary>A floor plan's points lie on its floor.</summary>
+        public override bool Flat => true;
         [HideInInspector] public List<RoomSettings> rooms = new List<RoomSettings>();
         /// <summary>Plans from before wall networks were an outline through the points in order: closed joined the last to the first. Read once, when they are converted.</summary>
         [HideInInspector] public bool closed;
@@ -77,79 +64,23 @@ namespace CsgBrush
 
         // ------------------------------------------------------------------ points and walls
 
-        /// <summary>Give every point an id, turn an outline from before wall networks into walls, and drop walls that join nothing.</summary>
-        public void EnsureGraph()
+        /// <summary>An outline from before wall networks becomes walls through the points in order.</summary>
+        protected override void ConvertLegacy()
         {
-            while (pointIds.Count > points.Count) pointIds.RemoveAt(pointIds.Count - 1);
-            while (pointIds.Count < points.Count) pointIds.Add(nextPointId++);
-            if (walls.Count == 0 && points.Count >= 2)
-            {
-                for (int i = 0; i + 1 < points.Count; i++) walls.Add(new WallLink(pointIds[i], pointIds[i + 1]));
-                if (closed && points.Count > 2) walls.Add(new WallLink(pointIds[points.Count - 1], pointIds[0]));
-                closed = false;
-            }
-            var seen = new HashSet<long>();
-            for (int i = walls.Count - 1; i >= 0; i--)
-            {
-                var w = walls[i];
-                long key = ((long)Mathf.Min(w.start, w.end) << 32) | (uint)Mathf.Max(w.start, w.end);
-                if (w.start == w.end || PointIndex(w.start) < 0 || PointIndex(w.end) < 0 || !seen.Add(key)) walls.RemoveAt(i);
-            }
+            if (links.Count != 0 || points.Count < 2) return;
+            for (int i = 0; i + 1 < points.Count; i++) links.Add(new Link(pointIds[i], pointIds[i + 1]));
+            if (closed && points.Count > 2) links.Add(new Link(pointIds[points.Count - 1], pointIds[0]));
+            closed = false;
         }
-
-        /// <summary>The index of the point with an id, or -1.</summary>
-        public int PointIndex(int id) { for (int i = 0; i < pointIds.Count; i++) if (pointIds[i] == id) return i; return -1; }
-
-        /// <summary>A new point; returns its id.</summary>
-        public int AddPoint(Vector3 p) { EnsureGraph(); points.Add(new Vector3(p.x, 0f, p.z)); pointIds.Add(nextPointId); return nextPointId++; }
 
         /// <summary>A wall between two points; returns its index, or -1 when they are one point or already joined.</summary>
-        public int AddWall(int startId, int endId, float thickness = 0f)
-        {
-            if (startId == endId || PointIndex(startId) < 0 || PointIndex(endId) < 0) return -1;
-            foreach (var w in walls) if ((w.start == startId && w.end == endId) || (w.start == endId && w.end == startId)) return -1;
-            walls.Add(new WallLink(startId, endId, thickness));
-            return walls.Count - 1;
-        }
+        public int AddWall(int startId, int endId, float thickness = 0f) => AddLink(startId, endId, thickness);
 
         /// <summary>Split a wall with a new point (kept on the floor); both halves keep its thickness. Returns the new point's id.</summary>
-        public int SplitWall(int wall, Vector3 p)
-        {
-            var w = walls[wall];
-            int id = AddPoint(p);
-            walls[wall] = new WallLink(w.start, id, w.thickness);
-            walls.Insert(wall + 1, new WallLink(id, w.end, w.thickness));
-            return id;
-        }
-
-        /// <summary>Remove a point and its walls.</summary>
-        public void RemovePointAt(int index)
-        {
-            EnsureGraph();
-            int id = pointIds[index];
-            points.RemoveAt(index); pointIds.RemoveAt(index);
-            walls.RemoveAll(w => w.start == id || w.end == id);
-        }
-
-        /// <summary>Remove points no wall uses.</summary>
-        public void RemoveLonePoints()
-        {
-            var used = new HashSet<int>();
-            foreach (var w in walls) { used.Add(w.start); used.Add(w.end); }
-            for (int i = points.Count - 1; i >= 0; i--) if (!used.Contains(pointIds[i])) { points.RemoveAt(i); pointIds.RemoveAt(i); }
-        }
-
-        /// <summary>Replace the points; points that carry over pass their ids (null ids: all new). Walls to points that are gone are dropped.</summary>
-        public void SetPoints(List<Vector3> newPoints, List<int> ids)
-        {
-            points = new List<Vector3>(newPoints);
-            pointIds = ids != null ? new List<int>(ids) : new List<int>();
-            foreach (var id in pointIds) if (id >= nextPointId) nextPointId = id + 1;
-            EnsureGraph();
-        }
+        public int SplitWall(int wall, Vector3 p) => SplitLink(wall, p);
 
         /// <summary>The indices of a wall's two points.</summary>
-        public void WallPoints(int wall, out int a, out int b) { a = PointIndex(walls[wall].start); b = PointIndex(walls[wall].end); }
+        public void WallPoints(int wall, out int a, out int b) => LinkPoints(wall, out a, out b);
 
         // ------------------------------------------------------------------ what the plan makes
 
@@ -189,8 +120,7 @@ namespace CsgBrush
             unchecked
             {
                 int h = 17;
-                for (int i = 0; i < points.Count; i++) { h = h * 31 + pointIds[i]; h = h * 31 + Mathf.RoundToInt(points[i].x * 1e5f); h = h * 31 + Mathf.RoundToInt(points[i].z * 1e5f); }
-                foreach (var w in walls) { h = h * 31 + w.start; h = h * 31 + w.end; h = h * 31 + Mathf.RoundToInt(w.thickness * 1e5f); }
+                h = GraphKey(h);
                 foreach (var r in rooms)
                 {
                     foreach (var id in r.boundary) h = h * 31 + id;
