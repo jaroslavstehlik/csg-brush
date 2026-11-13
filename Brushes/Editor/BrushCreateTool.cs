@@ -288,7 +288,7 @@ namespace CsgBrush.Editor
                     }
                     if (e.type == EventType.MouseDown && e.button == 0 && hoverValid && HandleUtility.nearestControl == controlId)
                     {
-                        GUIUtility.hotControl = controlId;
+                        EditModeMouse.Take(controlId);
                         FindPlane(e.mousePosition, out _, out normal);
                         var pressed = BrushHooks.PickBrushSurface(e.mousePosition, out _, out _);
                         wallPlan = pressed != null && Mathf.Abs(normal.y) < 0.5f ? pressed.generatedBy as FloorPlan : null; // drawn on a plan's wall: rides on it
@@ -340,7 +340,7 @@ namespace CsgBrush.Editor
                         }
                         if (e.type != EventType.MouseUp) { e.Use(); SceneView.RepaintAll(); }
                     }
-                    if (e.type == EventType.MouseDown && e.button == 0) { GUIUtility.hotControl = controlId; e.Use(); }
+                    if (e.type == EventType.MouseDown && e.button == 0) { EditModeMouse.Take(controlId); e.Use(); }
                     if (e.type == EventType.MouseUp && e.button == 0) { GUIUtility.hotControl = 0; state = State.Height; height = 0f; e.Use(); }
                     if (e.type == EventType.Repaint) DrawPreview();
                     break;
@@ -353,7 +353,7 @@ namespace CsgBrush.Editor
                         height = Grid > 0f ? BrushSnap.Round(h, Grid) : h;
                         e.Use(); SceneView.RepaintAll();
                     }
-                    if (e.type == EventType.MouseDown && e.button == 0) { GUIUtility.hotControl = controlId; e.Use(); }
+                    if (e.type == EventType.MouseDown && e.button == 0) { EditModeMouse.Take(controlId); e.Use(); }
                     if (e.type == EventType.MouseUp && e.button == 0) { GUIUtility.hotControl = 0; Finish(); e.Use(); }
                     if (e.type == EventType.Repaint) DrawPreview();
                     break;

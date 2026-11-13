@@ -11,6 +11,30 @@ namespace CsgBrush.Editor
     /// changed, redirects selection from generated objects to the brush, hides the generated objects, and keeps
     /// Unity's grid on the world grid.
     /// </summary>
+    /// <summary>
+    /// The mouse held by an edit mode or tool of this package (a marquee, a point or handle drag). Each lets go in its own
+    /// handler; that handler is skipped when the View tool takes over mid-press (Q) or the press moves to another tool, and
+    /// a hold left behind blocks Unity's own controls: a fly-through (right mouse) then starts without its Scene view and
+    /// every fly key throws. A hold still on when the button comes up, or when the mouse moves with no button down, is let go.
+    /// </summary>
+    public static class EditModeMouse
+    {
+        static int s_Held;
+
+        /// <summary>Take the mouse for a control of this package.</summary>
+        public static void Take(int controlId) { GUIUtility.hotControl = controlId; s_Held = controlId; }
+
+        /// <summary>At the end of every Scene view event: let go of a hold no handler ended. True when it did.</summary>
+        public static bool ReleaseStale(Event e)
+        {
+            if (s_Held == 0) return false;
+            if (GUIUtility.hotControl != s_Held) { s_Held = 0; return false; } // let go already, or another control took it
+            if (e.rawType != EventType.MouseUp && e.rawType != EventType.MouseMove) return false;
+            GUIUtility.hotControl = 0; s_Held = 0;
+            return true;
+        }
+    }
+
     [InitializeOnLoad]
     public static class BrushHooks
     {
@@ -178,6 +202,7 @@ namespace CsgBrush.Editor
         static void OnSceneGUI(SceneView view)
         {
             var e = Event.current;
+            EditModeMouse.ReleaseStale(e); // after every edit mode and tool had the event
             if (BrushEditContext.IsActive || Application.isPlaying) return;
             if (e.type == EventType.Repaint)
             {

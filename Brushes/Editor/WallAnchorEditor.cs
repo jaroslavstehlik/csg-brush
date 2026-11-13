@@ -142,7 +142,7 @@ namespace CsgBrush.Editor
                     Picking = false;
                     Repaint();
                 }
-                GUIUtility.hotControl = id; e.Use(); SceneView.RepaintAll();
+                EditModeMouse.Take(id); e.Use(); SceneView.RepaintAll();
             }
             if (e.type == EventType.MouseUp && GUIUtility.hotControl == id) { GUIUtility.hotControl = 0; e.Use(); }
         }

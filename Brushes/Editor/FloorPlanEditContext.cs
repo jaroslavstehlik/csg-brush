@@ -311,6 +311,7 @@ namespace CsgBrush.Editor
         {
             var e = Event.current;
             if (dragStart != null && GUIUtility.hotControl == 0) EndDrag(); // the handle let go, however the release went
+            if (marquee && GUIUtility.hotControl == 0) marquee = false; // let go without its release (see EditModeMouse)
             HandleKeys(e);
             bool viewTool = Tools.current == Tool.View || Tools.viewToolActive;
             int passive = GUIUtility.GetControlID(FocusType.Passive);
@@ -620,7 +621,7 @@ namespace CsgBrush.Editor
         static void StartPointDrag(PointGraph plan, Selection sel, Event e, int dragId, int pressed)
         {
             if (!FloorPlanTools.MouseOnFloor(plan, e.mousePosition, out s_Grab)) return;
-            GUIUtility.hotControl = dragId;
+            EditModeMouse.Take(dragId);
             s_PressedPoint = pressed; s_Moved = false;
             BeginDrag(plan, new HashSet<int>(sel.vertices));
         }
@@ -656,7 +657,7 @@ namespace CsgBrush.Editor
             if (e.type == EventType.MouseDown && e.button == 0 && HandleUtility.nearestControl == passive)
             {
                 marquee = true; marqueeStart = e.mousePosition;
-                GUIUtility.hotControl = passive; e.Use();
+                EditModeMouse.Take(passive); e.Use();
             }
             else if (e.type == EventType.ContextClick && GUIUtility.hotControl == 0) // a right click, not the end of a fly-through (right drag)
             {
@@ -798,7 +799,7 @@ namespace CsgBrush.Editor
                     case EventType.MouseDown:
                         if (e.button == 0 && !e.alt && HandleUtility.nearestControl == id && OnFloor(plan, centre, e.mousePosition, out grab))
                         {
-                            GUIUtility.hotControl = id;
+                            EditModeMouse.Take(id);
                             FloorPlanEditState.BeginDrag(plan, moving);
                     if (!FloorPlanEditState.Dragging(plan)) continue;
                             e.Use();

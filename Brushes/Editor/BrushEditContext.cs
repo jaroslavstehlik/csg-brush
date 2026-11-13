@@ -94,6 +94,7 @@ namespace CsgBrush.Editor
         public static void OnSceneGUI(EditorToolContext context)
         {
             var e = Event.current;
+            if (marquee && GUIUtility.hotControl == 0) marquee = false; // let go without its release (see EditModeMouse)
             HandleKeys(e);
             bool viewTool = Tools.current == Tool.View || Tools.viewToolActive; // the hand tool pans; it never selects
             int passive = GUIUtility.GetControlID(FocusType.Passive);
@@ -216,7 +217,7 @@ namespace CsgBrush.Editor
             if (e.type == EventType.MouseDown && e.button == 0 && HandleUtility.nearestControl == passive)
             {
                 marquee = true; marqueeStart = e.mousePosition;
-                GUIUtility.hotControl = passive; e.Use();
+                EditModeMouse.Take(passive); e.Use();
             }
             else if (e.type == EventType.ContextClick && GUIUtility.hotControl == 0) // a right click, not the end of a fly-through (right drag)
             {

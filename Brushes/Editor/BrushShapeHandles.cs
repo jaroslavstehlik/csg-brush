@@ -692,7 +692,7 @@ namespace CsgBrush.Editor
                         case EventType.MouseDown:
                             if (HandleUtility.nearestControl == id && e.button == 0 && !e.alt)
                             {
-                                GUIUtility.hotControl = id;
+                                EditModeMouse.Take(id);
                                 s_HotControl = id; s_HotId = h.id; s_HotBrush = b; s_Dragging = false;
                                 s_DownMouse = e.mousePosition; s_StartWorld = world; s_StartDirection = dir;
                                 if (line != null)
