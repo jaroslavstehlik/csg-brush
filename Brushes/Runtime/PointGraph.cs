@@ -165,6 +165,49 @@ namespace CsgBrush
             }
         }
 
+        // ------------------------------------------------------------------ finding a link again
+
+        /// <summary>
+        /// A link split by points added since (ids from <paramref name="newPointsFrom"/> on), straight or bent: the shortest
+        /// run of links from <paramref name="startId"/> to <paramref name="endId"/> through such points, and the link a
+        /// distance along that run reaches, with the distance on it (from that link's start). False when there is no run.
+        /// </summary>
+        public bool FollowSplit(int startId, int endId, float distance, int newPointsFrom, out int link, out float along)
+        {
+            link = -1; along = distance;
+            if (newPointsFrom < 0) return false; // which points are new is not known
+            var reachedBy = new Dictionary<int, int> { [startId] = -1 }; // point id -> the link it was reached along
+            var queue = new Queue<int>(); queue.Enqueue(startId);
+            while (queue.Count > 0 && !reachedBy.ContainsKey(endId))
+            {
+                int p = queue.Dequeue();
+                for (int i = 0; i < links.Count; i++)
+                {
+                    var l = links[i];
+                    int q = l.start == p ? l.end : l.end == p ? l.start : -1;
+                    if (q < 0 || reachedBy.ContainsKey(q) || (q != endId && q < newPointsFrom)) continue;
+                    reachedBy[q] = i; queue.Enqueue(q);
+                }
+            }
+            if (!reachedBy.ContainsKey(endId)) return false;
+            var run = new List<int>();
+            for (int p = endId; reachedBy[p] >= 0;) { int i = reachedBy[p]; run.Add(i); p = links[i].start == p ? links[i].end : links[i].start; }
+            run.Reverse();
+            float before = 0f; int at = startId;
+            for (int k = 0; k < run.Count; k++)
+            {
+                var l = links[run[k]]; bool forward = l.start == at; float len = CurveLength(run[k]);
+                if (distance <= before + len || k == run.Count - 1)
+                {
+                    link = run[k]; float d = distance - before;
+                    along = forward ? d : len - d;
+                    return true;
+                }
+                before += len; at = forward ? l.end : l.start;
+            }
+            return false;
+        }
+
         // ------------------------------------------------------------------ curves
 
         [NonSerialized] Vector3[][] m_Curves;

@@ -97,6 +97,7 @@ namespace CsgBrush.Editor
                 }
                 else if (mtarget is GameObject mgo && mgo.TryGetComponent<BrushGroup>(out var modelObj)) BrushCsg.MarkDirty(modelObj); // the meshes take tag and flags from the model
                 if (mtarget is Transform otr && otr.TryGetComponent<WallAnchor>(out var movedAnchor)) WallAnchors.Moved(movedAnchor); // a door moved by hand takes the nearest wall
+                else if (mtarget is Transform str && str.TryGetComponent<SplineAnchor>(out var onSpline)) SplineAnchors.Moved(onSpline); // and an object on a spline the nearest place on it
                 else if (mtarget is Brush ob && ob.TryGetComponent<WallAnchor>(out var sizedAnchor) && sizedAnchor.Plan != null) BrushGenerators.MarkDirty(sizedAnchor.Plan); // resized: placed again on its wall
                 if (mtarget is GameObject ggo && ggo.TryGetComponent<BrushGenerator>(out var generatorObj)) BrushGenerators.MarkDirty(generatorObj); // its brushes take its layer, tag and flags
                 else if (mtarget is BrushModule) BrushCsg.MarkAllDirty(); // a parent's module tags every brush below it
@@ -632,6 +633,14 @@ namespace CsgBrush.Editor
 
         static Vector3 Abs(Vector3 v) => new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z));
 
+        /// <summary>The spline whose Spline Repeat made this object (or the object it is part of), or null.</summary>
+        static GameObject RepeatedBy(Transform t)
+        {
+            for (; t != null && t.parent != null; t = t.parent)
+                if (t.parent.name == SplineRepeat.ContainerName && t.parent.parent != null && t.parent.parent.GetComponent<Spline>() != null) return t.parent.parent.gameObject;
+            return null;
+        }
+
         static void OnSelectionChanged()
         {
             if (redirecting) return;
@@ -646,6 +655,13 @@ namespace CsgBrush.Editor
                     var parent = go.transform.parent.gameObject;
                     if (!result.Contains(parent)) result.Add(parent);
                     changed = true;
+                    continue;
+                }
+                var repeated = go != null ? RepeatedBy(go.transform) : null;
+                if (repeated != null)
+                {
+                    if (!result.Contains(repeated)) result.Add(repeated);
+                    changed = true; // a copy made by a Spline Repeat: the spline is what to edit
                     continue;
                 }
                 if (go != null && go.TryGetComponent<Brush>(out var generatedBrush) && generatedBrush.IsGenerated)

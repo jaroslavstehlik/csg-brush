@@ -129,6 +129,8 @@ namespace CsgBrush
         public sealed class Run
         {
             public readonly List<Vector3> points = new List<Vector3>();
+            /// <summary>The links it runs along, in order: which way, and the indices of their first and last points in <see cref="points"/> (the last may be <c>points.Count</c> on a closed run: its first point again).</summary>
+            public readonly List<(int link, bool forward, int from, int to)> spans = new List<(int, bool, int, int)>();
             public bool closed;
             /// <summary>What each end of an open run is: a free end of the path (true), or a junction or sharp corner.</summary>
             public bool startIsEnd, endIsEnd;
@@ -199,18 +201,20 @@ namespace CsgBrush
                         used[link] = true;
                         var path = Curve(link);
                         bool forward = links[link].start == at;
+                        int from = Mathf.Max(0, run.points.Count - 1);
                         for (int k = 0; k < path.Length; k++)
                         {
                             var q = path[forward ? k : path.Length - 1 - k];
                             if (run.points.Count == 0 || (run.points[run.points.Count - 1] - q).sqrMagnitude > 1e-10f) run.points.Add(q);
                         }
+                        run.spans.Add((link, forward, from, run.points.Count - 1));
                         at = Far(link, at);
                         int next = Next(link, at);
                         if (next < 0) { run.endIsEnd = linksAt[at].Count == 1; break; }
                         if (used[next]) { run.closed = pass == 1 && at == startId; break; }
                         link = next;
                     }
-                    if (run.closed && run.points.Count > 1 && (run.points[0] - run.points[run.points.Count - 1]).sqrMagnitude < 1e-10f) run.points.RemoveAt(run.points.Count - 1);
+                    if (run.closed && run.points.Count > 1 && (run.points[0] - run.points[run.points.Count - 1]).sqrMagnitude < 1e-10f) run.points.RemoveAt(run.points.Count - 1); // the last span ends on points.Count: the first point
                     if (run.points.Count >= 2) runs.Add(run);
                 }
             return runs;
@@ -226,6 +230,106 @@ namespace CsgBrush
         }
 
         float TurnDegrees(int arriving, int leaving, int atId) => Vector3.Angle(-Away(arriving, atId), Away(leaving, atId));
+
+        // ------------------------------------------------------------------ places on the path
+
+        /// <summary>A place on the path and the profile's frame there (this object's space): along the path, the profile's right and up.</summary>
+        public struct Pose { public Vector3 position, forward, right, up; }
+
+        /// <summary>The place a distance along a link from its start (clamped), with the frame the sweep uses there. False for a link that isn't swept.</summary>
+        public bool PoseAt(int link, float distance, out Pose pose)
+        {
+            pose = default;
+            foreach (var run in Runs())
+                foreach (var span in run.spans)
+                {
+                    if (span.link != link) continue;
+                    int n = run.points.Count;
+                    float len = 0f; for (int i = span.from; i < span.to; i++) len += (run.points[(i + 1) % n] - run.points[i % n]).magnitude;
+                    float d = Mathf.Clamp(span.forward ? distance : len - distance, 0f, len);
+                    pose = OnRun(run, Frames(run.points, run.closed), span.from, span.to, d);
+                    if (!span.forward) { pose.forward = -pose.forward; pose.right = -pose.right; } // facing the link's own way
+                    return true;
+                }
+            return false;
+        }
+
+        /// <summary>A run's length along its points (round the loop for a closed one).</summary>
+        public static float RunLength(Run run)
+        {
+            int n = run.points.Count; float len = 0f;
+            for (int i = 0; i + 1 < n; i++) len += (run.points[i + 1] - run.points[i]).magnitude;
+            if (run.closed && n > 1) len += (run.points[0] - run.points[n - 1]).magnitude;
+            return len;
+        }
+
+        /// <summary>The place a distance along a run from its first point (clamped), with the sweep's frame there.</summary>
+        public Pose PoseAlong(Run run, float distance)
+        {
+            int n = run.points.Count;
+            return OnRun(run, Frames(run.points, run.closed), 0, run.closed ? n : n - 1, Mathf.Clamp(distance, 0f, RunLength(run)));
+        }
+
+        /// <summary>The place <paramref name="d"/> along a run from point <paramref name="from"/>, going no further than point <paramref name="to"/>.</summary>
+        static Pose OnRun(Run run, List<Frame> frames, int from, int to, float d)
+        {
+            var pose = new Pose();
+            int n = run.points.Count;
+            for (int i = from; i < to || i == from; i++)
+            {
+                Vector3 a = run.points[i % n], b = run.points[(i + 1) % n]; float seg = (b - a).magnitude;
+                if (d > seg && i + 1 < to) { d -= seg; continue; }
+                float t = seg > 1e-9f ? Mathf.Clamp01(d / seg) : 0f;
+                pose.position = Vector3.Lerp(a, b, t);
+                pose.forward = seg > 1e-9f ? (b - a) / seg : frames[i % n].forward;
+                var up = Vector3.Lerp(frames[i % n].up, frames[(i + 1) % n].up, t);
+                up -= pose.forward * Vector3.Dot(up, pose.forward);
+                pose.up = up.sqrMagnitude > 1e-8f ? up.normalized : frames[i % n].up;
+                pose.right = Vector3.Cross(pose.up, pose.forward).normalized;
+                break;
+            }
+            return pose;
+        }
+
+        /// <summary>
+        /// Where the profile's outside is at an angle around it, in the profile's plane (x right, y up): 0 is the top, 90 the
+        /// right. The farthest crossing of its parts along that direction.
+        /// </summary>
+        public Vector2 SurfacePoint(float angleDegrees)
+        {
+            float rad = angleDegrees * Mathf.Deg2Rad;
+            var dir = new Vector2(Mathf.Sin(rad), Mathf.Cos(rad));
+            float far = 0f;
+            foreach (var part in ProfileParts(false))
+                for (int i = 0; i < part.Length; i++)
+                {
+                    var p = part[i]; var e = part[(i + 1) % part.Length] - p;
+                    float den = dir.x * e.y - dir.y * e.x;
+                    if (Mathf.Abs(den) < 1e-9f) continue;
+                    float t = (p.x * e.y - p.y * e.x) / den, u = (p.x * dir.y - p.y * dir.x) / den;
+                    if (u >= -1e-6f && u <= 1f + 1e-6f && t > far) far = t;
+                }
+            return dir * far;
+        }
+
+        /// <summary>The place on the path nearest a point (this object's space): which link and how far along it.</summary>
+        public bool Nearest(Vector3 point, out int link, out float along, out float distance)
+        {
+            link = -1; along = 0f; distance = float.MaxValue;
+            for (int l = 0; l < links.Count; l++)
+            {
+                var path = Curve(l); float before = 0f;
+                for (int i = 0; i + 1 < path.Length; i++)
+                {
+                    var ab = path[i + 1] - path[i]; float len = ab.magnitude;
+                    float t = len < 1e-9f ? 0f : Mathf.Clamp(Vector3.Dot(point - path[i], ab / len), 0f, len);
+                    float d = (path[i] + (len < 1e-9f ? Vector3.zero : ab / len * t) - point).magnitude;
+                    if (d < distance) { distance = d; link = l; along = before + t; }
+                    before += len;
+                }
+            }
+            return link >= 0;
+        }
 
         // ------------------------------------------------------------------ the sweep
 

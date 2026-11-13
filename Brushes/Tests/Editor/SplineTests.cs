@@ -140,6 +140,106 @@ namespace CsgBrush.Tests
             s.sides = 20; Assert.AreEqual(20, s.CircleSides, "typed");
         }
 
+        // ------------------------------------------------------------------ objects on splines
+
+        static void Near(Vector3 expected, Vector3 actual, string what, float tol = 2e-3f) => Assert.That((expected - actual).magnitude, Is.LessThan(tol), what + ": expected " + expected.ToString("F3") + " was " + actual.ToString("F3"));
+
+        static GameObject Prop(Vector3 at)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.transform.localScale = Vector3.one * 0.1f; go.transform.position = at;
+            return go;
+        }
+
+        /// <summary>Where an anchor should be, from the spline's own pose at its place.</summary>
+        static void Expected(Spline s, SplineAnchor a, out Vector3 position, out Quaternion rotation)
+        {
+            Assert.IsTrue(SplineAnchors.Resolve(s, a, out int link, out float along, out _), "its link is found");
+            Assert.IsTrue(s.PoseAt(link, along, out var pose));
+            SplineAnchors.Place(s, pose, a.angle, a.offset, a.rotation, a.upright, out position, out rotation);
+        }
+
+        [Test]
+        public void AnObjectStandsOnThePipeAndFollowsItsPath()
+        {
+            var s = Make(Spline.Profile.Circle, new Vector2(0.6f, 0.6f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
+            s.sides = 16; Rebuild(s);
+            var prop = Prop(new Vector3(1.5f, 1.6f, 0.02f));
+            var a = SplineAnchors.Attach(prop);
+            Rebuild(s);
+            Assert.IsTrue(a.onPath); Assert.AreEqual(s.transform, prop.transform.parent);
+            Assert.That(a.angle, Is.EqualTo(0f).Within(5f), "on top");
+            Assert.That(a.distance, Is.EqualTo(1.5f).Within(1e-3f));
+            Near(new Vector3(1.5f, 1f + s.SurfacePoint(a.angle).magnitude, 0f), prop.transform.position, "standing on the surface", 0.05f);
+            Near(Vector3.up, prop.transform.up, "upright, out of the surface (put 2 cm off the top: 2 degrees round)", 0.05f); Near(Vector3.right, prop.transform.forward, "facing along the path");
+
+            s.points[1] = new Vector3(4f, 3f, 0f); Rebuild(s); // the pipe becomes a ramp
+            Expected(s, a, out var p, out var r);
+            Near(p, prop.transform.position, "it rides up with the pipe");
+            Assert.That(Quaternion.Angle(r, prop.transform.rotation), Is.LessThan(0.1f));
+            Assert.Greater(Vector3.Dot(prop.transform.up, Vector3.up), 0.8f, "still on top");
+
+            int mid = s.SplitLink(0, new Vector3(2f, 2f, 0f));
+            s.points[s.PointIndex(mid)] = new Vector3(2f, 2f, 1.5f); s.SetSmooth(mid, true); Rebuild(s); // split and bent
+            Assert.IsTrue(a.onPath, "still on its link, split and bent");
+            Expected(s, a, out p, out _);
+            Near(p, prop.transform.position, "on the bent pipe");
+        }
+
+        [Test]
+        public void MovedByHandItTakesItsPlaceAroundThePipeOrComesOff()
+        {
+            var s = Make(Spline.Profile.Circle, new Vector2(0.6f, 0.6f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
+            s.sides = 16; Rebuild(s);
+            var prop = Prop(new Vector3(2f, 1.3f, 0f));
+            var a = SplineAnchors.Attach(prop); Rebuild(s);
+            prop.transform.position = new Vector3(3f, 1f, -0.45f); prop.transform.rotation = Quaternion.Euler(0f, 0f, 0f);
+            SplineAnchors.Moved(a); Rebuild(s);
+            Assert.IsTrue(a.onPath);
+            Assert.That(a.angle, Is.EqualTo(90f).Within(1f), "on the right side (looking along the path)");
+            Assert.That(a.distance, Is.EqualTo(3f).Within(1e-3f));
+            Assert.That(a.offset, Is.EqualTo(0.45f - s.SurfacePoint(90f).magnitude).Within(1e-3f), "out from the surface as far as it was put");
+            Near(new Vector3(3f, 1f, -0.45f), prop.transform.position, "it stays where it was put");
+            prop.transform.position = new Vector3(3f, 1f, -2f);
+            SplineAnchors.Moved(a); Rebuild(s);
+            Assert.IsFalse(a.onPath, "pulled away: free");
+            Near(new Vector3(3f, 1f, -2f), prop.transform.position, "and it stays");
+        }
+
+        [Test]
+        public void RepeatPlacesACopyEveryFewMetresAlongEveryRun()
+        {
+            var s = Make(Spline.Profile.Rectangle, new Vector2(0.6f, 0.2f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
+            var post = BrushApi.Create(BrushShape.Box, new Vector3(0f, -10f, 0f), new Vector3(0.1f, 0.5f, 0.1f), Quaternion.identity);
+            post.gameObject.SetActive(false); // the source stays out of the level
+            var rep = s.gameObject.AddComponent<SplineRepeat>();
+            rep.source = post.gameObject; rep.spacing = 0.7f; rep.start = 0.3f; rep.offset = 0.25f;
+            Rebuild(s);
+            Assert.IsNotNull(rep.container);
+            Assert.AreEqual(6, rep.container.childCount, "0.3, 1.0, 1.7, 2.4, 3.1, 3.8 along 4 m");
+            for (int i = 0; i < rep.container.childCount; i++)
+            {
+                var c = rep.container.GetChild(i);
+                Near(new Vector3(0.3f + 0.7f * i, 1.1f + 0.25f, 0f), c.position, "copy " + i + " stands on the top at its place");
+                Assert.IsTrue(c.gameObject.activeSelf);
+                Assert.IsTrue(c.GetComponent<Brush>().anchored, "placed by the spline, not snapped");
+            }
+            BrushApi.ForceUpdate();
+            Near(new Vector3(1f, 1.35f, 0f), rep.container.GetChild(1).position, "not moved to the grid");
+
+            rep.angle = 90f; rep.offset = 0f; rep.upright = true; Rebuild(s); // on the right edge, standing up
+            Near(Vector3.up, rep.container.GetChild(0).up, "upright on the edge");
+            Assert.That(Vector3.Dot(rep.container.GetChild(0).position - new Vector3(0.3f, 1f, 0f), Vector3.back), Is.EqualTo(0.3f).Within(1e-3f), "on the right edge (right is -z looking along +x)");
+            rep.upright = false; Rebuild(s);
+            Near(Vector3.back, rep.container.GetChild(0).up, "out of the edge's face");
+            rep.angle = 0f; rep.offset = 0.25f;
+            rep.spacing = 2f; Rebuild(s);
+            Assert.AreEqual(2, rep.container.childCount, "0.3 and 2.3");
+            int mid = s.SplitLink(0, new Vector3(2f, 1f, 0f)); int end = s.AddPoint(new Vector3(2f, 1f, 3f)); s.AddLink(mid, end);
+            Rebuild(s);
+            Assert.AreEqual(4, rep.container.childCount, "per run: the runs of 2, 2 and 3 m get a copy at 0.3, the 3 m one also at 2.3");
+        }
+
         [Test]
         public void DrawingOnALinkSplitsItAndBranchesFromThere()
         {

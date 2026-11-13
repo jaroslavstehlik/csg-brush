@@ -6,6 +6,8 @@
 * [Splines](splines.md)
   * [Draw a spline](splines.md#draw-a-spline)
   * [Spline component reference](splines.md#spline-component-reference)
+  * [Attach objects to a spline](splines.md#attach-objects-to-a-spline)
+  * [Repeat objects along a spline](splines.md#repeat-objects-along-a-spline)
 * [Doors and windows](doors-and-windows.md)
 * [Attach objects to walls](wall-anchor.md)
   * [Turn an object on its wall](wall-anchor.md#turn-an-object-on-its-wall)

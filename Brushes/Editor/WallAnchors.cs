@@ -284,38 +284,10 @@ namespace CsgBrush.Editor
         static bool FollowBentSplit(WallAnchor a, List<FloorPlan.Wall> walls, out FloorPlan.Wall wall, out float distance)
         {
             wall = default; distance = a.distance;
-            int newer = a.newPointsFrom;
-            if (newer < 0) return false; // which points are new is not known
-            var reachedBy = new Dictionary<int, int> { [a.startId] = -1 }; // point id -> the wall it was reached along
-            var queue = new Queue<int>(); queue.Enqueue(a.startId);
-            while (queue.Count > 0 && !reachedBy.ContainsKey(a.endId))
-            {
-                int p = queue.Dequeue();
-                for (int i = 0; i < walls.Count; i++)
-                {
-                    var w = walls[i];
-                    int q = w.startId == p ? w.endId : w.endId == p ? w.startId : -1;
-                    if (q < 0 || reachedBy.ContainsKey(q) || (q != a.endId && q < newer)) continue;
-                    reachedBy[q] = i; queue.Enqueue(q);
-                }
-            }
-            if (!reachedBy.ContainsKey(a.endId)) return false;
-            var run = new List<int>();
-            for (int p = a.endId; reachedBy[p] >= 0;) { int i = reachedBy[p]; run.Add(i); p = walls[i].startId == p ? walls[i].endId : walls[i].startId; }
-            run.Reverse();
-            float before = 0f; int at = a.startId;
-            for (int k = 0; k < run.Count; k++)
-            {
-                var piece = walls[run[k]]; bool forward = piece.startId == at; float len = piece.Length;
-                if (a.distance <= before + len || k == run.Count - 1)
-                {
-                    wall = piece; float along = a.distance - before;
-                    distance = forward ? along : len - along;
-                    return true;
-                }
-                before += len; at = forward ? piece.endId : piece.startId;
-            }
-            return false;
+            var plan = a.Plan;
+            if (plan == null || !plan.FollowSplit(a.startId, a.endId, a.distance, a.newPointsFrom, out int link, out float along) || link >= walls.Count) return false;
+            wall = walls[link]; distance = along; // the walls are in the order of the plan's links
+            return true;
         }
 
         /// <summary>

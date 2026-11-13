@@ -6,6 +6,10 @@
   3D path, solid or hollow, open or capped, upright or following the path. Draw on surfaces (the profile rests on
   them); edit with the floor plan's edit mode, Move also up and down; Smooth points curve the path. Hollow branches
   open into each other. See the Splines page of the manual.
+- Objects on splines: **GameObject** > **Brush** > **Attach to Spline** keeps an object on the nearest spline (its
+  distance along it, its angle round the profile, its offset from the surface) when the path changes; moved by hand
+  it takes the nearest place, or comes off when pulled away. **Spline Repeat** places a copy of an object or prefab
+  every few metres along each run of a spline: sleepers, posts, brackets, lamps.
 - Curved walls: in floor plan edit mode, press **S** (or click **Smooth**) to make the selected points Smooth, and the
   walls curve through them. Curves are built from straight pieces within the **Curve tolerance** (Project Settings >
   Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,

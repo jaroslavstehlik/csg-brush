@@ -60,6 +60,47 @@ If the path bends more tightly than half the profile's width, the Inspector warn
 
 The pieces take the layer, tag, and static flags of the Spline GameObject.
 
+## Attach objects to a spline
+
+An object attached to a spline stays on it when the path changes: at its distance along its link, at its angle around the profile, and at its offset from the surface. It stands on the surface: its up points out of the surface and its forward runs along the path.
+
+To attach objects, select them and select **GameObject** > **Brush** > **Attach to Spline**. Each object goes onto the surface of the nearest spline where it's nearest, and becomes the spline's child. To take an object off, select **GameObject** > **Brush** > **Detach from Spline**. It stays where it is.
+
+When you move an attached object, it takes the nearest place on the spline, keeping how far out from the surface you put it and how you turned it. Pull it more than 0.3 m further out and it comes off the spline. It stays where you put it and no longer follows the path. If its link is deleted, it stays where it was.
+
+### Spline Anchor component reference
+
+| **Property** | **Description** |
+| :--- | :--- |
+| **Distance** | Metres along the link from its first point. |
+| **Angle** | Degrees around the profile: **0** is the top, **90** the right side looking along the path, **180** underneath. |
+| **Offset** | Metres from the profile's surface to the object's pivot, out of the surface. |
+| **Upright** | Keeps the profile's up instead of standing out of the surface. Use it for posts and lamps on the edge of a road. |
+
+## Repeat objects along a spline
+
+A **Spline Repeat** places a copy of an object every few metres along a spline: sleepers on a rail, posts along a fence, brackets under a pipe, lamps along a road. Each run of the path, from an end or a junction to the next, gets its own row.
+
+To repeat an object:
+
+1. Select the Spline and add **Spline Repeat** (**Add Component** > **CSG Brush** > **Spline Repeat**). A Spline can have several, one per kind of object.
+2. Set **Source** to a prefab, or to an object in the scene. To keep a scene object out of the level, disable it: the copies are enabled.
+3. Set **Spacing**, and the place on the profile with **Angle**, **Offset**, and **Upright**.
+
+The copies are generated objects. They're hidden in the Hierarchy, and clicking one selects the Spline. They're made again when the path or the Spline Repeat changes. To change the copies, edit the source.
+
+### Spline Repeat component reference
+
+| **Property** | **Description** |
+| :--- | :--- |
+| **Source** | The object or prefab to copy. |
+| **Spacing** | Metres between copies. |
+| **Start** | Metres from the start of each run to the first copy. |
+| **Angle** | Degrees around the profile: **0** is the top, **90** the right side looking along the path, **180** underneath. |
+| **Offset** | Metres from the profile's surface to each copy's pivot, out of the surface. |
+| **Upright** | Keeps the profile's up instead of standing out of the surface. |
+| **Rotation** | Each copy's turn in degrees, relative to standing on the surface facing along the path. |
+
 ## Additional resources
 
 * [Floor plans](floor-plans.md)
