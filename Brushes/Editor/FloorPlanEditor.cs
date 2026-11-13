@@ -56,11 +56,31 @@ namespace CsgBrush.Editor
             plan.EnsureGraph();
             Handles.color = Line;
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
-            for (int w = 0; w < plan.links.Count; w++)
-            {
-                plan.LinkPoints(w, out int a, out int b);
-                Handles.DrawAAPolyLine(3f, World(plan, plan.points[a]), World(plan, plan.points[b]));
-            }
+            for (int w = 0; w < plan.links.Count; w++) Handles.DrawAAPolyLine(3f, WorldPath(plan, w));
+        }
+
+        /// <summary>A link's path (a curve's pieces) in world space.</summary>
+        public static Vector3[] WorldPath(PointGraph plan, int link)
+        {
+            var path = plan.Curve(link); var world = new Vector3[path.Length];
+            for (int i = 0; i < path.Length; i++) world[i] = World(plan, path[i]);
+            return world;
+        }
+
+        /// <summary>A link's path on screen.</summary>
+        public static Vector2[] ScreenPath(PointGraph plan, int link)
+        {
+            var path = plan.Curve(link); var screen = new Vector2[path.Length];
+            for (int i = 0; i < path.Length; i++) screen[i] = HandleUtility.WorldToGUIPoint(World(plan, path[i]));
+            return screen;
+        }
+
+        /// <summary>How far a screen point is from a screen path, in pixels.</summary>
+        public static float DistanceToPath(Vector2 p, IList<Vector2> path)
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i + 1 < path.Count; i++) best = Mathf.Min(best, HandleUtility.DistancePointLine(p, path[i], path[i + 1]));
+            return best;
         }
 
         /// <summary>The point nearest the mouse within 12 pixels, or -1.</summary>
@@ -78,11 +98,25 @@ namespace CsgBrush.Editor
             int best = -1; float bestD = 10f;
             for (int w = 0; w < plan.links.Count; w++)
             {
-                plan.LinkPoints(w, out int a, out int b);
-                float d = HandleUtility.DistancePointLine(mouse, HandleUtility.WorldToGUIPoint(World(plan, plan.points[a])), HandleUtility.WorldToGUIPoint(World(plan, plan.points[b])));
+                float d = DistanceToPath(mouse, ScreenPath(plan, w));
                 if (d < bestD) { bestD = d; best = w; }
             }
             if (best < 0 || !MouseOnFloor(plan, mouse, out var world)) return -1;
+            var curve = plan.Curve(best);
+            if (curve.Length > 2)
+            {
+                // a curved wall: the nearest place on its pieces, as it is (a grid point would leave the curve)
+                var m3 = plan.transform.InverseTransformPoint(world); if (plan.Flat) m3.y = 0f;
+                float bestDist = float.MaxValue;
+                for (int i = 0; i + 1 < curve.Length; i++)
+                {
+                    var seg = curve[i + 1] - curve[i]; float l2 = seg.sqrMagnitude;
+                    float u = l2 < 1e-12f ? 0f : Mathf.Clamp01(Vector3.Dot(m3 - curve[i], seg) / l2);
+                    var q = curve[i] + seg * u; float dd = (q - m3).sqrMagnitude;
+                    if (dd < bestDist) { bestDist = dd; local = q; }
+                }
+                return best;
+            }
             plan.LinkPoints(best, out int ia, out int ib);
             Vector3 pa = plan.points[ia], pb = plan.points[ib], ab = pb - pa;
             float len = ab.magnitude;
@@ -93,6 +127,28 @@ namespace CsgBrush.Editor
             t = Mathf.Clamp(t, 0f, len);
             local = pa + ab / len * t;
             return best;
+        }
+    }
+
+    /// <summary>Inspector parts every point graph (floor plan, spline) shows.</summary>
+    public static class PointGraphGUI
+    {
+        /// <summary>The curve tolerance override: off uses the project's (Project Settings > Brushes).</summary>
+        public static void Tolerance(SerializedObject so)
+        {
+            so.Update();
+            var on = so.FindProperty("overrideTolerance"); var value = so.FindProperty("tolerance");
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(on, new GUIContent("Override tolerance", "Use a curve tolerance of its own instead of the project's."));
+            if (EditorGUI.EndChangeCheck() && on.boolValue) value.floatValue = PointGraph.ProjectTolerance; // starts from the project's
+            if (on.boolValue)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(value, new GUIContent("Tolerance (m)", "How far the straight pieces of its curves may stray from the true curve."));
+                if (value.floatValue < PointGraph.MinTolerance) value.floatValue = PointGraph.MinTolerance;
+                EditorGUI.indentLevel--;
+            }
+            so.ApplyModifiedProperties();
         }
     }
 
@@ -107,6 +163,7 @@ namespace CsgBrush.Editor
         {
             var plan = (FloorPlan)target;
             DrawDefaultInspector();
+            PointGraphGUI.Tolerance(serializedObject);
             plan.EnsureGraph();
             EditorGUILayout.LabelField("Plan", plan.points.Count + " points, " + plan.links.Count + " walls, " + FloorPlanEditState.RoomsOf(plan).Count + " rooms");
             EditorGUILayout.BeginHorizontal();

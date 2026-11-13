@@ -57,6 +57,30 @@ In Vertex mode, a light blue plus sign appears in the middle of every wall.
 * Drag a plus sign to add a corner and move it in one step.
 * Drag any corner to move it without selecting it first. If the corner is part of a selection, the whole selection moves.
 
+## Curve walls
+
+Every point is a **Corner** or **Smooth**. Walls between two corners are straight. A wall with a smooth end curves, and the curve passes through the smooth point without a bend.
+
+To switch points between Corner and Smooth, select them and do one of the following:
+
+* Press **S**.
+* Click **Smooth** in the **Tool Settings** toolbar.
+* Right-click and select **Smooth / Corner**.
+
+If any selected point is a corner, they all become smooth. If they're all smooth already, they become corners. In Edge mode, the toggle acts on both ends of the selected walls. To turn a whole plan into curves, press **Ctrl**+**A** (macOS: **Cmd**+**A**), then **S**.
+
+Smooth points are round marks, corners are square.
+
+| **Situation** | **Result** |
+| :--- | :--- |
+| A smooth point between two walls | The path runs through it in one smooth curve. |
+| A smooth point where three or more walls meet | The two walls that are most nearly opposite run through it smoothly. The others meet it as at a corner. |
+| A plus sign on a curved wall | The new point lands on the curve and is smooth, so the curve keeps its shape. |
+
+Curved walls are built from straight pieces. The pieces stay within the **Curve tolerance** of the true curve, set in **Project Settings** > **Brushes** (0.1 m by default). A larger tolerance gives fewer pieces and lighter meshes. To give one Floor Plan its own tolerance, enable **Override tolerance** in its Inspector.
+
+Doors, windows, and attached objects follow a curved wall: they stay at their distance along it and face across it. A door on a curved wall is a straight cut, so on a tight curve its sides are flat.
+
 ## Delete points and walls
 
 To delete, select points or walls and press **Delete** or **Backspace**, or right-click and select **Delete**.

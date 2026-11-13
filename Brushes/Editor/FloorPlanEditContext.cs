@@ -100,13 +100,32 @@ namespace CsgBrush.Editor
 
         // ------------------------------------------------------------------ selection rules
 
-        /// <summary>A click: the nearest point (within 12 px) or wall (within 10 px) to the mouse, added or removed.</summary>
+        /// <summary>Each wall as a straight screen path between its two points (for the overloads that take point pairs).</summary>
+        static Vector2[][] StraightPaths(IList<Vector2> screen, IList<(int a, int b)> walls)
+        {
+            var paths = new Vector2[walls.Count][];
+            for (int w = 0; w < walls.Count; w++) paths[w] = new[] { screen[walls[w].a], screen[walls[w].b] };
+            return paths;
+        }
+
         public static void SelectNearest(Selection sel, IList<Vector2> screen, IList<(int a, int b)> walls, Vector2 mouse, BrushEditMode mode, bool remove)
+            => SelectNearest(sel, screen, StraightPaths(screen, walls), mouse, mode, remove);
+
+        public static void SelectInRect(Selection sel, IList<Vector2> screen, IList<(int a, int b)> walls, Rect rect, BrushEditMode mode, bool complete, bool remove)
+            => SelectInRect(sel, screen, StraightPaths(screen, walls), rect, mode, complete, remove);
+
+        /// <summary>A click: the nearest point (within 12 px) or wall (within 10 px of its path) to the mouse, added or removed.</summary>
+        public static void SelectNearest(Selection sel, IList<Vector2> screen, IList<Vector2[]> paths, Vector2 mouse, BrushEditMode mode, bool remove)
         {
             if (mode == BrushEditMode.Edge)
             {
                 int best = -1; float bestD = 10f;
-                for (int w = 0; w < walls.Count; w++) { float d = DistanceToSegment(mouse, screen[walls[w].a], screen[walls[w].b]); if (d < bestD) { bestD = d; best = w; } }
+                for (int w = 0; w < paths.Count; w++)
+                {
+                    float d = float.MaxValue; var path = paths[w];
+                    for (int i = 0; i + 1 < path.Length; i++) d = Mathf.Min(d, DistanceToSegment(mouse, path[i], path[i + 1]));
+                    if (d < bestD) { bestD = d; best = w; }
+                }
                 if (best >= 0) Apply(sel.edges, best, remove);
             }
             else if (mode == BrushEditMode.Vertex)
@@ -118,14 +137,16 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>A marquee: points inside it; walls completely inside it, or touching it when <paramref name="complete"/> is off.</summary>
-        public static void SelectInRect(Selection sel, IList<Vector2> screen, IList<(int a, int b)> walls, Rect rect, BrushEditMode mode, bool complete, bool remove)
+        public static void SelectInRect(Selection sel, IList<Vector2> screen, IList<Vector2[]> paths, Rect rect, BrushEditMode mode, bool complete, bool remove)
         {
             if (mode == BrushEditMode.Edge)
             {
-                for (int w = 0; w < walls.Count; w++)
+                for (int w = 0; w < paths.Count; w++)
                 {
-                    var a = screen[walls[w].a]; var b = screen[walls[w].b];
-                    if (complete ? rect.Contains(a) && rect.Contains(b) : BrushEditState.SegmentTouchesRect(a, b, rect)) Apply(sel.edges, w, remove);
+                    var path = paths[w]; bool all = true, any = false;
+                    foreach (var q in path) if (!rect.Contains(q)) all = false;
+                    for (int i = 0; i + 1 < path.Length && !any; i++) if (BrushEditState.SegmentTouchesRect(path[i], path[i + 1], rect)) any = true;
+                    if (complete ? all : any) Apply(sel.edges, w, remove);
                 }
             }
             else if (mode == BrushEditMode.Vertex) for (int v = 0; v < screen.Count; v++) if (rect.Contains(screen[v])) Apply(sel.vertices, v, remove);
@@ -278,6 +299,13 @@ namespace CsgBrush.Editor
             if (e.rawType == EventType.MouseUp) EndDrag();
         }
 
+        static Vector2[][] ScreenPaths(PointGraph plan)
+        {
+            var paths = new Vector2[plan.links.Count][];
+            for (int w = 0; w < paths.Length; w++) paths[w] = FloorPlanTools.ScreenPath(plan, w);
+            return paths;
+        }
+
         static Vector2[] Screen(PointGraph plan)
         {
             var pts = new Vector2[plan.points.Count];
@@ -302,8 +330,41 @@ namespace CsgBrush.Editor
             else if (e.keyCode == KeyCode.Alpha2) { Mode = BrushEditMode.Edge; e.Use(); }
             else if (e.keyCode == KeyCode.Alpha3) { Mode = BrushEditMode.Face; e.Use(); }
             else if (e.keyCode == KeyCode.Escape) { ClearSelection(); e.Use(); }
+            else if (e.keyCode == KeyCode.S && !e.control && !e.command && !e.alt && !e.shift && CanToggleSmooth()) { ToggleSmoothSelection(); e.Use(); }
             else if (e.keyCode == KeyCode.A && (e.control || e.command)) { foreach (var p in SelectedPlans()) SelectAll(p); e.Use(); SceneView.RepaintAll(); }
             else if (e.keyCode == KeyCode.I && (e.control || e.command)) { foreach (var p in SelectedPlans()) Invert(p); e.Use(); SceneView.RepaintAll(); }
+        }
+
+        /// <summary>The points the Smooth toggle acts on: the selected points, or both ends of the selected walls.</summary>
+        static HashSet<int> SmoothTargets(PointGraph plan)
+        {
+            var sel = Sel(plan);
+            if (Mode == BrushEditMode.Vertex) return new HashSet<int>(sel.vertices);
+            if (Mode == BrushEditMode.Edge) return MovingPoints(plan, sel, BrushEditMode.Edge);
+            return new HashSet<int>();
+        }
+
+        static bool CanToggleSmooth() { foreach (var p in SelectedPlans()) if (SmoothTargets(p).Count > 0) return true; return false; }
+
+        /// <summary>
+        /// Make points Smooth (the path curves through them), or Corners when they all are Smooth already. Undoable. Returns
+        /// true when they became Smooth.
+        /// </summary>
+        public static bool ToggleSmooth(PointGraph plan, ICollection<int> pointIndices)
+        {
+            bool allSmooth = true;
+            foreach (var i in pointIndices) if (i < plan.points.Count && !plan.IsSmooth(plan.pointIds[i])) allSmooth = false;
+            Undo.RecordObject(plan, allSmooth ? "Corner points" : "Smooth points");
+            foreach (var i in pointIndices) if (i < plan.points.Count) plan.SetSmooth(plan.pointIds[i], !allSmooth);
+            BrushGenerators.MarkDirty(plan);
+            return !allSmooth;
+        }
+
+        /// <summary>The Smooth toggle (S) on the selection of every selected plan.</summary>
+        public static void ToggleSmoothSelection()
+        {
+            foreach (var plan in SelectedPlans()) { var targets = SmoothTargets(plan); if (targets.Count > 0) ToggleSmooth(plan, targets); }
+            SceneView.RepaintAll();
         }
 
         static bool CanDelete()
@@ -402,19 +463,21 @@ namespace CsgBrush.Editor
                     Handles.DrawAAPolyLine(sel.rooms.Contains(r) ? 4f : 2f, loop);
                 }
             }
-            var ends = WallEnds(plan);
-            for (int w = 0; w < ends.Length; w++)
+            for (int w = 0; w < plan.links.Count; w++)
             {
                 bool selected = Mode == BrushEditMode.Edge && sel.edges.Contains(w);
                 Handles.color = selected ? BrushEditState.SelectedColor : new Color(1f, 1f, 1f, 0.8f);
-                Handles.DrawAAPolyLine(selected ? 5f : 3f, FloorPlanTools.World(plan, plan.points[ends[w].a]), FloorPlanTools.World(plan, plan.points[ends[w].b]));
+                Handles.DrawAAPolyLine(selected ? 5f : 3f, FloorPlanTools.WorldPath(plan, w));
             }
             if (Mode != BrushEditMode.Vertex) return;
+            var cam = Camera.current;
             for (int v = 0; v < plan.points.Count; v++)
             {
                 var w = FloorPlanTools.World(plan, plan.points[v]);
                 Handles.color = sel.vertices.Contains(v) ? BrushEditState.SelectedColor : Color.white;
-                Handles.DotHandleCap(0, w, Quaternion.identity, HandleUtility.GetHandleSize(w) * 0.045f, EventType.Repaint);
+                float size = HandleUtility.GetHandleSize(w) * 0.045f;
+                if (plan.IsSmooth(plan.pointIds[v])) Handles.DrawSolidDisc(w, cam != null ? -cam.transform.forward : Vector3.up, size * 1.2f); // Smooth: a round mark
+                else Handles.DotHandleCap(0, w, Quaternion.identity, size, EventType.Repaint); // Corner: a square
             }
         }
 
@@ -492,7 +555,8 @@ namespace CsgBrush.Editor
             for (int w = 0; w < ends.Length; w++)
             {
                 int id = GUIUtility.GetControlID(s_AddHash, FocusType.Passive);
-                var mid = (FloorPlanTools.World(plan, plan.points[ends[w].a]) + FloorPlanTools.World(plan, plan.points[ends[w].b])) * 0.5f;
+                plan.CurvePoint(w, plan.CurveLength(w) * 0.5f, out var midLocal, out _);
+                var mid = FloorPlanTools.World(plan, midLocal); // the middle of the path: on a curve, on the curve
                 switch (e.GetTypeForControl(id))
                 {
                     case EventType.Layout:
@@ -502,7 +566,7 @@ namespace CsgBrush.Editor
                         if (e.button == 0 && !e.alt && HandleUtility.nearestControl == id)
                         {
                             Undo.RecordObject(plan, "Add floor plan point");
-                            plan.SplitLink(w, FloorPlanTools.SnapLocal(plan, mid));
+                            plan.SplitLink(w, plan.Curve(w).Length > 2 ? midLocal : FloorPlanTools.SnapLocal(plan, mid)); // a grid point would leave the curve
                             int added = plan.points.Count - 1;
                             sel.Clear(); sel.vertices.Add(added);
                             BrushGenerators.MarkDirty(plan);
@@ -574,6 +638,7 @@ namespace CsgBrush.Editor
                 menu.AddItem(new GUIContent("Invert Selection"), false, () => { foreach (var p in SelectedPlans()) Invert(p); SceneView.RepaintAll(); });
                 menu.AddItem(new GUIContent("Clear Selection"), false, ClearSelection);
                 if (CanDelete()) menu.AddItem(new GUIContent("Delete  ⌫"), false, DeleteSelection); else menu.AddDisabledItem(new GUIContent("Delete  ⌫"));
+                if (CanToggleSmooth()) menu.AddItem(new GUIContent("Smooth / Corner  S"), false, ToggleSmoothSelection); else menu.AddDisabledItem(new GUIContent("Smooth / Corner  S"));
                 menu.AddSeparator("");
                 menu.AddItem(new GUIContent("Vertex mode  1"), Mode == BrushEditMode.Vertex, () => Mode = BrushEditMode.Vertex);
                 menu.AddItem(new GUIContent("Wall mode  2"), Mode == BrushEditMode.Edge, () => Mode = BrushEditMode.Edge);
@@ -604,8 +669,8 @@ namespace CsgBrush.Editor
                             SelectRoomsInRect(sel, screens, rect, BrushEditState.RectComplete, remove);
                         }
                     }
-                    else if (click) SelectNearest(sel, Screen(p), WallEnds(p), e.mousePosition, Mode, remove);
-                    else SelectInRect(sel, Screen(p), WallEnds(p), rect, Mode, BrushEditState.RectComplete, remove);
+                    else if (click) SelectNearest(sel, Screen(p), ScreenPaths(p), e.mousePosition, Mode, remove);
+                    else SelectInRect(sel, Screen(p), ScreenPaths(p), rect, Mode, BrushEditState.RectComplete, remove);
                 }
                 marquee = false; GUIUtility.hotControl = 0; e.Use(); SceneView.RepaintAll();
             }
@@ -790,8 +855,20 @@ namespace CsgBrush.Editor
             {
                 yield return "CSG Brush/Handle Orientation";
                 yield return "CSG Brush/Floor Plan Select Mode";
+                yield return "CSG Brush/Floor Plan Smooth";
                 yield return "CSG Brush/Drag Rect Mode";
             }
+        }
+    }
+
+    [EditorToolbarElement("CSG Brush/Floor Plan Smooth")]
+    sealed class FloorPlanSmoothButton : EditorToolbarButton
+    {
+        public FloorPlanSmoothButton()
+        {
+            text = "Smooth";
+            tooltip = "Curve the walls through the selected points, or make them corners again (S).";
+            clicked += FloorPlanEditState.ToggleSmoothSelection;
         }
     }
 

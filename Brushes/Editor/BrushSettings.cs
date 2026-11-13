@@ -77,6 +77,8 @@ namespace CsgBrush.Editor
         public ShapeEditSelection shapeEditSelection = ShapeEditSelection.Single;
         [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]
         public bool snapToGrid = true;
+        [Tooltip("Metres: how far the straight pieces of a curved wall or spline may stray from the true curve. Larger is rougher and lighter.")]
+        public float curveTolerance = 0.1f;
 
         public static event Action Changed;
 
@@ -201,6 +203,7 @@ namespace CsgBrush.Editor
                     var names = Array.ConvertAll(s.gridSizes, g => g.ToString("0.###") + " " + s.unitLabel);
                     s.gridIndex = EditorGUILayout.Popup("Default grid", Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names);
                     s.snapToGrid = EditorGUILayout.Toggle(new GUIContent("Snap brushes to grid", "Positions, sizes and rotations are kept on the world grid after every edit, whatever the parent does."), s.snapToGrid);
+                    s.curveTolerance = Mathf.Max(PointGraph.MinTolerance, EditorGUILayout.FloatField(new GUIContent("Curve tolerance (m)", "How far the straight pieces of curved walls may stray from the true curve. Larger is rougher and lighter."), s.curveTolerance));
                     EditorGUILayout.BeginHorizontal();
                     s.defaultMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Default material", "Every brush face without a material of its own. Empty: the generated grid texture, a ruler in metres, created under Assets/CSG Brush on first use."), s.defaultMaterial, typeof(Material), false);
                     if (GUILayout.Button(new GUIContent("Grid", "Use the generated grid material (drawn again from the grid sizes)"), GUILayout.Width(44))) { s.defaultMaterial = null; BrushGridMaterial.Regenerate(); BrushGridMaterial.GetOrCreate(); BrushApi.ForceUpdate(); }

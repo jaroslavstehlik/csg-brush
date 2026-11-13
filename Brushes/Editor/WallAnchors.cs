@@ -218,9 +218,8 @@ namespace CsgBrush.Editor
         /// <summary>Does a point lie on a wall (within its thickness and a little more)?</summary>
         static bool OnWall(FloorPlan.Wall w, Vector2 p, float reach)
         {
-            float t = Vector2.Dot(p - w.a, w.direction);
+            w.Project(p, out float t, out float across);
             if (t < -CatchMeters || t > w.Length + CatchMeters) return false;
-            float across = Vector2.Dot(p - w.a, w.outward);
             return across > w.inner - reach && across < w.outer + reach;
         }
 
@@ -339,7 +338,8 @@ namespace CsgBrush.Editor
                 return;
             }
             float middle = (wall.inner + wall.outer) * 0.5f;
-            var face = a.face == WallFace.Centered ? WallFace.Centered : Vector2.Dot(p2 - wall.a, wall.outward) - middle >= 0f ? WallFace.Outside : WallFace.Inside;
+            wall.Project(p2, out _, out float side);
+            var face = a.face == WallFace.Centered ? WallFace.Centered : side - middle >= 0f ? WallFace.Outside : WallFace.Inside;
             float distance = Mathf.Clamp(Snap(along), 0f, wall.Length);
             Frame(plan, wall, face, distance, out var origin, out var frame);
             var inv = Quaternion.Inverse(frame);
@@ -394,9 +394,10 @@ namespace CsgBrush.Editor
             nearest = default; along = 0f; across = float.MaxValue;
             foreach (var w in walls)
             {
-                float len = w.Length;
-                float t = Mathf.Clamp(Vector2.Dot(point - w.a, w.direction), 0f, len);
-                var middle = w.a + w.direction * t + w.outward * ((w.inner + w.outer) * 0.5f);
+                w.Project(point, out float t, out _);
+                t = Mathf.Clamp(t, 0f, w.Length);
+                w.At(t, out var onLine, out _, out var normal);
+                var middle = onLine + normal * ((w.inner + w.outer) * 0.5f);
                 float d = (point - middle).magnitude;
                 if (d < across) { across = d; nearest = w; along = t; }
             }
@@ -428,8 +429,9 @@ namespace CsgBrush.Editor
         public static void Frame(FloorPlan plan, FloorPlan.Wall wall, WallFace face, float distance, out Vector3 origin, out Quaternion rotation)
         {
             float off = face == WallFace.Inside ? wall.inner : face == WallFace.Outside ? wall.outer : (wall.inner + wall.outer) * 0.5f;
-            var n = face == WallFace.Inside ? -wall.outward : wall.outward;
-            var p = wall.a + wall.direction * distance + wall.outward * off;
+            wall.At(distance, out var onLine, out _, out var outward); // along a curved wall: its direction there
+            var n = face == WallFace.Inside ? -outward : outward;
+            var p = onLine + outward * off;
             origin = plan.transform.TransformPoint(new Vector3(p.x, 0f, p.y));
             rotation = plan.transform.rotation * Quaternion.LookRotation(new Vector3(n.x, 0f, n.y), Vector3.up);
         }

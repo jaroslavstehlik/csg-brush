@@ -351,6 +351,119 @@ namespace CsgBrush.Tests
             finally { s.snapToGrid = snap; }
         }
 
+        // ------------------------------------------------------------------ curved walls
+
+        static void SmoothAll(FloorPlan plan) { foreach (var id in plan.pointIds) plan.SetSmooth(id, true); Rebuild(plan); }
+
+        static float DistanceToPath(Vector3 p, Vector3[] path)
+        {
+            float best = float.MaxValue;
+            for (int i = 0; i + 1 < path.Length; i++)
+            {
+                var ab = path[i + 1] - path[i]; float t = Mathf.Clamp01(Vector3.Dot(p - path[i], ab) / Mathf.Max(ab.sqrMagnitude, 1e-12f));
+                best = Mathf.Min(best, (path[i] + ab * t - p).magnitude);
+            }
+            return best;
+        }
+
+        [Test]
+        public void CornersKeepStraightWallsAndSmoothPointsCurveThemWithinTheTolerance()
+        {
+            var plan = Room(FourByThree);
+            for (int w = 0; w < plan.links.Count; w++) Assert.AreEqual(2, plan.Curve(w).Length, "a wall between corners is straight");
+            plan.EnsureGraph(); SmoothAll(plan);
+            plan.overrideTolerance = true; plan.tolerance = PointGraph.MinTolerance;
+            var fine = new Vector3[plan.links.Count][]; for (int w = 0; w < fine.Length; w++) fine[w] = (Vector3[])plan.Curve(w).Clone();
+            foreach (float tol in new[] { 0.1f, 0.3f })
+            {
+                plan.tolerance = tol;
+                for (int w = 0; w < plan.links.Count; w++)
+                {
+                    var path = plan.Curve(w);
+                    Assert.Greater(path.Length, 2, "curved");
+                    Assert.LessOrEqual(path.Length - 1, PointGraph.MaxPiecesPerLink);
+                    plan.LinkPoints(w, out int a, out int b);
+                    Assert.AreEqual(plan.points[a], path[0]); Assert.AreEqual(plan.points[b], path[path.Length - 1], "from its first point to its last");
+                    foreach (var q in fine[w]) Assert.LessOrEqual(DistanceToPath(q, path), tol * 1.1f, "within the tolerance of the curve");
+                    Assert.Less(path.Length, fine[w].Length, "rougher than the finest");
+                }
+            }
+            plan.tolerance = 0.1f; int at01 = plan.Curve(0).Length;
+            plan.overrideTolerance = false; PointGraph.ProjectTolerance = 0.3f;
+            try { Assert.Less(plan.Curve(0).Length, at01, "the project's tolerance when not overridden"); }
+            finally { PointGraph.ProjectTolerance = BrushSettings.instance.curveTolerance; }
+        }
+
+        [Test]
+        public void ASmoothRoomHasCurvedWallsAndARoundFloor()
+        {
+            var plan = Room(FourByThree);
+            plan.EnsureGraph(); SmoothAll(plan);
+            Physics.SyncTransforms();
+            var rooms = new List<FloorPlan.Room>(); plan.Rooms(rooms);
+            Assert.AreEqual(1, rooms.Count, "still one room");
+            Assert.Greater(rooms[0].polygon.Length, 12, "its floor follows the curves");
+            plan.CurvePoint(0, plan.CurveLength(0) * 0.5f, out var bulge, out _);
+            Assert.Less(bulge.z, -0.2f, "the wall along z = 0 bows out of the room");
+            Assert.IsTrue(Solid(bulge + Vector3.up * 1.5f), "a wall stands on the curve");
+            Assert.IsFalse(Solid(new Vector3(2f, 1.5f, 0f)), "and not on the old straight line");
+            Assert.IsTrue(Solid(new Vector3(2f, -0.1f, bulge.z * 0.5f)), "the floor reaches into the bow");
+        }
+
+        [Test]
+        public void AnObjectAndADoorStayOnACurvedWall()
+        {
+            var s = BrushSettings.instance; bool snap = s.snapToGrid;
+            try
+            {
+                s.snapToGrid = false;
+                var plan = Room(FourByThree);
+                var picture = Picture();
+                picture.transform.position = new Vector3(1f, 1.5f, 0.05f); // against the inside of the wall along z = 0
+                var a = WallAnchors.Attach(picture);
+                Rebuild(plan);
+                var door = WallAnchors.Place(plan, BrushShape.Door, 0, 3f);
+                Rebuild(plan);
+                plan.EnsureGraph(); SmoothAll(plan);
+                Physics.SyncTransforms();
+                Assert.IsTrue(a.onWall && door.GetComponent<WallAnchor>().onWall);
+                var walls = new List<FloorPlan.Wall>(); plan.Walls(walls);
+                var w = walls[0];
+                Assert.IsTrue(w.Curved);
+                foreach (var (t, along, what) in new[] { (picture.transform, 1f, "picture"), (door.transform, 3f, "door") })
+                {
+                    w.At(along, out var p, out var dir, out _);
+                    var local = plan.transform.InverseTransformPoint(t.position);
+                    Assert.That((new Vector2(local.x, local.z) - p).magnitude, Is.LessThan(0.2f), what + " is at its place along the curve");
+                    Assert.That(Mathf.Abs(Vector3.Dot(t.forward, new Vector3(dir.x, 0f, dir.y))), Is.LessThan(1e-3f), what + " faces across the curve there");
+                }
+                Assert.That(picture.transform.forward.z, Is.GreaterThan(0.5f), "the picture faces into the room");
+                Assert.IsFalse(Solid(door.transform.position), "the door cuts its curved wall");
+            }
+            finally { s.snapToGrid = snap; }
+        }
+
+        [Test]
+        public void SmoothIsAToggleThatUndoesAndSplittingACurveKeepsItSmooth()
+        {
+            var plan = Room(FourByThree);
+            plan.EnsureGraph();
+            Undo.IncrementCurrentGroup();
+            Assert.IsTrue(FloorPlanEditState.ToggleSmooth(plan, new[] { 0, 1 }), "two corners become smooth");
+            Assert.IsTrue(plan.IsSmooth(plan.pointIds[0]) && plan.IsSmooth(plan.pointIds[1]));
+            Undo.IncrementCurrentGroup();
+            Assert.IsTrue(FloorPlanEditState.ToggleSmooth(plan, new[] { 1, 2 }), "one is not smooth yet: both become smooth");
+            Undo.IncrementCurrentGroup();
+            Assert.IsFalse(FloorPlanEditState.ToggleSmooth(plan, new[] { 1, 2 }), "both smooth: both become corners");
+            Assert.IsFalse(plan.IsSmooth(plan.pointIds[1]));
+            Undo.PerformUndo(); Undo.PerformUndo();
+            Assert.IsTrue(plan.IsSmooth(plan.pointIds[1]) && !plan.IsSmooth(plan.pointIds[2]), "undone twice");
+            int added = plan.SplitWall(0, plan.Curve(0)[1]);
+            Assert.IsTrue(plan.IsSmooth(added), "a point added on a curve is smooth");
+            int straight = plan.SplitWall(plan.links.FindIndex(l => l.start == plan.pointIds[2] && l.end == plan.pointIds[3]), new Vector3(2f, 0f, 3f));
+            Assert.IsFalse(plan.IsSmooth(straight), "on a straight wall, a corner");
+        }
+
         /// <summary>Plans saved before the point graph kept their links under the name "walls".</summary>
         [Test]
         public void APlanSavedWithWallsLoadsItsLinks()

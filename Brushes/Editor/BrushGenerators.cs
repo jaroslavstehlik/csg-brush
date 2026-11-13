@@ -22,6 +22,14 @@ namespace CsgBrush.Editor
             Undo.undoRedoPerformed += () => { s_Force = true; MarkAllDirty(); };
             UnityEditor.SceneManagement.EditorSceneManager.sceneOpened += (scene, mode) => MarkAllDirty();
             EditorApplication.delayCall += MarkAllDirty; // after a domain reload
+            PointGraph.ProjectTolerance = BrushSettings.instance.curveTolerance;
+            BrushSettings.Changed += () =>
+            {
+                float t = BrushSettings.instance.curveTolerance;
+                if (Mathf.Approximately(t, PointGraph.ProjectTolerance)) return;
+                PointGraph.ProjectTolerance = t; // curves are sampled again: their keys include it
+                MarkAllDirty();
+            };
         }
 
         public static void MarkDirty(BrushGenerator generator) { if (generator != null) s_Dirty.Add(generator); }

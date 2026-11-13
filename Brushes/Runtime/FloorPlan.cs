@@ -97,8 +97,59 @@ namespace CsgBrush
             public float inner, outer;
             /// <summary>On the outside of the building: one side faces a room, the other does not.</summary>
             public bool exterior;
-            public float Length => (b - a).magnitude;
+            /// <summary>The wall's line from a to b: the curve cut into straight pieces (just a and b for a straight wall).</summary>
+            public Vector2[] path;
+            /// <summary>Its length along <see cref="path"/>.</summary>
+            public float length;
+            /// <summary><see cref="outward"/> is the left of the direction, not the right.</summary>
+            public bool outwardLeft;
+            public float Length => path != null ? length : (b - a).magnitude;
             public float Thickness => outer - inner;
+            public bool Curved => path != null && path.Length > 2;
+
+            /// <summary>A place on the wall's line a distance from a (clamped), its direction there and its outward normal there.</summary>
+            public void At(float distance, out Vector2 point, out Vector2 dir, out Vector2 normal)
+            {
+                if (!Curved) { dir = direction; normal = outward; point = a + direction * Mathf.Clamp(distance, 0f, Length); return; }
+                point = path[0]; dir = (path[1] - path[0]).normalized;
+                float left = Mathf.Max(0f, distance);
+                for (int i = 0; i + 1 < path.Length; i++)
+                {
+                    var d = path[i + 1] - path[i]; float len = d.magnitude;
+                    if (len < 1e-9f) continue;
+                    dir = d / len;
+                    if (left <= len || i + 2 == path.Length) { point = path[i] + dir * Mathf.Min(left, len); break; }
+                    left -= len;
+                }
+                var right = new Vector2(dir.y, -dir.x);
+                normal = outwardLeft ? -right : right;
+            }
+
+            /// <summary>
+            /// A point's place relative to the wall's line: how far along it (before a or past b measured along the end's
+            /// direction) and how far from it along the outward normal there.
+            /// </summary>
+            public void Project(Vector2 p, out float along, out float across)
+            {
+                if (!Curved) { along = Vector2.Dot(p - a, direction); across = Vector2.Dot(p - a, outward); return; }
+                float best = float.MaxValue, before = 0f; along = 0f; across = 0f;
+                for (int i = 0; i + 1 < path.Length; i++)
+                {
+                    var d = path[i + 1] - path[i]; float len = d.magnitude;
+                    if (len < 1e-9f) continue;
+                    var u = d / len; float t = Vector2.Dot(p - path[i], u);
+                    bool first = i == 0, last = i + 2 == path.Length;
+                    float tc = Mathf.Clamp(t, first ? float.NegativeInfinity : 0f, last ? float.PositiveInfinity : len); // the ends run on along their direction
+                    var q = path[i] + u * tc; float dist = (p - q).sqrMagnitude;
+                    if (dist < best)
+                    {
+                        best = dist; along = before + tc;
+                        var right = new Vector2(u.y, -u.x);
+                        across = Vector2.Dot(p - q, outwardLeft ? -right : right);
+                    }
+                    before += len;
+                }
+            }
         }
 
         /// <summary>An enclosed area of the plan.</summary>
@@ -274,11 +325,15 @@ namespace CsgBrush
             var segs = new List<(int wall, Vector2 a, Vector2 b, int ida, int idb)>();
             for (int i = 0; i < walls.Count; i++)
             {
-                int ia = PointIndex(walls[i].start), ib = PointIndex(walls[i].end);
-                var a = P2(points[ia]); var b = P2(points[ib]);
-                if ((b - a).sqrMagnitude < Eps * Eps) continue;
-                segs.Add((i, a, b, walls[i].start, walls[i].end));
+                var path = Curve(i); // a curved wall stands as its straight pieces, joined at points without ids
+                for (int k = 0; k + 1 < path.Length; k++)
+                {
+                    var a = P2(path[k]); var b = P2(path[k + 1]);
+                    if ((b - a).sqrMagnitude < Eps * Eps) continue;
+                    segs.Add((i, a, b, k == 0 ? walls[i].start : -1, k + 2 == path.Length ? walls[i].end : -1));
+                }
             }
+            var partsOfWall = new int[walls.Count];
             an.piecesOfWall = new int[walls.Count];
             var pieceAt = new Dictionary<(int, int), int>();
             for (int s = 0; s < segs.Count; s++)
@@ -303,7 +358,6 @@ namespace CsgBrush
                 }
                 cuts.Sort();
                 var thickness = walls[wall].thickness;
-                int part = 0;
                 for (int k = 0; k + 1 < cuts.Count; k++)
                 {
                     float t0 = cuts[k], t1 = cuts[k + 1];
@@ -319,7 +373,7 @@ namespace CsgBrush
                         continue;
                     }
                     pieceAt[pairKey] = an.pieces.Count;
-                    an.pieces.Add(new Piece { wall = wall, part = part++, na = na, nb = nb, a = an.nodes[na].p, b = an.nodes[nb].p });
+                    an.pieces.Add(new Piece { wall = wall, part = partsOfWall[wall]++, na = na, nb = nb, a = an.nodes[na].p, b = an.nodes[nb].p });
                 }
             }
             foreach (var pc in an.pieces) an.piecesOfWall[pc.wall]++;
@@ -363,7 +417,16 @@ namespace CsgBrush
                 float lo = -0.5f * t0, hi = 0.5f * t0; bool exterior = false, outsideAlongN = false;
                 if (longest != null)
                 {
-                    bool same = Vector2.Dot(longest.b - longest.a, b - a) >= 0f; // the piece may run the other way
+                    // the piece may run the other way: compared with the wall's path where the piece lies (a curve turns away from its chord)
+                    var curveHere = Curve(i); var mid = (longest.a + longest.b) * 0.5f; var along = b - a; float nearest = float.MaxValue;
+                    for (int k = 0; k + 1 < curveHere.Length; k++)
+                    {
+                        var p0 = P2(curveHere[k]); var p1 = P2(curveHere[k + 1]); var seg = p1 - p0;
+                        float t = seg.sqrMagnitude < 1e-12f ? 0f : Mathf.Clamp01(Vector2.Dot(mid - p0, seg) / seg.sqrMagnitude);
+                        float dist = (p0 + seg * t - mid).sqrMagnitude;
+                        if (dist < nearest) { nearest = dist; along = seg; }
+                    }
+                    bool same = Vector2.Dot(longest.b - longest.a, along) >= 0f;
                     lo = same ? longest.lo : -longest.hi; hi = same ? longest.hi : -longest.lo;
                     exterior = longest.exterior; outsideAlongN = same ? longest.outsideRight : !longest.outsideRight;
                 }
@@ -371,7 +434,10 @@ namespace CsgBrush
                 bool flip = exterior && !outsideAlongN;
                 var outward = flip ? -n : n;
                 float inner = flip ? -hi : lo, outer = flip ? -lo : hi;
-                an.walls.Add(new Wall { index = i, startId = walls[i].start, endId = walls[i].end, a = a, b = b, direction = dir, outward = outward, inner = inner, outer = outer, exterior = exterior });
+                var curve = Curve(i); var path2 = new Vector2[curve.Length];
+                float length = 0f;
+                for (int k = 0; k < curve.Length; k++) { path2[k] = P2(curve[k]); if (k > 0) length += (path2[k] - path2[k - 1]).magnitude; }
+                an.walls.Add(new Wall { index = i, startId = walls[i].start, endId = walls[i].end, a = a, b = b, direction = dir, outward = outward, inner = inner, outer = outer, exterior = exterior, path = path2, length = length, outwardLeft = flip });
             }
             return an;
         }

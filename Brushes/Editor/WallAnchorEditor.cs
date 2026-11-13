@@ -151,13 +151,26 @@ namespace CsgBrush.Editor
         static void DrawWall(FloorPlan plan, FloorPlan.Wall w, Color color)
         {
             float middle = (w.inner + w.outer) * 0.5f;
-            var p0 = w.a + w.outward * middle; var p1 = w.b + w.outward * middle;
             var t = plan.transform;
             Vector3 P(Vector2 p, float y) => t.TransformPoint(new Vector3(p.x, y, p.y));
             float h = plan.wallHeight;
+            // along the wall's line (a curve's pieces), in its middle: the bottom edge, then back along the top
+            var line = new List<Vector2>();
+            int n = w.path != null && w.path.Length >= 2 ? w.path.Length : 2;
+            float step = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                if (i > 0) step += w.path != null ? (w.path[i] - w.path[i - 1]).magnitude : w.Length;
+                w.At(step, out var on, out _, out var normal);
+                line.Add(on + normal * middle);
+            }
+            var loop = new List<Vector3>();
+            foreach (var p in line) loop.Add(P(p, 0f));
+            for (int i = line.Count - 1; i >= 0; i--) loop.Add(P(line[i], h));
+            loop.Add(loop[0]);
             Handles.zTest = UnityEngine.Rendering.CompareFunction.Always;
             Handles.color = color;
-            Handles.DrawAAPolyLine(4f, P(p0, 0f), P(p1, 0f), P(p1, h), P(p0, h), P(p0, 0f));
+            Handles.DrawAAPolyLine(4f, loop.ToArray());
         }
     }
 }

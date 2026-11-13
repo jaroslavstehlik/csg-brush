@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Curved walls: in floor plan edit mode, press **S** (or click **Smooth**) to make the selected points Smooth, and the
+  walls curve through them. Curves are built from straight pieces within the **Curve tolerance** (Project Settings >
+  Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,
+  windows and attached objects stay on a curved wall and face across it. A + on a curved wall adds a smooth point on
+  the curve.
 - Fixed: undo after scaling a brush with the Scale tool (or typing a scale in the Inspector) left it at the new size.
   The scale becomes the brush's size when you let go, and that change is now part of the same undo step, so one undo
   (and redo) takes back the whole scale.
