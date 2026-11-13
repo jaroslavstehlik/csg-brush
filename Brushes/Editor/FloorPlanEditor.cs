@@ -101,7 +101,21 @@ namespace CsgBrush.Editor
                 float d = DistanceToPath(mouse, ScreenPath(plan, w));
                 if (d < bestD) { bestD = d; best = w; }
             }
-            if (best < 0 || !MouseOnFloor(plan, mouse, out var world)) return -1;
+            if (best < 0) return -1;
+            if (!plan.Flat)
+            {
+                // a path in the air: the place on it nearest the mouse on screen
+                var path = plan.Curve(best); float bd = float.MaxValue;
+                for (int i = 0; i + 1 < path.Length; i++)
+                {
+                    Vector2 sa = HandleUtility.WorldToGUIPoint(World(plan, path[i])), sb = HandleUtility.WorldToGUIPoint(World(plan, path[i + 1]));
+                    var sab = sb - sa; float u = sab.sqrMagnitude < 1e-6f ? 0f : Mathf.Clamp01(Vector2.Dot(mouse - sa, sab) / sab.sqrMagnitude);
+                    float dd = (sa + sab * u - mouse).sqrMagnitude;
+                    if (dd < bd) { bd = dd; local = Vector3.Lerp(path[i], path[i + 1], u); }
+                }
+                return best;
+            }
+            if (!MouseOnFloor(plan, mouse, out var world)) return -1;
             var curve = plan.Curve(best);
             if (curve.Length > 2)
             {

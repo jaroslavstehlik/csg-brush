@@ -14,27 +14,34 @@ namespace CsgBrush.Editor
     /// Scale tools act on the selected points or walls of the selected plans, on their floor. Selection (click, Shift add,
     /// Ctrl remove, marquee) works as in brush edit mode, with Vertex, Edge (wall) and Room modes (1, 2, 3).
     /// </summary>
-    [EditorToolContext("Edit Floor Plan", typeof(FloorPlan))]
-    [Icon(BrushIcons.Folder + "FloorPlan.png")]
-    public sealed class FloorPlanEditContext : EditorToolContext
+    public abstract class PointGraphEditContext : EditorToolContext
     {
-        public static bool IsActive => ToolManager.activeContextType == typeof(FloorPlanEditContext);
+        /// <summary>Is a floor plan's or a spline's edit mode active?</summary>
+        public static bool IsActive => ToolManager.activeContextType != null && typeof(PointGraphEditContext).IsAssignableFrom(ToolManager.activeContextType);
 
-        /// <summary>Start editing the selected plans (nothing happens without one: Unity refuses the context).</summary>
+        /// <summary>Start editing the selected plans or splines (nothing happens without one: Unity refuses the context).</summary>
         public static void Enter()
         {
             if (IsActive) return;
-            foreach (var go in Selection.gameObjects) if (go.GetComponent<PointGraph>() != null) { ToolManager.SetActiveContext<FloorPlanEditContext>(); return; }
+            foreach (var go in Selection.gameObjects)
+            {
+                if (go.GetComponent<FloorPlan>() != null) { ToolManager.SetActiveContext<FloorPlanEditContext>(); return; }
+                if (go.GetComponent<Spline>() != null) { ToolManager.SetActiveContext<SplineEditContext>(); return; }
+            }
         }
         public static void Exit() { if (IsActive) ToolManager.SetActiveContext<GameObjectToolContext>(); }
+
+        protected abstract Type MoveTool { get; }
+        protected abstract Type RotateTool { get; }
+        protected abstract Type ScaleTool { get; }
 
         protected override Type GetEditorToolType(Tool tool)
         {
             switch (tool)
             {
-                case Tool.Move: return typeof(FloorPlanMoveTool);
-                case Tool.Rotate: return typeof(FloorPlanRotateTool);
-                case Tool.Scale: return typeof(FloorPlanScaleTool);
+                case Tool.Move: return MoveTool;
+                case Tool.Rotate: return RotateTool;
+                case Tool.Scale: return ScaleTool;
                 default: return base.GetEditorToolType(tool);
             }
         }
@@ -44,6 +51,25 @@ namespace CsgBrush.Editor
             if (!(window is SceneView)) return;
             FloorPlanEditState.OnSceneGUI();
         }
+    }
+
+    [EditorToolContext("Edit Floor Plan", typeof(FloorPlan))]
+    [Icon(BrushIcons.Folder + "FloorPlan.png")]
+    public sealed class FloorPlanEditContext : PointGraphEditContext
+    {
+        protected override Type MoveTool => typeof(FloorPlanMoveTool);
+        protected override Type RotateTool => typeof(FloorPlanRotateTool);
+        protected override Type ScaleTool => typeof(FloorPlanScaleTool);
+    }
+
+    /// <summary>Spline edit mode: the floor plan's, on a spline's points and links (Move also moves them up and down).</summary>
+    [EditorToolContext("Edit Spline", typeof(Spline))]
+    [Icon(BrushIcons.Folder + "FloorPlan.png")]
+    public sealed class SplineEditContext : PointGraphEditContext
+    {
+        protected override Type MoveTool => typeof(SplineMoveTool);
+        protected override Type RotateTool => typeof(SplineRotateTool);
+        protected override Type ScaleTool => typeof(SplineScaleTool);
     }
 
     /// <summary>Selection, drawing, picking and drags of floor plan edit mode. The selection rules are plain functions of screen points, for tests.</summary>
@@ -227,7 +253,7 @@ namespace CsgBrush.Editor
             {
                 if (i >= start.Count || i >= plan.points.Count) continue;
                 var p = local(start[i]); if (plan.Flat) p.y = 0f;
-                if (g > 0f) { p.x = Mathf.Round(p.x / g) * g; p.z = Mathf.Round(p.z / g) * g; }
+                if (g > 0f) { p.x = Mathf.Round(p.x / g) * g; p.z = Mathf.Round(p.z / g) * g; if (!plan.Flat) p.y = Mathf.Round(p.y / g) * g; }
                 if (p == plan.points[i]) continue;
                 if (!recorded) { Undo.RecordObject(plan, "Edit floor plan"); recorded = true; }
                 plan.points[i] = p;
@@ -708,8 +734,15 @@ namespace CsgBrush.Editor
     }
 
     /// <summary>Move in floor plan edit mode: along the gizmo's two floor axes or freely on the floor; points land on the grid.</summary>
-    [EditorTool("Move floor plan selection", typeof(FloorPlan), typeof(FloorPlanEditContext))]
-    public sealed class FloorPlanMoveTool : FloorPlanSelectionTool
+    [EditorTool("Move floor plan selection", typeof(FloorPlan), typeof(FloorPlanEditContext))] public sealed class FloorPlanMoveTool : PointGraphMoveTool { }
+    [EditorTool("Move spline selection", typeof(Spline), typeof(SplineEditContext))] public sealed class SplineMoveTool : PointGraphMoveTool { }
+    [EditorTool("Rotate floor plan selection", typeof(FloorPlan), typeof(FloorPlanEditContext))] public sealed class FloorPlanRotateTool : PointGraphRotateTool { }
+    [EditorTool("Rotate spline selection", typeof(Spline), typeof(SplineEditContext))] public sealed class SplineRotateTool : PointGraphRotateTool { }
+    [EditorTool("Scale floor plan selection", typeof(FloorPlan), typeof(FloorPlanEditContext))] public sealed class FloorPlanScaleTool : PointGraphScaleTool { }
+    [EditorTool("Scale spline selection", typeof(Spline), typeof(SplineEditContext))] public sealed class SplineScaleTool : PointGraphScaleTool { }
+
+    /// <summary>Move in edit mode: along the gizmo's two floor axes, freely on the floor, and up and down for a spline; points land on the grid.</summary>
+    public abstract class PointGraphMoveTool : FloorPlanSelectionTool
     {
         Vector3 offset; Quaternion frame = Quaternion.identity;
 
@@ -726,12 +759,13 @@ namespace CsgBrush.Editor
                 Handles.color = Handles.xAxisColor; var p = Handles.Slider(at, x, size, Handles.ArrowHandleCap, 0f);
                 Handles.color = Handles.zAxisColor; p = Handles.Slider(p, z, size, Handles.ArrowHandleCap, 0f);
                 Handles.color = Handles.yAxisColor; p = Handles.Slider2D(p, up, x, z, size * 0.12f, Handles.RectangleHandleCap, Vector2.zero);
+                if (!plan.Flat) { Handles.color = Handles.yAxisColor; p = Handles.Slider(p, up, size, Handles.ArrowHandleCap, 0f); } // a spline's points also go up and down
                 if (EditorGUI.EndChangeCheck())
                 {
                     FloorPlanEditState.BeginDrag(plan, moving);
                     if (!FloorPlanEditState.Dragging(plan)) continue;
                     offset += p - at;
-                    var local = plan.transform.InverseTransformVector(offset); local.y = 0f;
+                    var local = plan.transform.InverseTransformVector(offset); if (plan.Flat) local.y = 0f;
                     FloorPlanEditState.TransformPoints(plan, FloorPlanEditState.dragStart, FloorPlanEditState.dragMoving, q => q + local);
                 }
             }
@@ -739,8 +773,7 @@ namespace CsgBrush.Editor
     }
 
     /// <summary>Rotate in floor plan edit mode: drag the ring on the floor; the selection turns about its centre in rotation-snap steps.</summary>
-    [EditorTool("Rotate floor plan selection", typeof(FloorPlan), typeof(FloorPlanEditContext))]
-    public sealed class FloorPlanRotateTool : FloorPlanSelectionTool
+    public abstract class PointGraphRotateTool : FloorPlanSelectionTool
     {
         Vector3 grab; // where the drag began on the floor, from the centre
 
@@ -805,8 +838,7 @@ namespace CsgBrush.Editor
     }
 
     /// <summary>Scale in floor plan edit mode: drag a cube along one of the gizmo's floor axes, or the middle cube for both, about the selection's centre.</summary>
-    [EditorTool("Scale floor plan selection", typeof(FloorPlan), typeof(FloorPlanEditContext))]
-    public sealed class FloorPlanScaleTool : FloorPlanSelectionTool
+    public abstract class PointGraphScaleTool : FloorPlanSelectionTool
     {
         float sx = 1f, sz = 1f; Vector3 uniformOffset; Quaternion frame = Quaternion.identity;
 

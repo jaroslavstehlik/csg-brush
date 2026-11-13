@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Splines: **GameObject** > **Brush** > **Spline** sweeps a Circle, Rectangle or U Channel profile along a branching
+  3D path, solid or hollow, open or capped, upright or following the path. Draw on surfaces (the profile rests on
+  them); edit with the floor plan's edit mode, Move also up and down; Smooth points curve the path. Hollow branches
+  open into each other. See the Splines page of the manual.
 - Curved walls: in floor plan edit mode, press **S** (or click **Smooth**) to make the selected points Smooth, and the
   walls curve through them. Curves are built from straight pieces within the **Curve tolerance** (Project Settings >
   Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,
