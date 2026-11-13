@@ -310,6 +310,47 @@ namespace CsgBrush.Tests
             Assert.IsTrue(Anchor(door).onWall, "undo gives the wall back, with its door");
         }
 
+        /// <summary>A + on the wall drags its new point off the line: the wall bends in two, and what is on it stays on its piece.</summary>
+        [Test]
+        public void BendingASplitWallKeepsWhatIsOnItAndDeletingThePieceFreesIt([Values(1f, 3f)] float x)
+        {
+            var s = BrushSettings.instance; bool snap = s.snapToGrid;
+            try
+            {
+                s.snapToGrid = false;
+                var plan = Room(FourByThree);
+                var picture = Picture();
+                picture.transform.position = new Vector3(x, 1.5f, 0.05f); // against the inside face of the wall along z = 0
+                var a = WallAnchors.Attach(picture);
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall);
+
+                Undo.IncrementCurrentGroup();
+                Undo.RecordObject(plan, "Add floor plan point");
+                int added = plan.SplitWall(0, new Vector3(2f, 0f, 0f));
+                Rebuild(plan);
+                plan.points[plan.PointIndex(added)] = new Vector3(2f, 0f, -1f); // dragged out: the wall bends
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall, "still on its wall");
+                var walls = new List<FloorPlan.Wall>(); plan.Walls(walls);
+                int piece = WallAnchors.WallIndex(a, walls);
+                Assert.IsTrue(x < 2f ? walls[piece].endId == added : walls[piece].startId == added, "on the piece it was on");
+                var w = walls[piece];
+                var local = WallAnchors.Local(plan, picture.transform);
+                float across = Vector2.Dot(local - w.a, w.outward);
+                Assert.That(Mathf.Abs(across - (w.inner + w.outer) * 0.5f), Is.LessThan(w.Thickness * 0.5f + 0.1f), "against the bent piece");
+
+                Undo.IncrementCurrentGroup();
+                FloorPlanEditState.DeleteWalls(plan, new[] { piece });
+                Rebuild(plan);
+                Assert.IsFalse(a.onWall, "its piece is gone: free, not taken round the room");
+                Undo.PerformUndo();
+                Rebuild(plan);
+                Assert.IsTrue(a.onWall, "undo gives the piece back, with what is on it");
+            }
+            finally { s.snapToGrid = snap; }
+        }
+
         [Test]
         public void MovingADoorPutsItOnTheNearestWallOrFreesIt()
         {

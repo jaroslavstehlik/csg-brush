@@ -37,6 +37,11 @@ namespace CsgBrush
         [HideInInspector] public Quaternion rotation = Quaternion.identity;
         /// <summary>The wall's length when last placed: finds the place again from the far end if the first corner is gone.</summary>
         [HideInInspector] public float wallLength;
+        /// <summary>
+        /// The plan's next point id when its wall was last seen whole: points from this id on were added since, so a run of
+        /// them between the wall's two ends is the wall split and bent. -1: not known yet.
+        /// </summary>
+        [HideInInspector] public int newPointsFrom = -1;
 
         /// <summary>Set when the plan last placed it: false while its wall is not in the plan.</summary>
         [NonSerialized] public bool onWall;

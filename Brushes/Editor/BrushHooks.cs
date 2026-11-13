@@ -110,6 +110,13 @@ namespace CsgBrush.Editor
                         BrushSnap.SnapOrDefer(db);
                 return modifications;
             }
+            // a typed scale becomes the brush's size; the size can't be recorded from here, so that snap waits for the next
+            // update and is recorded into this undo step there (as after a Scale drag)
+            HashSet<Brush> scaled = null;
+            for (int i = 0; i < modifications.Length; i++)
+                if (modifications[i].currentValue.target is Transform st && modifications[i].currentValue.propertyPath.StartsWith("m_LocalScale.") && st.TryGetComponent<Brush>(out var sb))
+                    (scaled ??= new HashSet<Brush>()).Add(sb);
+            if (scaled != null) foreach (var sb in scaled) BrushSnap.DeferRecorded(sb);
             HashSet<Brush> snapped = null;
             for (int i = 0; i < modifications.Length; i++)
             {
@@ -117,7 +124,7 @@ namespace CsgBrush.Editor
                 Brush brush = null;
                 if (target is Transform t) t.TryGetComponent(out brush);
                 else if (target is Brush b && modifications[i].currentValue.propertyPath.StartsWith("size")) brush = b;
-                if (brush == null) continue;
+                if (brush == null || (scaled != null && scaled.Contains(brush))) continue;
                 snapped ??= new HashSet<Brush>();
                 if (!snapped.Add(brush)) continue;
                 BrushSnap.Snap(brush);

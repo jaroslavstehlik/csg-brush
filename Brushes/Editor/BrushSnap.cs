@@ -281,12 +281,27 @@ namespace CsgBrush.Editor
 
         static readonly HashSet<Brush> s_Deferred = new HashSet<Brush>();
 
+        /// <summary>
+        /// The undo group of the drag that deferred a brush through Undo (a handle): the snap on release (the Scale tool's
+        /// scale becoming the size) is recorded into it, so one undo takes back the whole drag.
+        /// </summary>
+        static int s_DeferredGroup = -1;
+
         /// <summary>Snap now, or after the current drag ends.</summary>
         public static void SnapOrDefer(Brush brush)
         {
             if (brush == null) return;
-            if (DragInProgress) { s_Deferred.Add(brush); return; }
+            if (DragInProgress) { DeferRecorded(brush); return; }
             if (Snap(brush)) BrushSync.Ensure(brush);
+        }
+
+        /// <summary>Snap at the next update (after the drag, if one is held), recorded into the current undo step.</summary>
+        public static void DeferRecorded(Brush brush)
+        {
+            if (brush == null) return;
+            s_Deferred.Add(brush);
+            int group = Undo.GetCurrentGroup();
+            if (s_DeferredGroup < 0 || group < s_DeferredGroup) s_DeferredGroup = group;
         }
 
         static Vector3 Divide(Vector3 a, Vector3 b) => new Vector3(Mathf.Abs(b.x) > 1e-6f ? a.x / b.x : a.x, Mathf.Abs(b.y) > 1e-6f ? a.y / b.y : a.y, Mathf.Abs(b.z) > 1e-6f ? a.z / b.z : a.z);
@@ -362,14 +377,20 @@ namespace CsgBrush.Editor
             ClearPreview();
             if (s_Deferred.Count > 0)
             {
-                // release: snap the transform and rebuild
+                // release: snap the transform and rebuild; a drag made through Undo gets the snap in its undo step
+                int group = s_DeferredGroup; s_DeferredGroup = -1;
                 foreach (var brush in s_Deferred)
                 {
                     if (brush == null) continue;
-                    if (snap) Snap(brush);
+                    if (snap)
+                    {
+                        if (group >= 0) Undo.RecordObjects(new Object[] { brush, brush.transform }, "Snap brush");
+                        Snap(brush);
+                    }
                     BrushSync.Ensure(brush);
                 }
                 s_Deferred.Clear();
+                if (group >= 0 && snap) Undo.CollapseUndoOperations(group);
             }
             var active = Brush.Active;
             for (int i = 0; i < active.Count; i++)

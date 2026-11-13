@@ -215,6 +215,43 @@ namespace CsgBrush.Tests
             Assert.AreEqual(new Vector3(1.5f, 0f, 0f), b.transform.position, "redo lands on the grid again");
         }
 
+        /// <summary>The Scale tool (dragged) or the Inspector (typed): the scale becomes the size, and one undo takes both back.</summary>
+        [Test]
+        public void ScalingIsUndoable([Values(true, false)] bool dragged)
+        {
+            var b = BrushApi.Create(BrushShape.Box, new Vector3(0f, 1f, 0f), new Vector3(2f, 2f, 2f), Quaternion.identity);
+            BrushApi.ForceUpdate();
+            Undo.IncrementCurrentGroup();
+            if (dragged) GUIUtility.hotControl = 1234; // the handle records the transform every frame of the drag
+            try
+            {
+                for (int frame = 1; frame <= (dragged ? 4 : 1); frame++)
+                {
+                    Undo.RecordObject(b.transform, "Scale");
+                    b.transform.localScale = new Vector3(dragged ? 1f + frame * 0.25f : 2f, 1f, 1f);
+                    Undo.FlushUndoRecordObjects();
+                    BrushApi.ForceUpdate();
+                }
+            }
+            finally { GUIUtility.hotControl = 0; }
+            BrushApi.ForceUpdate(); // released
+            Assert.AreEqual(new Vector3(4f, 2f, 2f), b.size, "the scale became the size");
+            Assert.AreEqual(Vector3.one, b.transform.localScale);
+            Assert.AreEqual(4f, RenderBounds().size.x, 1e-3f, "and the mesh");
+
+            Undo.PerformUndo();
+            BrushApi.ForceUpdate();
+            Assert.AreEqual(new Vector3(2f, 2f, 2f), b.size, "undo gives the size back");
+            Assert.AreEqual(Vector3.one, b.transform.localScale, "with no scale");
+            Assert.AreEqual(2f, RenderBounds().size.x, 1e-3f, "and the mesh");
+
+            Undo.PerformRedo();
+            BrushApi.ForceUpdate();
+            Assert.AreEqual(new Vector3(4f, 2f, 2f), b.size, "redo");
+            Assert.AreEqual(Vector3.one, b.transform.localScale);
+            Assert.AreEqual(4f, RenderBounds().size.x, 1e-3f);
+        }
+
         [Test]
         public void UnitysVisibleGridFollowsTheBrushGrid()
         {

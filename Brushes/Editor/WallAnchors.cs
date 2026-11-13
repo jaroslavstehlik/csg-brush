@@ -190,6 +190,9 @@ namespace CsgBrush.Editor
                 // must find the object's wall again from the same values
                 if (!Resolve(a, s_Walls, out var wall, out float distance, Local(plan, child))) { a.onWall = false; continue; }
                 a.onWall = true;
+                // its wall is whole: points added from now on are new (derived from the plan, so kept out of Undo)
+                bool whole = (wall.startId == a.startId && wall.endId == a.endId) || (wall.startId == a.endId && wall.endId == a.startId);
+                if (whole && a.newPointsFrom != plan.nextPointId) a.newPointsFrom = plan.nextPointId;
                 Vector3 position; Quaternion rotation;
                 if (opening)
                 {
@@ -261,6 +264,7 @@ namespace CsgBrush.Editor
                     }
                     before += len; current = far;
                 }
+                if (FollowBentSplit(a, walls, out wall, out distance)) return true;
             }
             if (ps.HasValue && pe.HasValue) return false; // both points are there but no wall joins them: the wall was deleted
             // one of its points is gone (a point between two straight walls was deleted, say): a wall from the other point,
@@ -270,6 +274,48 @@ namespace CsgBrush.Editor
             foreach (var w in walls) if (w.endId == a.startId && Fits(w)) { wall = w; distance = w.Length - a.distance; return true; }
             foreach (var w in walls) if (w.endId == a.endId && Fits(w)) { wall = w; distance = w.Length - (a.wallLength - a.distance); return true; }
             foreach (var w in walls) if (w.startId == a.endId && Fits(w)) { wall = w; distance = a.wallLength - a.distance; return true; }
+            return false;
+        }
+
+        /// <summary>
+        /// A wall split by new points that no longer line up (a + dragged off the line): the shortest run of walls from its
+        /// first point to its last through points added since (their ids are newer than both ends), the object on the piece
+        /// its distance reaches along the run. False when there is no such run.
+        /// </summary>
+        static bool FollowBentSplit(WallAnchor a, List<FloorPlan.Wall> walls, out FloorPlan.Wall wall, out float distance)
+        {
+            wall = default; distance = a.distance;
+            int newer = a.newPointsFrom;
+            if (newer < 0) return false; // which points are new is not known
+            var reachedBy = new Dictionary<int, int> { [a.startId] = -1 }; // point id -> the wall it was reached along
+            var queue = new Queue<int>(); queue.Enqueue(a.startId);
+            while (queue.Count > 0 && !reachedBy.ContainsKey(a.endId))
+            {
+                int p = queue.Dequeue();
+                for (int i = 0; i < walls.Count; i++)
+                {
+                    var w = walls[i];
+                    int q = w.startId == p ? w.endId : w.endId == p ? w.startId : -1;
+                    if (q < 0 || reachedBy.ContainsKey(q) || (q != a.endId && q < newer)) continue;
+                    reachedBy[q] = i; queue.Enqueue(q);
+                }
+            }
+            if (!reachedBy.ContainsKey(a.endId)) return false;
+            var run = new List<int>();
+            for (int p = a.endId; reachedBy[p] >= 0;) { int i = reachedBy[p]; run.Add(i); p = walls[i].startId == p ? walls[i].endId : walls[i].startId; }
+            run.Reverse();
+            float before = 0f; int at = a.startId;
+            for (int k = 0; k < run.Count; k++)
+            {
+                var piece = walls[run[k]]; bool forward = piece.startId == at; float len = piece.Length;
+                if (a.distance <= before + len || k == run.Count - 1)
+                {
+                    wall = piece; float along = a.distance - before;
+                    distance = forward ? along : len - along;
+                    return true;
+                }
+                before += len; at = forward ? piece.endId : piece.startId;
+            }
             return false;
         }
 

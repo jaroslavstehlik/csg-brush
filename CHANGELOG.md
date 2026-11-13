@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: undo after scaling a brush with the Scale tool (or typing a scale in the Inspector) left it at the new size.
+  The scale becomes the brush's size when you let go, and that change is now part of the same undo step, so one undo
+  (and redo) takes back the whole scale.
+- Fixed: an object or door on a floor plan wall came off the wall when a point added in the wall's middle (the +) was
+  dragged off the line. It now stays on the piece of the bent wall it was on, and still comes off when that piece is
+  deleted.
+
 ## 0.5.1 (2026-11-06)
 
 - Fixed: clicking a brush with an ordinary mesh behind it selected the mesh, and clicking a brush with a door or window
