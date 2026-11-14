@@ -544,10 +544,12 @@ namespace CsgBrush.Editor
         static readonly int s_PointHash = "FloorPlanPoint".GetHashCode(), s_AddHash = "FloorPlanAddPoint".GetHashCode();
 
         /// <summary>
-        /// How much further than it is a point or a + counts, in pixels, against the gizmo: a handle of the Move, Rotate or Scale
-        /// gizmo under the mouse wins (it counts 0 on its shape), even where it crosses a point or a + along a wall.
+        /// How near a point or a + counts against the other controls, in pixels, for one <paramref name="pixels"/> from the
+        /// mouse (within <see cref="PointPickPixels"/>): between 1 and 4.2, so a gizmo handle under the mouse (0 on its shape)
+        /// wins even where it crosses a point or a + along a wall, and a point or + still wins over a click on empty space
+        /// (Unity counts that 5).
         /// </summary>
-        const float BehindGizmoPixels = 3f;
+        static float Pick(float pixels) => 1f + pixels * 0.4f;
 
         static int s_PressedPoint = -1; static Vector3 s_Grab; static bool s_Moved;
         /// <summary>The level a point drag slides on: the plan's floor, or for a spline the height of the point pressed.</summary>
@@ -564,7 +566,7 @@ namespace CsgBrush.Editor
 
         /// <summary>
         /// Vertex mode: pressing a point selects it and drags it (a point of the selection drags the selection); pressing a +
-        /// adds a point there and drags it. A gizmo handle under the mouse comes first (see <see cref="BehindGizmoPixels"/>).
+        /// adds a point there and drags it. A gizmo handle under the mouse comes first (see <see cref="Pick"/>).
         /// </summary>
         static void PointControls(PointGraph plan, Selection sel, Event e)
         {
@@ -578,7 +580,7 @@ namespace CsgBrush.Editor
             {
                 int id = GUIUtility.GetControlID(s_PointHash, FocusType.Passive);
                 var world = FloorPlanTools.World(plan, plan.points[v]);
-                if (e.GetTypeForControl(id) == EventType.Layout) { float d = HandleUtility.DistanceToCircle(world, 0f); if (d < PointPickPixels) HandleUtility.AddControl(id, d + BehindGizmoPixels); }
+                if (e.GetTypeForControl(id) == EventType.Layout) { float d = HandleUtility.DistanceToCircle(world, 0f); if (d < PointPickPixels) HandleUtility.AddControl(id, Pick(d)); }
                 if (e.GetTypeForControl(id) != EventType.MouseDown || e.button != 0 || e.alt || HandleUtility.nearestControl != id || Dragging(plan)) continue;
                 e.Use(); SceneView.RepaintAll();
                 if (e.control || e.command) { sel.vertices.Remove(v); continue; } // Ctrl: deselect only
@@ -598,7 +600,7 @@ namespace CsgBrush.Editor
                 switch (e.GetTypeForControl(id))
                 {
                     case EventType.Layout:
-                        { float d = HandleUtility.DistanceToCircle(mid, 0f); if (d < PointPickPixels) HandleUtility.AddControl(id, d + BehindGizmoPixels); }
+                        { float d = HandleUtility.DistanceToCircle(mid, 0f); if (d < PointPickPixels) HandleUtility.AddControl(id, Pick(d)); }
                         break;
                     case EventType.MouseDown:
                         if (e.button == 0 && !e.alt && HandleUtility.nearestControl == id)
