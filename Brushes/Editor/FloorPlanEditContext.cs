@@ -64,7 +64,7 @@ namespace CsgBrush.Editor
 
     /// <summary>Spline edit mode: the floor plan's, on a spline's points and links (Move also moves them up and down).</summary>
     [EditorToolContext("Edit Spline", typeof(Spline))]
-    [Icon(BrushIcons.Folder + "FloorPlan.png")]
+    [Icon(BrushIcons.Folder + "Spline.png")]
     public sealed class SplineEditContext : PointGraphEditContext
     {
         protected override Type MoveTool => typeof(SplineMoveTool);

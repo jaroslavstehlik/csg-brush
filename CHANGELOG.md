@@ -5,7 +5,8 @@
 - Splines: **GameObject** > **Brush** > **Spline** sweeps a Circle, Rectangle or U Channel profile along a branching
   3D path, solid or hollow, open or capped, upright or following the path. Draw on surfaces (the profile rests on
   them); edit with the floor plan's edit mode, Move also up and down; Smooth points curve the path. Hollow branches
-  open into each other. See the Splines page of the manual.
+  open into each other. See the Splines page of the manual. The **Create** tool has a **Spline** entry with its own
+  icon: click to start a spline, or click a spline's point or link to continue it.
 - Objects on splines: **GameObject** > **Brush** > **Attach to Spline** keeps an object on the nearest spline (its
   distance along it, its angle round the profile, its offset from the surface) when the path changes; moved by hand
   it takes the nearest place, or comes off when pulled away. **Spline Repeat** places a copy of an object or prefab

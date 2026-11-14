@@ -345,6 +345,40 @@ def floor_plan(ic):
     prisms(ic, [([(0, 0, True), (1, 0, True), (1, t, True), (t, t, True), (t, 1, True), (0, 1, True)], 0, h)])
     ic.line([P(1, 0, t), P(1, 0, 1), P(t, 0, 1)])
 
+def spline(ic):
+    # a pipe bent along an S-shaped path, open at its upper end: a profile swept along a spline
+    def path(t):
+        (ax, ay), (bx, by), (cx, cy), (dx, dy) = (2.2, 11.8), (9.5, 17.5), (6.5, -1.5), (13.6, 4.2)
+        u = 1 - t
+        return (u * u * u * ax + 3 * u * u * t * bx + 3 * u * t * t * cx + t * t * t * dx,
+                u * u * u * ay + 3 * u * u * t * by + 3 * u * t * t * cy + t * t * t * dy)
+    n = 64
+    mid = [path(i / n) for i in range(n + 1)]
+    r = 1.7  # the pipe's radius, design units
+    left, right = [], []
+    for i, p in enumerate(mid):
+        q0, q1 = mid[max(0, i - 1)], mid[min(n, i + 1)]
+        dx, dy = q1[0] - q0[0], q1[1] - q0[1]
+        length = math.hypot(dx, dy)
+        nx, ny = -dy / length, dx / length
+        left.append((p[0] + nx * r, p[1] + ny * r))
+        right.append((p[0] - nx * r, p[1] - ny * r))
+    ic.fill(left + list(reversed(right)), FILL_LEFT)
+    ic.line(left)
+    ic.line(right)
+    ic.line([left[0], right[0]])  # the far end
+    # the near end, open: a ring across the pipe, seen a little from the side
+    (ex, ey), (px_, py_) = mid[-1], mid[-3]
+    dx, dy = ex - px_, ey - py_
+    length = math.hypot(dx, dy)
+    ux, uy = dx / length, dy / length
+    ring = [(ex - uy * r * math.cos(a) + ux * r * 0.5 * math.sin(a), ey + ux * r * math.cos(a) + uy * r * 0.5 * math.sin(a))
+            for a in [2 * math.pi * k / 48 for k in range(48)]]
+    ic.erase(ring)
+    ic.fill(ring, FILL_TOP)
+    ic.line(ring, closed=True)
+
+
 def mode_vertex(ic):
     cube_edges(ic, DIM)
     for k in "bcdefgh":
@@ -461,7 +495,7 @@ def selection_match(ic):
 ICONS = {
     # create tools (names match BrushShape)
     "Box": box, "Wedge": wedge, "Cylinder": cylinder, "Cone": cone, "Sphere": sphere,
-    "Stairs": linear_stairs, "CurvedStairs": curved_stairs, "SpiralStairs": spiral_stairs, "Arch": arch, "Door": door, "Window": window, "FloorPlan": floor_plan,
+    "Stairs": linear_stairs, "CurvedStairs": curved_stairs, "SpiralStairs": spiral_stairs, "Arch": arch, "Door": door, "Window": window, "FloorPlan": floor_plan, "Spline": spline,
     # edit toolbar
     "EditBrush": edit_brush, "Mode_Vertex": mode_vertex, "Mode_Edge": mode_edge, "Mode_Face": mode_face,
     "SelectHidden": select_hidden, "DragRect": drag_rect, "ToolHandleElement": handle_element,

@@ -8,8 +8,11 @@ The pieces are generated brushes. They're hidden in the Hierarchy, and when you 
 
 To draw a spline:
 
-1. Select **GameObject** > **Brush** > **Spline**. This creates a Spline at the Scene view pivot and starts drawing.
-2. Click to place each point. Each click adds a link from the previous point.
+1. In the Scene view, open the **Create** tool dropdown and select **Spline**, then click where the spline starts. On a brush, it starts on the surface; elsewhere on the ground. This creates a Spline GameObject and starts drawing. If you click a point or link of an existing Spline instead, drawing continues that spline from there.
+
+    You can also select **GameObject** > **Brush** > **Spline**, which creates a Spline at the Scene view pivot and starts drawing.
+
+2. Click to place each following point. Each click adds a link from the previous point.
     * On a brush, the point lands on its surface, raised so that the profile rests on it.
     * In the open, the point lands level with the previous point.
 3. Click an existing point or link to join the stroke to it. Clicking a link splits it there. Joining ends the stroke.

@@ -10,7 +10,7 @@ namespace CsgBrush
     /// at its two ends. A hollow profile also cuts its inside, after every solid piece, so branches open into each other.
     /// </summary>
     [AddComponentMenu("CSG Brush/Spline")]
-    [Icon("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/FloorPlan.png")]
+    [Icon("Packages/digital.dream.csgbrush/Brushes/Editor/Icons/Spline.png")]
     [DisallowMultipleComponent]
     public sealed class Spline : PointGraph
     {
@@ -34,7 +34,9 @@ namespace CsgBrush
         }
 
         [Tooltip("The shape swept along the path.")] public Profile profile = Profile.Circle;
-        [Tooltip("Metres: width and height of the profile (a circle's diameter is the width).")] public Vector2 size = new Vector2(0.5f, 0.5f);
+        [Tooltip("Metres: width and height of the profile (a circle's diameter is the width).")] public Vector2 size = DefaultSize;
+        /// <summary>A new spline's profile size, metres.</summary>
+        public static readonly Vector2 DefaultSize = new Vector2(0.5f, 0.5f);
         [Tooltip("Sides of a circle; 0 works them out from the curve tolerance.")] public int sides = 0;
         [Tooltip("Cut out the inside, leaving a wall of the thickness below.")] public bool hollow;
         [Tooltip("Metres: the wall of a hollow profile or a channel.")] public float thickness = 0.05f;

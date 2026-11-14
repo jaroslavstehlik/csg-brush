@@ -90,14 +90,34 @@ namespace CsgBrush.Editor
     [EditorTool("Draw Spline", typeof(Spline))]
     public sealed class SplineDrawTool : EditorTool
     {
-        public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get("FloorPlan"), "Draw Spline");
+        public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get("Spline"), "Draw Spline");
 
         enum Hover { None, Free, Point, Link }
         Hover m_Kind; Vector3 m_Hover; int m_HoverPoint = -1, m_HoverLink = -1;
         int m_Last = -1;
         readonly List<int> m_Stroke = new List<int>();
 
-        public override void OnActivated() { m_Last = -1; m_Stroke.Clear(); }
+        /// <summary>The point (id) the next activation starts its first link from, or -1.</summary>
+        static int s_Start = -1;
+
+        /// <summary>
+        /// Draw on the selected spline, from a point (id) when given. Unity makes a selection's component tools a little after
+        /// the selection changes, so the editors are rebuilt first, else the switch fails.
+        /// </summary>
+        public static void Begin(int startPoint = -1)
+        {
+            s_Start = startPoint;
+            ActiveEditorTracker.sharedTracker.ForceRebuild();
+            ToolManager.SetActiveTool<SplineDrawTool>();
+            if (ToolManager.activeToolType != typeof(SplineDrawTool)) s_Start = -1; // the switch failed: no later activation may use it
+        }
+
+        public override void OnActivated()
+        {
+            m_Last = -1; m_Stroke.Clear();
+            int start = s_Start; s_Start = -1;
+            if (target is Spline spline && start >= 0 && spline.PointIndex(start) >= 0) { m_Last = start; m_Stroke.Add(start); }
+        }
 
         public override void OnToolGUI(EditorWindow window)
         {
@@ -189,7 +209,7 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>A point on a surface moved to the grid along the surface (not off it).</summary>
-        static Vector3 SnapAcross(Vector3 p, Vector3 normal, float g)
+        public static Vector3 SnapAcross(Vector3 p, Vector3 normal, float g)
         {
             if (g <= 0f) return p;
             var snapped = new Vector3(Mathf.Round(p.x / g) * g, Mathf.Round(p.y / g) * g, Mathf.Round(p.z / g) * g);
@@ -221,19 +241,124 @@ namespace CsgBrush.Editor
             float g = BrushSettings.instance.GridMeters;
             if (g > 0f) pivot = new Vector3(Mathf.Round(pivot.x / g) * g, 0f, Mathf.Round(pivot.z / g) * g);
             var parent = Selection.activeTransform != null && Selection.activeTransform.GetComponent<Brush>() == null ? Selection.activeTransform : null;
+            Create(pivot, parent, false);
+        }
+
+        /// <summary>A new spline at a position, selected, drawing; with <paramref name="firstPoint"/> its first point is there.</summary>
+        public static Spline Create(Vector3 position, Transform parent, bool firstPoint)
+        {
             var go = new GameObject("Spline");
-            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags);
+            GameObjectUtility.SetStaticEditorFlags(go, BrushSettings.instance.defaultModelStaticFlags); // its pieces take the spline's flags
             Undo.RegisterCreatedObjectUndo(go, "Create spline");
             if (parent != null) Undo.SetTransformParent(go.transform, parent, "Create spline");
-            go.transform.position = pivot;
-            Undo.AddComponent<Spline>(go);
+            go.transform.position = position;
+            var spline = Undo.AddComponent<Spline>(go);
+            int first = firstPoint ? spline.AddPoint(Vector3.zero) : -1; // the draw tool starts its first link here
             Selection.activeGameObject = go;
-            EditorApplication.delayCall += () =>
+            EditorApplication.delayCall += () => { if (Selection.activeGameObject == go) SplineDrawTool.Begin(first); };
+            return spline;
+        }
+    }
+
+    /// <summary>
+    /// The Create tool's Spline: click to start a spline there (on a surface, the profile resting on it), then click its
+    /// points. A click on a spline's point or link continues that spline from there, the selected spline first.
+    /// </summary>
+    [EditorTool("Spline", variantGroup = typeof(BrushCreateTool), variantPriority = 12)]
+    public sealed class CreateSplineTool : EditorTool
+    {
+        public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get("Spline"), "Spline");
+        [MenuItem("Tools/CSG Brush/Create/Spline", false, 13)] static void Menu() => ToolManager.SetActiveTool<CreateSplineTool>();
+
+        Vector3 m_Hover; bool m_HoverValid;
+        /// <summary>The spline a click continues, and where: one of its points (index) or links (index and spot).</summary>
+        Spline m_Spline; int m_Point = -1, m_Link = -1; Vector3 m_Local;
+        /// <summary>The scene's splines, found again only when the hierarchy changes.</summary>
+        List<Spline> m_Splines;
+
+        public override void OnActivated() { m_Splines = null; EditorApplication.hierarchyChanged += Forget; }
+        public override void OnWillBeDeactivated() => EditorApplication.hierarchyChanged -= Forget;
+        void Forget() => m_Splines = null;
+
+        void FindSpline(Vector2 mouse)
+        {
+            m_Spline = null; m_Point = m_Link = -1;
+            var selected = Selection.activeGameObject != null ? Selection.activeGameObject.GetComponent<Spline>() : null;
+            if (m_Splines == null)
             {
-                if (Selection.activeGameObject != go) return;
-                ActiveEditorTracker.sharedTracker.ForceRebuild(); // a new selection's component tools are made a little later
-                ToolManager.SetActiveTool<SplineDrawTool>();
-            };
+                m_Splines = new List<Spline>();
+                foreach (var s in Object.FindObjectsByType<Spline>(FindObjectsSortMode.None)) if (s.gameObject.scene.IsValid()) m_Splines.Add(s);
+            }
+            for (int i = -1; i < m_Splines.Count; i++)
+            {
+                var s = i < 0 ? selected : m_Splines[i]; // the selected spline first
+                if (s == null || (i >= 0 && s == selected)) continue;
+                s.EnsureGraph();
+                int point = FloorPlanTools.PointUnderMouse(s, mouse);
+                if (point >= 0) { m_Spline = s; m_Point = point; return; }
+                int link = FloorPlanTools.WallUnderMouse(s, mouse, out var local);
+                if (link < 0) continue;
+                m_Spline = s; m_Link = link; m_Local = local;
+                return;
+            }
+        }
+
+        public override void OnToolGUI(EditorWindow window)
+        {
+            if (!(window is SceneView)) return;
+            var e = Event.current;
+            int id = GUIUtility.GetControlID(FocusType.Passive);
+            HandleUtility.AddDefaultControl(id);
+            if (e.alt || Tools.viewToolActive) return;
+            if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape) { ToolManager.RestorePreviousPersistentTool(); e.Use(); return; }
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDown)
+            {
+                FindSpline(e.mousePosition);
+                if (m_Spline != null) { m_HoverValid = true; m_Hover = FloorPlanTools.World(m_Spline, m_Point >= 0 ? m_Spline.points[m_Point] : m_Local); }
+                else m_HoverValid = StartPoint(HandleUtility.GUIPointToWorldRay(e.mousePosition), out m_Hover);
+                if (e.type == EventType.MouseMove) SceneView.RepaintAll();
+            }
+            if (e.type == EventType.MouseDown && e.button == 0 && m_HoverValid && HandleUtility.nearestControl == id)
+            {
+                if (m_Spline != null)
+                {
+                    var s = m_Spline;
+                    Undo.RecordObject(s, "Draw spline");
+                    int start = SplineDrawTool.AddAt(s, m_Point, m_Point >= 0 ? -1 : m_Link, m_Local);
+                    BrushGenerators.MarkDirty(s);
+                    Selection.activeGameObject = s.gameObject;
+                    EditorApplication.delayCall += () => { if (s != null && Selection.activeGameObject == s.gameObject) SplineDrawTool.Begin(start); };
+                }
+                else SplineMenu.Create(m_Hover, null, true);
+                m_HoverValid = false;
+                BrushHooks.TakeClick();
+                e.Use();
+            }
+            if (e.type == EventType.Repaint && m_HoverValid)
+            {
+                bool joining = m_Spline != null; // white and larger on a spline's point or link, as when drawing
+                Handles.color = joining ? Color.white : FloorPlanTools.Line;
+                Handles.DotHandleCap(-1, m_Hover, Quaternion.identity, HandleUtility.GetHandleSize(m_Hover) * (joining ? 0.09f : 0.06f), EventType.Repaint);
+            }
+        }
+
+        /// <summary>
+        /// Where a new spline starts: on the surface under the mouse, raised so a new spline's profile rests on it, else on
+        /// the ground (y = 0); on the grid across the surface.
+        /// </summary>
+        static bool StartPoint(Ray ray, out Vector3 world)
+        {
+            float g = BrushSettings.instance.snapToGrid ? BrushSettings.instance.GridMeters : 0f;
+            float rest = Spline.DefaultSize.x * 0.5f; // a new spline's circle
+            if (BrushHooks.PickBrushSurface(ray, out var point, out var normal) != null)
+            {
+                world = SplineDrawTool.SnapAcross(point, normal, g) + normal * rest;
+                return true;
+            }
+            var ground = new Plane(Vector3.up, Vector3.zero);
+            if (!ground.Raycast(ray, out float t) || t <= 0f) { world = default; return false; }
+            world = SplineDrawTool.SnapAcross(ray.GetPoint(t), Vector3.up, g) + Vector3.up * rest;
+            return true;
         }
     }
 }
