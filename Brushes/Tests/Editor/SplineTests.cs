@@ -435,6 +435,37 @@ namespace CsgBrush.Tests
             }
         }
 
+        /// <summary>
+        /// A network drawn in the editor that broke junctions: a wide, low channel following the path, with rolls, one point
+        /// 6.75 m below the rest, junctions where two links meet at 40 degrees and a third runs almost straight on.
+        /// </summary>
+        [Test]
+        public void ADrawnNetworkWithRollsAndADeepJunctionHasItsFloorAllAlong()
+        {
+            BrushSettings.instance.snapToGrid = false;
+            var s = new GameObject("Spline").AddComponent<Spline>();
+            s.profile = Spline.Profile.UChannel; s.size = new Vector2(3.88f, 0.5f); s.thickness = 0.249f; s.orientation = Spline.Orientation.Follow;
+            var pts = new[] { new Vector3(0f, 0f, 0f), new Vector3(-5.25f, 0f, -6.5f), new Vector3(5.25f, -1f, -20.5f), new Vector3(28.25f, 0f, -18f), new Vector3(26.75f, 0f, -11f), new Vector3(12.5f, 0f, 3f), new Vector3(22f, 0f, 1.5f),
+                new Vector3(-2.25f, 1.5f, -14.25f), new Vector3(6.5f, 0.25f, -12.75f), new Vector3(16.5f, -6.75f, -18.75f), new Vector3(11f, 0f, -8.25f), new Vector3(4.05f, 0f, 0.97f), new Vector3(2f, -1.5f, -18.75f) };
+            var id = new int[14];
+            for (int i = 0; i < pts.Length; i++) id[i + 1] = s.AddPoint(pts[i]);
+            foreach (var (a, b) in new[] { (1, 2), (2, 8), (8, 13), (13, 3), (3, 10), (10, 4), (4, 5), (5, 7), (7, 6), (6, 12), (12, 1), (7, 11), (11, 9), (9, 8), (9, 10), (11, 12) }) s.AddLink(id[a], id[b]);
+            s.SetRoll(id[10], 13.6f); s.SetRoll(id[13], 10.4f); s.SetRoll(id[3], -4.6f);
+            Rebuild(s);
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            for (int link = 0; link < s.links.Count; link++)
+            {
+                float len = s.CurveLength(link);
+                for (float d = 0.25f; d < len - 0.1f; d += 0.25f)
+                {
+                    s.CurvePoint(link, d, out var p, out _);
+                    Assert.IsTrue(Physics.Raycast(p + Vector3.up * 0.3f, Vector3.down, out var hit, 1.5f), "a floor on link " + link + " at " + d.ToString("F2"));
+                    float below = p.y - hit.point.y; // the floor's top is at the path here (a 0.249 m floor in a 0.5 m channel); lower on a bank
+                    Assert.IsTrue(below > -0.06f && below < 0.35f, "the floor, not a wall or a lump, on link " + link + " at " + d.ToString("F2") + ": " + below.ToString("F2") + " m under the path, on " + hit.collider.name);
+                }
+            }
+        }
+
         [Test]
         public void ASharpCornerEndsFlatJustPastItsPoint()
         {
