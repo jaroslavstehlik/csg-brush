@@ -179,6 +179,8 @@ namespace CsgBrush
             public bool closed;
             /// <summary>What each end of an open run is: a free end of the path (true), or a junction or sharp corner.</summary>
             public bool startIsEnd, endIsEnd;
+            /// <summary>The ids of the points an open run starts and ends at.</summary>
+            public int startId = -1, endId = -1;
         }
 
         /// <summary>The most the roll changes along one piece, degrees: a link whose ends roll differently is cut finer.</summary>
@@ -243,7 +245,7 @@ namespace CsgBrush
                         else continue;
                     }
                     else startId = links[i].start;
-                    var run = new Run { startIsEnd = linksAt[startId].Count == 1 };
+                    var run = new Run { startIsEnd = linksAt[startId].Count == 1, startId = startId };
                     int link = i, at = startId;
                     while (link >= 0 && !used[link])
                     {
@@ -281,8 +283,8 @@ namespace CsgBrush
                         run.spans.Add((link, forward, from, run.points.Count - 1));
                         at = Far(link, at);
                         int next = Next(link, at);
-                        if (next < 0) { run.endIsEnd = linksAt[at].Count == 1; break; }
-                        if (used[next]) { run.closed = pass == 1 && at == startId; break; }
+                        if (next < 0) { run.endIsEnd = linksAt[at].Count == 1; run.endId = at; break; }
+                        if (used[next]) { run.closed = pass == 1 && at == startId; run.endId = at; break; }
                         link = next;
                     }
                     if (run.closed && run.points.Count > 1 && (run.points[0] - run.points[run.points.Count - 1]).sqrMagnitude < 1e-10f) { run.points.RemoveAt(run.points.Count - 1); run.rolls.RemoveAt(run.rolls.Count - 1); } // the last span ends on points.Count: the first point
@@ -450,42 +452,353 @@ namespace CsgBrush
             var outer = ProfileParts(false); var inner = IsHollow ? ProfileParts(true) : new List<Vector2[]>();
             float reachOut = HalfWidth(false), reachIn = HalfWidth(true);
             const float Hair = 0.01f;
+            var hubs = Hubs(runs, reachOut);
+            var pullStart = new float[runs.Count]; var pullEnd = new float[runs.Count];
+            foreach (var hub in hubs)
+                foreach (var arm in hub.arms)
+                    if (arm.through < 0) { if (arm.atStart) pullStart[arm.run] = arm.pull; else pullEnd[arm.run] = arm.pull; }
             int piece = 0;
             var cuts = new List<BrushSpec>();
             for (int r = 0; r < runs.Count; r++)
             {
                 var run = runs[r];
-                // solid: on past a junction or sharp corner, so the branches overlap
-                var solid = Extended(run, run.startIsEnd ? 0f : reachOut, run.endIsEnd ? 0f : reachOut);
-                var frames = Frames(solid, run.closed, run.rolls);
+                // solid: pulled back from its hubs to where it no longer overlaps the other arms there
+                var solid = Trimmed(run, -pullStart[r], -pullEnd[r], out var solidRolls);
+                var frames = Frames(solid, run.closed, solidRolls);
                 foreach (var part in outer) Sweep(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
+                // the profile where the run meets its hubs, or where it crosses one it passes through
+                foreach (var hub in hubs)
+                    foreach (var arm in hub.arms)
+                    {
+                        if (arm.run != r) continue;
+                        if (arm.through < 0)
+                        {
+                            int i = arm.atStart ? 0 : solid.Count - 1;
+                            arm.frame = Away(frames[arm.atStart ? 0 : frames.Count - 1], arm.direction);
+                            foreach (var part in outer) arm.outer.Add(Ring(solid, frames, false, part, i));
+                            foreach (var part in inner) arm.inner.Add(Ring(solid, frames, false, part, i));
+                            continue;
+                        }
+                        int from = solid.FindIndex(q => (q - hub.at).sqrMagnitude < 1e-10f);
+                        if (from < 0) continue;
+                        Frame frame = default;
+                        foreach (var part in outer) arm.outer.Add(RingAlong(solid, frames, run.closed, from, arm.sign, arm.pull, part, out frame));
+                        foreach (var part in inner) arm.inner.Add(RingAlong(solid, frames, run.closed, from, arm.sign, arm.pull, part, out frame));
+                        arm.frame = Away(frame, arm.direction);
+                    }
                 if (inner.Count == 0) continue;
-                // inside: to the middle of junctions; past an open end by a hair, short of a closed one by the wall
-                float s = run.startIsEnd ? (ends == Ends.Open ? Hair : -thickness) : reachIn;
-                float e = run.endIsEnd ? (ends == Ends.Open ? Hair : -thickness) : reachIn;
-                var hole = Extended(run, s, e);
-                var holeFrames = Frames(hole, run.closed, run.rolls);
+                // inside: a hair into its hubs; past an open end by a hair, short of a closed one by the wall
+                float s = run.startIsEnd ? (ends == Ends.Open ? Hair : -thickness) : Hair - pullStart[r];
+                float e = run.endIsEnd ? (ends == Ends.Open ? Hair : -thickness) : Hair - pullEnd[r];
+                var hole = Trimmed(run, s, e, out var holeRolls);
+                var holeFrames = Frames(hole, run.closed, holeRolls);
                 foreach (var part in inner) Sweep(hole, holeFrames, run.closed, part, reachIn, BrushOperation.Subtract, "Inside", ref piece, cuts);
+            }
+            // each hub: solid pieces joining its arms' ends, and pieces cutting their insides through
+            int hubCount = 0;
+            foreach (var hub in hubs)
+            {
+                hubCount++;
+                for (int k = 0; k < outer.Count; k++)
+                    foreach (var poly in HubPieces(hub, k, false, outer[k], reachOut))
+                        into.Add(new BrushSpec { name = "Junction " + hubCount, operation = BrushOperation.Add, polyhedron = poly, material = material });
+                for (int k = 0; k < inner.Count; k++)
+                    foreach (var poly in HubPieces(hub, k, true, inner[k], reachOut - thickness))
+                        cuts.Add(new BrushSpec { name = "Junction inside " + hubCount, operation = BrushOperation.Subtract, polyhedron = poly, material = material });
             }
             into.AddRange(cuts); // every inside after every solid piece: branches open into each other
         }
 
-        /// <summary>A run's points with its ends moved along the path: out past the end (positive) or back in (negative).</summary>
-        static List<Vector3> Extended(Run run, float atStart, float atEnd)
+        /// <summary>
+        /// A hub's pieces, solid or inside. Where three or more arms meet: each arm's profile carried in to where it meets
+        /// the others (<see cref="ArmPiece"/>), mitring the junction exactly (one hull would fill the corners between
+        /// neighbouring arms, or cut into their walls).
+        /// Where two arms meet at a corner: the first arm carried in, then the second (<see cref="TurnedIn"/>); and for the
+        /// solid one hull round both (<see cref="CornerHull"/>), which also fills where their profiles are turned against each other.
+        /// </summary>
+        IEnumerable<BrushPolyhedron> HubPieces(Hub hub, int part, bool inside, Vector2[] profile, float cap)
         {
-            var p = new List<Vector3>(run.points);
+            List<Vector3[]> Rings(Arm arm) => inside ? arm.inner : arm.outer;
+            foreach (var arm in hub.arms) if (part >= Rings(arm).Count) yield break;
+            if (hub.arms.Count == 2)
+            {
+                if (!inside) { var hull = CornerHull(hub, part, cap); if (hull != null) yield return hull; yield break; }
+                Arm first = hub.arms[0], second = hub.arms[1];
+                var a = ArmPiece(hub, first, Rings(first)[part], cap);
+                if (a == null) yield break;
+                yield return a;
+                foreach (var piece in TurnedIn(hub, first, second, profile, Rings(second)[part], cap)) yield return piece;
+                yield break;
+            }
+            foreach (var arm in hub.arms)
+            {
+                var piece = ArmPiece(hub, arm, Rings(arm)[part], cap);
+                if (piece != null) yield return piece;
+            }
+        }
+
+        /// <summary>
+        /// The solid where two arms meet: the hull of their ends, and of those ends carried back along each arm to the plane
+        /// halving the turn, but no further than <paramref name="cap"/> beyond the point. On the outside of a sharp corner that
+        /// keeps the corner's outline, ending flat.
+        /// </summary>
+        static BrushPolyhedron CornerHull(Hub hub, int part, float cap)
+        {
+            var pts = new List<Vector3>();
+            foreach (var arm in hub.arms) pts.AddRange(arm.outer[part]);
+            foreach (var arm in hub.arms)
+                foreach (var other in hub.arms)
+                {
+                    if (other == arm) continue;
+                    Vector3 a = arm.direction, b = other.direction;
+                    var normal = b - a; var outward = -(a + b);
+                    if (normal.sqrMagnitude < 1e-6f || outward.sqrMagnitude < 1e-6f) continue; // the same way, or straight on
+                    normal.Normalize(); outward.Normalize();
+                    float along = Vector3.Dot(a, normal), toward = -Vector3.Dot(a, outward); // going back along the arm: how fast it nears the mitre, and goes outward
+                    if (Mathf.Abs(along) < 1e-4f) continue;
+                    foreach (var q in arm.outer[part])
+                    {
+                        float toMitre = Vector3.Dot(q - hub.at, normal) / along;
+                        float toCap = toward > 1e-4f ? (cap - Vector3.Dot(q - hub.at, outward)) / toward : toMitre;
+                        pts.Add(q - a * Mathf.Max(0f, Mathf.Min(toMitre, toCap)));
+                    }
+                }
+            return HullOf(pts);
+        }
+
+        /// <summary>
+        /// The second arm's inside at a corner, up to its end (<paramref name="end"/>): the first arm's profile carried round
+        /// the corner by the least turn, which meets the first arm's piece on the mitre exactly (<see cref="ArmPiece"/>), then
+        /// turned to the second arm's own profile at most <see cref="MaxTwistDegrees"/> per piece, so no piece sags below the floor.
+        /// </summary>
+        static IEnumerable<BrushPolyhedron> TurnedIn(Hub hub, Arm first, Arm second, Vector2[] profile, Vector3[] end, float cap)
+        {
+            var b = second.direction;
+            var carriedUp = Vector3.ProjectOnPlane(Quaternion.FromToRotation(-first.direction, b) * first.frame.up, b).normalized;
+            float twist = Vector3.SignedAngle(carriedUp, second.frame.up, b);
+            int steps = Mathf.CeilToInt(Mathf.Abs(twist) / MaxTwistDegrees - 1e-3f);
+            if (steps <= 0)
+            {
+                var straight = ArmPiece(hub, second, end, cap);
+                if (straight != null) yield return straight;
+                yield break;
+            }
+            // carried in from where the inside's edges cross (its inner corner is on the mitre there), then turned to the end
+            float halfWidth = 0f; foreach (var p in profile) halfWidth = Mathf.Max(halfWidth, Mathf.Abs(p.x));
+            float half = Vector3.Angle(first.direction, b) * 0.5f * Mathf.Deg2Rad;
+            float s1 = float.MaxValue; foreach (var q in end) s1 = Mathf.Min(s1, Vector3.Dot(q - hub.at, b));
+            float s0 = Mathf.Clamp(halfWidth / Mathf.Max(Mathf.Tan(half), 1e-3f), 0f, Mathf.Max(0f, s1 - 0.02f * steps));
+            Vector3[] At(float s, float degrees)
+            {
+                var up = Quaternion.AngleAxis(degrees, b) * carriedUp;
+                return Square(hub.at + b * s, new Frame { forward = b, up = up, right = Vector3.Cross(up, b).normalized }, profile);
+            }
+            var last = At(s0, 0f);
+            var into = ArmPiece(hub, second, last, cap);
+            if (into != null) yield return into;
+            for (int j = 1; j <= steps; j++)
+            {
+                var next = j == steps ? end : At(Mathf.Lerp(s0, s1, j / (float)steps), twist * j / steps);
+                var pts = new List<Vector3>(last); pts.AddRange(next);
+                var piece = HullOf(pts);
+                if (piece != null) yield return piece;
+                last = next;
+            }
+        }
+
+        /// <summary>A frame turned to run along <paramref name="direction"/> (the profile is the same either way: it is symmetric).</summary>
+        static Frame Away(Frame f, Vector3 direction) => Vector3.Dot(f.forward, direction) >= 0f ? f : new Frame { forward = -f.forward, right = -f.right, up = f.up };
+
+        /// <summary>How far a hub's inside pieces reach past the plane between them: they overlap, leaving no sliver between.</summary>
+        const float Overlap = 0.01f;
+
+        /// <summary>
+        /// An arm's profile <paramref name="ring"/> (at its end) carried in toward the hub: on the arm's own side of the plane
+        /// halving its turn to each other arm (a little past it), and within <paramref name="cap"/> of the point beyond each pair.
+        /// </summary>
+        static BrushPolyhedron ArmPiece(Hub hub, Arm arm, Vector3[] ring, float cap)
+        {
+            var a = arm.direction;
+            float far = 0.1f;
+            foreach (var other in hub.arms)
+            {
+                if (other == arm) continue;
+                var b = other.direction; var normal = b - a; var outward = -(a + b);
+                if (normal.sqrMagnitude < 1e-6f) continue;
+                normal.Normalize();
+                float along = Vector3.Dot(a, normal), toward = outward.sqrMagnitude > 1e-6f ? -Vector3.Dot(a, outward.normalized) : 0f;
+                foreach (var q in ring)
+                {
+                    float toMitre = Vector3.Dot(q - hub.at, normal) / along;
+                    float toCap = toward > 1e-4f ? (cap - Vector3.Dot(q - hub.at, outward.normalized)) / toward : toMitre;
+                    far = Mathf.Max(far, Mathf.Min(toMitre, toCap) + 0.1f);
+                }
+            }
+            var pts = new List<Vector3>(ring); foreach (var q in ring) pts.Add(q - a * far);
+            var poly = HullOf(pts);
+            foreach (var other in hub.arms)
+            {
+                if (poly == null) return null;
+                if (other == arm) continue;
+                var b = other.direction; var normal = b - a; var outward = -(a + b);
+                if (normal.sqrMagnitude < 1e-6f) continue;
+                poly = Clip(poly, hub.at, normal.normalized, Overlap);
+                if (poly != null && outward.sqrMagnitude > 1e-6f) poly = Clip(poly, hub.at, outward.normalized, cap);
+            }
+            return poly;
+        }
+
+        /// <summary>A convex brush cut to the side of a plane where <c>dot(q - at, direction)</c> is at most <paramref name="limit"/>; null when nothing is left.</summary>
+        static BrushPolyhedron Clip(BrushPolyhedron poly, Vector3 at, Vector3 direction, float limit)
+        {
+            var v = poly.vertices; var d = new float[v.Length];
+            bool any = false, all = true;
+            for (int i = 0; i < v.Length; i++) { d[i] = Vector3.Dot(v[i] - at, direction) - limit; if (d[i] > 1e-5f) any = true; else all = false; }
+            if (!any) return poly;
+            if (all) return null;
+            var pts = new List<Vector3>();
+            for (int i = 0; i < v.Length; i++) if (d[i] <= 1e-5f) pts.Add(v[i]);
+            foreach (var f in poly.faces)
+                for (int k = 0; k < f.indices.Length; k++)
+                {
+                    int i = f.indices[k], j = f.indices[(k + 1) % f.indices.Length];
+                    if ((d[i] < 0f && d[j] > 0f) || (d[i] > 0f && d[j] < 0f)) pts.Add(Vector3.Lerp(v[i], v[j], d[i] / (d[i] - d[j])));
+                }
+            return pts.Count >= 4 ? HullOf(pts) : null;
+        }
+
+        /// <summary>
+        /// A place where runs meet and can't simply be mitred: a junction, or a corner too sharp or too twisted for one. Its
+        /// arms are pulled back to where they stop overlapping, and the gap is filled by one convex piece: the hull of the
+        /// arms' ends (and its inside is cut by the hull of their insides).
+        /// </summary>
+        sealed class Hub
+        {
+            public Vector3 at;
+            public readonly List<Arm> arms = new List<Arm>();
+        }
+
+        /// <summary>One way out of a hub: a run's end (<see cref="through"/> is -1), or one side of a run passing through it.</summary>
+        sealed class Arm
+        {
+            public int run; public bool atStart;
+            /// <summary>For a run passing through: the hub's index in its points, and which way along them (+1 or -1).</summary>
+            public int through = -1, sign;
+            public Vector3 direction;
+            /// <summary>The profile's frame at the arm's end, running away from the hub.</summary>
+            public Frame frame;
+            /// <summary>How far from the hub the arm's end is: where its sides stop crossing its neighbours'.</summary>
+            public float pull;
+            public readonly List<Vector3[]> outer = new List<Vector3[]>(), inner = new List<Vector3[]>();
+        }
+
+        /// <summary>
+        /// The hubs: every point where an open run ends without being a free end of the path. Each arm is pulled back by
+        /// half the width over the tangent of half the angle to its nearest neighbour: there its sides clear theirs.
+        /// </summary>
+        List<Hub> Hubs(List<Run> runs, float halfWidth)
+        {
+            var hubs = new List<Hub>(); var byId = new Dictionary<int, Hub>();
+            Hub At(int id)
+            {
+                if (!byId.TryGetValue(id, out var hub)) { int index = PointIndex(id); if (index < 0) return null; byId[id] = hub = new Hub { at = Point(index) }; hubs.Add(hub); }
+                return hub;
+            }
+            for (int r = 0; r < runs.Count; r++)
+            {
+                var run = runs[r]; int n = run.points.Count;
+                if (run.closed || n < 2) continue;
+                if (!run.startIsEnd) At(run.startId)?.arms.Add(new Arm { run = r, atStart = true, direction = (run.points[1] - run.points[0]).normalized });
+                if (!run.endIsEnd) At(run.endId)?.arms.Add(new Arm { run = r, atStart = false, direction = (run.points[n - 2] - run.points[n - 1]).normalized });
+            }
+            // a run going straight through a Smooth junction: both ways out of it are arms
+            for (int r = 0; r < runs.Count; r++)
+            {
+                var run = runs[r]; int n = run.points.Count;
+                foreach (var hub in hubs)
+                    for (int i = run.closed ? 0 : 1; i < (run.closed ? n : n - 1); i++)
+                        if ((run.points[i] - hub.at).sqrMagnitude < 1e-10f)
+                        {
+                            hub.arms.Add(new Arm { run = r, through = i, sign = 1, direction = (run.points[(i + 1) % n] - run.points[i]).normalized });
+                            hub.arms.Add(new Arm { run = r, through = i, sign = -1, direction = (run.points[(i - 1 + n) % n] - run.points[i]).normalized });
+                        }
+            }
+            foreach (var hub in hubs)
+                foreach (var arm in hub.arms)
+                {
+                    float least = 180f;
+                    foreach (var other in hub.arms) if (other != arm) least = Mathf.Min(least, Vector3.Angle(arm.direction, other.direction));
+                    float pull = halfWidth / Mathf.Tan(Mathf.Max(least, 1f) * 0.5f * Mathf.Deg2Rad);
+                    var run = runs[arm.run];
+                    float room;
+                    if (arm.through >= 0) room = run.closed ? 0.45f * RunLength(run) : 0.9f * Along(run.points, arm.through, arm.sign);
+                    else room = RunLength(run) * ((arm.atStart ? run.endIsEnd : run.startIsEnd) ? 0.9f : 0.45f); // shared with a hub at its other end
+                    arm.pull = Mathf.Clamp(pull, 0f, room);
+                }
+            return hubs;
+        }
+
+        /// <summary>The length of an open run's points from index <paramref name="from"/> to its end one way (+1) or the other.</summary>
+        static float Along(List<Vector3> p, int from, int sign)
+        {
+            float len = 0f;
+            for (int i = from; i + sign >= 0 && i + sign < p.Count; i += sign) len += (p[i + sign] - p[i]).magnitude;
+            return len;
+        }
+
+        /// <summary>The profile square to the path, <paramref name="distance"/> along it from point <paramref name="from"/> one way (+1) or the other.</summary>
+        static Vector3[] RingAlong(List<Vector3> p, List<Frame> frames, bool closed, int from, int sign, float distance, Vector2[] part, out Frame frame)
+        {
+            int n = p.Count, count = frames.Count, i = from;
+            for (int step = 0; step < n; step++)
+            {
+                int j = closed ? ((i + sign) % n + n) % n : i + sign;
+                if (j < 0 || j >= n) break;
+                int k = sign > 0 ? i : j; // piece k runs from point k to the next
+                var f = frames[((k % count) + count) % count];
+                float seg = (p[j] - p[i]).magnitude;
+                bool last = !closed && (j + sign < 0 || j + sign >= n);
+                frame = f;
+                if (distance <= seg || last) return Square(Vector3.Lerp(p[i], p[j], seg > 1e-9f ? Mathf.Clamp01(distance / seg) : 0f), f, part);
+                distance -= seg; i = j;
+            }
+            frame = frames[Mathf.Clamp(sign > 0 ? i : i - 1, 0, count - 1)];
+            return Square(p[i], frame, part);
+        }
+
+        /// <summary>
+        /// A run's points (and rolls) with its ends moved along the path: out past the end along its last piece (positive), or
+        /// back in along the path (negative), never past nine tenths of the last piece left.
+        /// </summary>
+        static List<Vector3> Trimmed(Run run, float atStart, float atEnd, out List<float> rolls)
+        {
+            var p = new List<Vector3>(run.points); rolls = new List<float>(run.rolls);
             if (run.closed || p.Count < 2) return p;
-            Move(p, 0, 1, atStart);
-            Move(p, p.Count - 1, p.Count - 2, atEnd);
+            while (rolls.Count < p.Count) rolls.Add(0f);
+            Shift(p, rolls, atStart);
+            p.Reverse(); rolls.Reverse();
+            Shift(p, rolls, atEnd);
+            p.Reverse(); rolls.Reverse();
             return p;
         }
 
-        static void Move(List<Vector3> p, int end, int neighbour, float by)
+        static void Shift(List<Vector3> p, List<float> rolls, float by)
         {
-            var d = p[end] - p[neighbour]; float len = d.magnitude;
-            if (len < 1e-6f || Mathf.Abs(by) < 1e-6f) return;
-            by = Mathf.Max(by, -len * 0.5f); // never past the middle of the last piece
-            p[end] += d / len * by;
+            if (Mathf.Abs(by) < 1e-6f) return;
+            if (by > 0f)
+            {
+                var d = p[0] - p[1]; float len = d.magnitude;
+                if (len > 1e-6f) p[0] += d / len * by;
+                return;
+            }
+            float cut = -by;
+            while (p.Count > 2 && cut >= (p[1] - p[0]).magnitude - 1e-4f) { cut = Mathf.Max(0f, cut - (p[1] - p[0]).magnitude); p.RemoveAt(0); rolls.RemoveAt(0); }
+            if (cut <= 1e-4f) return;
+            float last = (p[1] - p[0]).magnitude;
+            if (last < 1e-6f) return;
+            float t = Mathf.Min(cut / last, 0.9f);
+            p[0] = Vector3.Lerp(p[0], p[1], t);
+            rolls[0] = Mathf.LerpAngle(rolls[0], rolls[1], t);
         }
 
         /// <summary>The profile's frame along one straight piece: its direction, and the profile's right and up.</summary>
@@ -617,6 +930,12 @@ namespace CsgBrush
         public static BrushPolyhedron Hull(Vector3[] a, Vector3[] b)
         {
             var pts = new List<Vector3>(a.Length + b.Length); pts.AddRange(a); pts.AddRange(b);
+            return HullOf(pts);
+        }
+
+        /// <summary>The convex hull of any points, as a sound brush; null when it comes out flat or unsound.</summary>
+        public static BrushPolyhedron HullOf(List<Vector3> pts)
+        {
             float scale = 1f; foreach (var q in pts) scale = Mathf.Max(scale, Mathf.Abs(q.x), Mathf.Abs(q.y), Mathf.Abs(q.z));
             var faces = CsgBrush.Colliders.ConvexPolytope.ConvexHullFaces(pts, 1e-5f * scale);
             if (faces == null) { LastHullProblem = "flat"; return null; }

@@ -332,6 +332,48 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void ChannelsCrossingAtUnevenAnglesMeetWithoutStubs()
+        {
+            var s = Channel(new Vector3(0f, 1f, 0f), new Vector3(8f, 1f, 1.5f));
+            int hub = s.pointIds[0];
+            var ends = new[] { new Vector3(-2f, 1f, 8f), new Vector3(-8f, 1f, -1f), new Vector3(2.5f, 1f, -8f) };
+            foreach (var e in ends) s.AddLink(hub, s.AddPoint(e));
+            Rebuild(s);
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            var node = new Vector3(0f, 1f, 0f);
+            Assert.IsTrue(Solid(new Vector3(0f, 0.75f, 0f)), "a floor under the crossing");
+            Assert.IsFalse(Solid(node), "open in the middle");
+            // between each two neighbouring arms: open up to where their insides meet, a wall to where their outsides meet, then nothing
+            var dirs = new List<Vector3> { new Vector3(8f, 0f, 1.5f).normalized };
+            foreach (var e in ends) dirs.Add(new Vector3(e.x, 0f, e.z).normalized);
+            dirs.Sort((a, b) => Mathf.Atan2(a.z, a.x).CompareTo(Mathf.Atan2(b.z, b.x)));
+            for (int i = 0; i < dirs.Count; i++)
+            {
+                Vector3 a = dirs[i], b = dirs[(i + 1) % dirs.Count];
+                var between = (a + b).normalized; float half = Vector3.Angle(a, b) * 0.5f * Mathf.Deg2Rad;
+                float inside = 0.9f / Mathf.Sin(half), outside = 1f / Mathf.Sin(half);
+                Assert.IsFalse(Solid(node + between * (inside - 0.05f)), "open into the corner between arms " + i);
+                Assert.IsTrue(Solid(node + between * (inside + outside) * 0.5f), "the wall at that corner");
+                Assert.IsFalse(Solid(node + between * (outside + 0.1f)), "and nothing sticking out past it, at " + (node + between * (outside + 0.1f)) + " between arms " + i);
+            }
+        }
+
+        [Test]
+        public void ASharpCornerEndsFlatJustPastItsPoint()
+        {
+            var s = Channel(new Vector3(0f, 1f, -3f), new Vector3(8f, 1f, 0f), new Vector3(0f, 1f, 3f));
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            Assert.IsFalse(Solid(new Vector3(8f, 1f, 0f)), "the channel reaches the point");
+            Assert.IsTrue(Solid(new Vector3(8.5f, 0.75f, 0f)), "with a floor past it");
+            Assert.IsTrue(Solid(new Vector3(8.95f, 1f, 0f)), "an end wall half the width past it");
+            Assert.IsFalse(Solid(new Vector3(9.1f, 1f, 0f)), "and no spike beyond");
+            // the two sides part where their outsides meet, 1 / sin(half the angle) from the point
+            float meet = 1f / Mathf.Sin(Mathf.Atan2(3f, 8f));
+            Assert.IsTrue(Solid(new Vector3(8f - meet + 0.15f, 1f, 0f)), "a wall between the sides");
+            Assert.IsFalse(Solid(new Vector3(8f - meet + 0.4f, 1f, 0f)), "open on the turning side of it");
+        }
+
+        [Test]
         public void DrawingOnALinkSplitsItAndBranchesFromThere()
         {
             var s = Make(Spline.Profile.Circle, new Vector2(0.4f, 0.4f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
