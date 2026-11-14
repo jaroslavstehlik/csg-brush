@@ -249,14 +249,17 @@ namespace CsgBrush.Tests
             s.orientation = orientation; s.thickness = 0.1f; Rebuild(s);
             Specs(s);
             Assert.AreEqual(0, s.droppedPieces, "no piece left out");
-            float probe = profile == Spline.Profile.UChannel ? -0.1f : 0f; // a channel is solid at its bottom
+            // a channel is solid at its floor: 0.05 to 0.15 below the path, every piece a true slice of the profile
+            var band = profile == Spline.Profile.UChannel ? new[] { -0.1f } : new[] { 0f };
             for (int link = 0; link < s.links.Count; link++)
             {
                 float len = s.CurveLength(link);
                 for (float d = 0.3f; d < len - 0.3f; d += 0.25f)
                 {
                     Assert.IsTrue(s.PoseAt(link, d, out var pose));
-                    Assert.IsTrue(Solid(s.transform.TransformPoint(pose.position + pose.up * probe)), "solid on link " + link + " at " + d.ToString("F2"));
+                    bool solid = false;
+                    foreach (var y in band) solid |= Solid(s.transform.TransformPoint(pose.position + pose.up * y));
+                    Assert.IsTrue(solid, "solid on link " + link + " at " + d.ToString("F2"));
                 }
             }
         }
@@ -281,6 +284,51 @@ namespace CsgBrush.Tests
             Undo.PerformUndo(); Rebuild(s);
             Assert.AreEqual(0, s.rolls.Count, "undo takes the rolls back");
             s.RemovePointAt(1); Assert.AreEqual(0, s.rolls.FindAll(r => r.id == 2).Count);
+        }
+
+        // a channel 2 m wide and 0.6 m high, walls 0.1 m: its floor from y 0.7 to 0.8, its sides up to 1.3
+        static Spline Channel(params Vector3[] path)
+        {
+            var s = Make(Spline.Profile.UChannel, new Vector2(2f, 0.6f), false, path);
+            s.thickness = 0.1f; s.orientation = Spline.Orientation.Upright; Rebuild(s);
+            return s;
+        }
+
+        [Test]
+        public void ChannelsCrossingAtATOpenIntoEachOther([Values(false, true)] bool smoothJunction)
+        {
+            var s = Channel(new Vector3(-5f, 1f, 0f), new Vector3(5f, 1f, 0f));
+            int mid = s.SplitLink(0, new Vector3(0f, 1f, 0f));
+            int branch = s.AddPoint(new Vector3(0f, 1f, -5f)); s.AddLink(mid, branch);
+            s.SetSmooth(mid, smoothJunction); Rebuild(s);
+            Assert.IsTrue(Solid(new Vector3(0f, 0.75f, 0f)) && Solid(new Vector3(0f, 0.75f, -0.8f)), "the floor runs on under the junction");
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, 0f)), "open where they meet");
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, -0.95f)), "the branch opens the main channel's near wall");
+            Assert.IsTrue(Solid(new Vector3(0f, 1f, 0.95f)), "its far wall stays");
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, 1.1f)), "and nothing of the branch sticks out beyond it");
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, -2f)), "the branch is a channel");
+            Assert.IsTrue(Solid(new Vector3(0.95f, 1f, -2f)) && Solid(new Vector3(-0.95f, 1f, -2f)), "with its walls");
+            Specs(s); Assert.AreEqual(0, s.unmitredPieces, "every piece mitred");
+        }
+
+        [Test]
+        public void AChannelTurnsACornerCleanly()
+        {
+            var s = Channel(new Vector3(-5f, 1f, 0f), new Vector3(0f, 1f, 0f), new Vector3(0f, 1f, 5f));
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, 0f)) || Solid(new Vector3(-0.5f, 1f, 0.5f)) || Solid(new Vector3(0.5f, 1f, -0.5f)), "the channel goes round the corner");
+            Assert.IsTrue(Solid(new Vector3(0.95f, 1f, -0.95f)), "the outer corner is walled");
+            Assert.IsFalse(Solid(new Vector3(1.1f, 1f, -1.1f)) || Solid(new Vector3(1.1f, 1f, 0f)) || Solid(new Vector3(0f, 1f, -1.1f)), "with nothing sticking out");
+            Assert.IsTrue(Solid(new Vector3(-0.95f, 1f, 0.95f)), "and the inner corner");
+        }
+
+        [Test]
+        public void AChannelIsOpenOrWalledAtItsEnds([Values(Spline.Ends.Open, Spline.Ends.Closed)] Spline.Ends ends)
+        {
+            var s = Channel(new Vector3(0f, 1f, 0f), new Vector3(5f, 1f, 0f));
+            s.ends = ends; Rebuild(s);
+            Assert.IsTrue(Solid(new Vector3(0.05f, 0.75f, 0f)), "its floor reaches the end");
+            Assert.AreEqual(ends == Spline.Ends.Closed, Solid(new Vector3(0.05f, 1f, 0f)), "walled across when closed");
+            Assert.IsFalse(Solid(new Vector3(2.5f, 1.2f, 0f)), "open on top");
         }
 
         [Test]

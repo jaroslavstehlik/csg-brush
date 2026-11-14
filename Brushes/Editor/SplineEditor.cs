@@ -30,7 +30,11 @@ namespace CsgBrush.Editor
                     EditorGUI.indentLevel--;
                 }
             }
-            else EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
+            else
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("ends"));
+            }
             EditorGUILayout.PropertyField(serializedObject.FindProperty("orientation"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("material"));
             serializedObject.ApplyModifiedProperties();

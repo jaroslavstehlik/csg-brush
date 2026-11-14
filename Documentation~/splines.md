@@ -37,11 +37,11 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 
 | **Where** | **Result** |
 | :--- | :--- |
-| A corner | The pieces meet at a mitre, like the corner of a picture frame. A corner sharper than 120 degrees is filled by overlapping the two sides instead. Where a short piece of a wide profile turns up or down as well as sideways, its mitres would cross, so that piece overlaps its neighbours instead. |
+| A corner | The pieces meet at a mitre, like the corner of a picture frame: each piece is its profile cut by the planes halving the turns at its ends. A corner sharper than 120 degrees is filled by overlapping the two sides instead, as is an **Upright** corner that climbs or falls while it turns (keeping both sides level would twist one of them). Make such a corner Smooth for a clean curve. |
 | A smooth point where three or more links meet | The two links that are most nearly opposite run through it in one piece. The other links end there. |
 | A corner where three or more links meet | Every link ends there. |
-| A junction of hollow links | The insides are cut after all the solid pieces, so the branches open into each other. |
-| An end of a hollow spline | Open, or capped by the wall thickness, as set by **Ends**. |
+| A junction of hollow links or channels | The insides are cut after all the solid pieces, so the branches open into each other. A branch ends flush with the far side of what it joins. |
+| An end of a hollow spline or a channel | Open, or capped by the wall thickness, as set by **Ends**. |
 
 ## Spline component reference
 
@@ -50,9 +50,9 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 | **Profile** | The shape swept along the path.<br/>&#8226; **Circle**: A round tube.<br/>&#8226; **Rectangle**: A box section.<br/>&#8226; **U Channel**: An open channel facing up. |
 | **Size** | The width and height of the profile, in metres. A circle's diameter is the width. |
 | **Sides** | The number of sides of a circle. **0** works them out from the curve tolerance, with at least 6. Visible for **Circle**. |
-| **Hollow** | Cuts out the inside, leaving a wall of the thickness below. Not available for **U Channel**, which is open already. |
+| **Hollow** | Cuts out the inside, leaving a wall of the thickness below. Not available for **U Channel**, which always has its channel cut out. |
 | **Thickness** | The wall of a hollow profile or a channel, in metres. |
-| **Ends** | Whether a hollow spline is open or capped where the path ends. |
+| **Ends** | Whether a hollow spline or a channel is open or capped where the path ends. |
 | **Orientation** | How the profile turns along the path.<br/>&#8226; **Follow**: The profile turns with the path without twisting. This is the default.<br/>&#8226; **Upright**: The top of the profile stays up. |
 | **Material** | The material of every piece. When empty, pieces use the project's default material. |
 | **Override tolerance** | Uses its own curve tolerance instead of the project's **Curve tolerance** (**Project Settings** > **Brushes**). |

@@ -299,6 +299,12 @@ namespace CsgBrush.Colliders
 
         struct Tri { public int a, b, c; public Vector3 n; public float d; }
 
+        /// <summary>
+        /// The convex hull of a small set of points: its faces as polygons of point indices, counter-clockwise seen from
+        /// outside, coplanar triangles merged. Null when the points are degenerate (flat or fewer than four).
+        /// </summary>
+        public static List<int[]> ConvexHullFaces(List<Vector3> points, float epsilon) => HullFaces(points, epsilon);
+
         /// <summary>Incremental convex hull; returns polygons (counter-clockwise seen from outside) or null when degenerate.</summary>
         static List<int[]> HullFaces(List<Vector3> pts, float eps)
         {

@@ -40,7 +40,7 @@ namespace CsgBrush
         [Tooltip("Sides of a circle; 0 works them out from the curve tolerance.")] public int sides = 0;
         [Tooltip("Cut out the inside, leaving a wall of the thickness below.")] public bool hollow;
         [Tooltip("Metres: the wall of a hollow profile or a channel.")] public float thickness = 0.05f;
-        [Tooltip("Whether a hollow profile is open or capped where the path ends.")] public Ends ends = Ends.Open;
+        [Tooltip("Whether a hollow profile or a channel is open or capped where the path ends.")] public Ends ends = Ends.Open;
         [Tooltip("How the profile turns along the path.")] public Orientation orientation = Orientation.Follow;
         [Tooltip("Empty uses the project's default material.")] public Material material;
 
@@ -75,8 +75,8 @@ namespace CsgBrush
             rolls.RemoveAll(r => PointIndex(r.id) < 0);
         }
 
-        /// <summary>Does the profile have an inside to cut (a channel is open already)?</summary>
-        public bool IsHollow => hollow && profile != Profile.UChannel;
+        /// <summary>Does the profile have an inside to cut: a hollow one, or a channel (a block with its channel cut out)?</summary>
+        public bool IsHollow => profile == Profile.UChannel || hollow;
 
         protected override void OnValidate()
         {
@@ -122,6 +122,15 @@ namespace CsgBrush
             var parts = new List<Vector2[]>();
             float w = size.x, hgt = size.y, t = thickness;
             if (inner) { w -= 2f * t; hgt -= 2f * t; if (w <= 1e-3f || hgt <= 1e-3f) return parts; }
+            if (profile == Profile.UChannel)
+            {
+                // a channel is a block with the channel cut out, open at the top: crossing channels open into each other
+                float w0 = size.x, h0 = size.y;
+                if (!inner) { parts.Add(Rect(-w0 * 0.5f, -h0 * 0.5f, w0 * 0.5f, h0 * 0.5f)); return parts; }
+                if (w0 - 2f * t <= 1e-3f || h0 - t <= 1e-3f) return parts;
+                parts.Add(Rect(-w0 * 0.5f + t, -h0 * 0.5f + t, w0 * 0.5f - t, h0 * (0.5f + OpenTop) + 0.01f));
+                return parts;
+            }
             switch (profile)
             {
                 case Profile.Circle:
@@ -134,24 +143,26 @@ namespace CsgBrush
                 case Profile.Rectangle:
                     parts.Add(Rect(-w * 0.5f, -hgt * 0.5f, w * 0.5f, hgt * 0.5f));
                     break;
-                case Profile.UChannel:
-                    if (inner) break;
-                    float x0 = -w * 0.5f, x1 = w * 0.5f, y0 = -hgt * 0.5f, y1 = hgt * 0.5f;
-                    parts.Add(Rect(x0, y0, x1, y0 + t));     // the bottom
-                    parts.Add(Rect(x0, y0 + t, x0 + t, y1)); // the sides, standing on it
-                    parts.Add(Rect(x1 - t, y0 + t, x1, y1));
-                    break;
             }
             return parts;
         }
 
         static Vector2[] Rect(float x0, float y0, float x1, float y1) => new[] { new Vector2(x0, y0), new Vector2(x1, y0), new Vector2(x1, y1), new Vector2(x0, y1) };
 
-        /// <summary>How far the profile reaches from the path: branches overlap by this much where they meet.</summary>
-        float Reach(bool inner)
+        /// <summary>
+        /// How far a channel's cut reaches above its sides, as a share of its height: a piece twisted by a turn that also
+        /// climbs (Upright) bulges a little, and the cut must clear it, or a thin lid would cover the channel.
+        /// </summary>
+        const float OpenTop = 0.5f;
+
+        /// <summary>
+        /// Half the profile's width (outer or inner): how far a run goes on past a junction or a folded corner. A branch's end
+        /// is then flush with the far side of what it joins, and an L corner is filled to its outer corner.
+        /// </summary>
+        float HalfWidth(bool inner)
         {
             float r = 0f;
-            foreach (var part in ProfileParts(inner)) foreach (var p in part) r = Mathf.Max(r, p.magnitude);
+            foreach (var part in ProfileParts(inner)) foreach (var p in part) r = Mathf.Max(r, Mathf.Abs(p.x));
             return r;
         }
 
@@ -169,6 +180,9 @@ namespace CsgBrush
             /// <summary>What each end of an open run is: a free end of the path (true), or a junction or sharp corner.</summary>
             public bool startIsEnd, endIsEnd;
         }
+
+        /// <summary>The most the roll changes along one piece, degrees: a link whose ends roll differently is cut finer.</summary>
+        public const float MaxRollStep = 10f;
 
         /// <summary>A corner turning more than this breaks the path: the two sides overlap instead of a spiking mitre.</summary>
         public const float SharpTurnDegrees = 120f;
@@ -201,6 +215,7 @@ namespace CsgBrush
                 {
                     int other = here[0] == link ? here[1] : here[0];
                     if (!IsSmooth(atId) && TurnDegrees(link, other, atId) > SharpTurnDegrees) return -1;
+                    if (!IsSmooth(atId) && orientation == Orientation.Upright && UprightTwist(-Away(link, atId), Away(other, atId)) > MaxTwistDegrees) return -1;
                     return other;
                 }
                 if (here.Count < 3 || !IsSmooth(atId)) return -1;
@@ -237,10 +252,26 @@ namespace CsgBrush
                         bool forward = links[link].start == at;
                         int from = Mathf.Max(0, run.points.Count - 1);
                         float r0 = Roll(at), r1 = Roll(Far(link, at)), total = PathLength(path), along = 0f;
+                        // where the roll changes, pieces no longer than MaxRollStep of it each: the profile turns gradually
+                        int steps = Mathf.CeilToInt(Mathf.Abs(Mathf.DeltaAngle(r0, r1)) / MaxRollStep);
                         for (int k = 0; k < path.Length; k++)
                         {
                             var q = path[forward ? k : path.Length - 1 - k];
-                            if (k > 0) along += (q - path[forward ? k - 1 : path.Length - k]).magnitude;
+                            int parts = 1;
+                            Vector3 prev = q;
+                            if (k > 0)
+                            {
+                                prev = path[forward ? k - 1 : path.Length - k];
+                                float len = (q - prev).magnitude;
+                                if (steps > 0 && total > 1e-6f) parts = Mathf.Max(1, Mathf.CeilToInt(steps * len / total));
+                                for (int j = 1; j < parts; j++)
+                                {
+                                    var mid = Vector3.Lerp(prev, q, j / (float)parts);
+                                    run.points.Add(mid);
+                                    run.rolls.Add(Mathf.LerpAngle(r0, r1, (along + len * j / parts) / total));
+                                }
+                                along += len;
+                            }
                             if (run.points.Count == 0 || (run.points[run.points.Count - 1] - q).sqrMagnitude > 1e-10f)
                             {
                                 run.points.Add(q);
@@ -270,6 +301,23 @@ namespace CsgBrush
         }
 
         float TurnDegrees(int arriving, int leaving, int atId) => Vector3.Angle(-Away(arriving, atId), Away(leaving, atId));
+
+        /// <summary>
+        /// A corner sharing one mitre between two Upright pieces twists one of them by this much (degrees): how far the level
+        /// frames on its two sides differ from the corner's own bend. Large at a corner that climbs or falls while it turns.
+        /// </summary>
+        static float UprightTwist(Vector3 arriving, Vector3 leaving)
+        {
+            Vector3 Up(Vector3 d) { var r = Vector3.Cross(Vector3.up, d); if (r.sqrMagnitude < 1e-6f) return Vector3.up; return Vector3.Cross(d, r.normalized).normalized; }
+            var carried = Quaternion.FromToRotation(arriving, leaving) * Up(arriving);
+            return Mathf.Abs(Vector3.SignedAngle(carried, Up(leaving), leaving));
+        }
+
+        /// <summary>
+        /// An Upright corner twisting a piece more than this breaks the path instead: each side keeps its own profile and runs
+        /// on by half its width past the corner, so the two overlap there and every piece is a true slice of its profile.
+        /// </summary>
+        public const float MaxTwistDegrees = 5f;
 
         // ------------------------------------------------------------------ places on the path
 
@@ -303,7 +351,15 @@ namespace CsgBrush
             var at = Point(index);
             foreach (var run in Runs())
                 for (int i = 0; i < run.points.Count; i++)
-                    if ((run.points[i] - at).sqrMagnitude < 1e-10f) { forward = Frames(run.points, run.closed)[i].forward; return true; }
+                    if ((run.points[i] - at).sqrMagnitude < 1e-10f)
+                    {
+                        int n = run.points.Count;
+                        var outgoing = run.closed || i + 1 < n ? run.points[(i + 1) % n] - run.points[i] : run.points[i] - run.points[i - 1];
+                        var incoming = run.closed || i > 0 ? run.points[i] - run.points[(i - 1 + n) % n] : outgoing;
+                        var halfway = incoming.normalized + outgoing.normalized;
+                        forward = halfway.sqrMagnitude > 1e-8f ? halfway.normalized : outgoing.normalized;
+                        return true;
+                    }
             return false;
         }
 
@@ -332,13 +388,9 @@ namespace CsgBrush
             {
                 Vector3 a = run.points[i % n], b = run.points[(i + 1) % n]; float seg = (b - a).magnitude;
                 if (d > seg && i + 1 < to) { d -= seg; continue; }
-                float t = seg > 1e-9f ? Mathf.Clamp01(d / seg) : 0f;
-                pose.position = Vector3.Lerp(a, b, t);
-                pose.forward = seg > 1e-9f ? (b - a) / seg : frames[i % n].forward;
-                var up = Vector3.Lerp(frames[i % n].up, frames[(i + 1) % n].up, t);
-                up -= pose.forward * Vector3.Dot(up, pose.forward);
-                pose.up = up.sqrMagnitude > 1e-8f ? up.normalized : frames[i % n].up;
-                pose.right = Vector3.Cross(pose.up, pose.forward).normalized;
+                var f = frames[Mathf.Clamp(i, 0, frames.Count - 1) % frames.Count]; // the piece's own frame: as it was swept
+                pose.position = Vector3.Lerp(a, b, seg > 1e-9f ? Mathf.Clamp01(d / seg) : 0f);
+                pose.forward = f.forward; pose.right = f.right; pose.up = f.up;
                 break;
             }
             return pose;
@@ -388,13 +440,15 @@ namespace CsgBrush
 
         /// <summary>Pieces the last build could not make (their two ends gave no sound shape). Should be 0.</summary>
         [System.NonSerialized] public int droppedPieces;
+        /// <summary>Pieces the last build made straight because their mitred ends crossed (they overlap their neighbours).</summary>
+        [System.NonSerialized] public int unmitredPieces;
 
         public override void Describe(List<BrushSpec> into)
         {
-            droppedPieces = 0;
+            droppedPieces = 0; unmitredPieces = 0;
             var runs = Runs();
             var outer = ProfileParts(false); var inner = IsHollow ? ProfileParts(true) : new List<Vector2[]>();
-            float reachOut = Reach(false), reachIn = Reach(true);
+            float reachOut = HalfWidth(false), reachIn = HalfWidth(true);
             const float Hair = 0.01f;
             int piece = 0;
             var cuts = new List<BrushSpec>();
@@ -434,112 +488,160 @@ namespace CsgBrush
             p[end] += d / len * by;
         }
 
-        /// <summary>Per point: the joint's direction, the profile's right and up there, and the mitre (stretch across the turn).</summary>
-        struct Frame { public Vector3 forward, right, up, bend; public float stretch; }
+        /// <summary>The profile's frame along one straight piece: its direction, and the profile's right and up.</summary>
+        struct Frame { public Vector3 forward, right, up; }
 
+        /// <summary>
+        /// One frame per straight piece of a run (piece i runs from point i to the next). Upright: right is level. Follow: each
+        /// piece's frame is the last one turned by the smallest rotation onto its direction (round a loop the leftover turn
+        /// is spread evenly), which makes the mitres between pieces exact. Then each piece is rolled by its points' rolls.
+        /// </summary>
         List<Frame> Frames(List<Vector3> p, bool closed, List<float> rolls = null)
         {
-            int n = p.Count;
-            var frames = new List<Frame>(n);
-            var seg = new Vector3[closed ? n : n - 1];
-            for (int i = 0; i < seg.Length; i++) seg[i] = (p[(i + 1) % n] - p[i]).normalized;
-            Vector3 lastRight = Vector3.right, lastUp = Vector3.up;
-            for (int i = 0; i < n; i++)
+            int n = p.Count, count = closed ? n : n - 1;
+            var frames = new List<Frame>(count);
+            Vector3 lastRight = Vector3.right;
+            for (int i = 0; i < count; i++)
             {
-                Vector3 din = closed ? seg[(i - 1 + seg.Length) % seg.Length] : i > 0 ? seg[i - 1] : seg[0];
-                Vector3 dout = closed ? seg[i] : i < seg.Length ? seg[i] : seg[seg.Length - 1];
-                var sum = din + dout;
-                var f = new Frame { forward = sum.sqrMagnitude > 1e-8f ? sum.normalized : dout, stretch = 1f };
-                float half = sum.magnitude * 0.5f; // cos of half the turn
-                if (half > 1e-3f && half < 0.99999f) { f.bend = (dout - din).normalized; f.stretch = 1f / half; }
+                var d = (p[(i + 1) % n] - p[i]).normalized;
+                var f = new Frame { forward = d };
                 if (i == 0 || orientation == Orientation.Upright)
                 {
-                    var right = Vector3.Cross(Vector3.up, f.forward);
-                    if (right.sqrMagnitude < 1e-6f) right = i == 0 ? Vector3.Cross(Vector3.forward, f.forward) : lastRight; // straight up or down
+                    var right = Vector3.Cross(Vector3.up, d);
+                    if (right.sqrMagnitude < 1e-6f) right = i == 0 ? Vector3.Cross(Vector3.forward, d) : lastRight; // straight up or down
                     f.right = right.normalized;
+                    f.up = Vector3.Cross(d, f.right).normalized;
                 }
                 else
                 {
-                    // Follow: the last frame turned by the smallest rotation onto this direction
-                    var up = Quaternion.FromToRotation(frames[i - 1].forward, f.forward) * lastUp;
-                    f.right = Vector3.Cross(up, f.forward).normalized;
+                    var prev = frames[i - 1];
+                    var turn = Quaternion.FromToRotation(prev.forward, d);
+                    f.up = (turn * prev.up).normalized;
+                    f.right = Vector3.Cross(f.up, d).normalized;
+                    f.up = Vector3.Cross(d, f.right).normalized;
                 }
-                f.up = Vector3.Cross(f.forward, f.right).normalized;
-                lastRight = f.right; lastUp = f.up;
+                lastRight = f.right;
                 frames.Add(f);
             }
-            if (closed && orientation == Orientation.Follow && n > 2)
+            if (closed && orientation == Orientation.Follow && count > 2)
             {
-                // round the loop the transported frame comes back turned: spread that turn evenly along it
-                var back = Quaternion.FromToRotation(frames[n - 1].forward, frames[0].forward) * frames[n - 1].up;
+                var back = Quaternion.FromToRotation(frames[count - 1].forward, frames[0].forward) * frames[count - 1].up;
                 float twist = Vector3.SignedAngle(back, frames[0].up, frames[0].forward);
-                for (int i = 1; i < n; i++)
+                for (int i = 1; i < count; i++)
                 {
-                    var f = frames[i]; var q = Quaternion.AngleAxis(twist * i / n, f.forward);
+                    var f = frames[i]; var q = Quaternion.AngleAxis(twist * i / count, f.forward);
                     f.up = q * f.up; f.right = q * f.right; frames[i] = f;
                 }
             }
-            if (rolls != null)
-                for (int i = 0; i < n && i < rolls.Count; i++)
+            if (rolls != null && rolls.Count >= n)
+                for (int i = 0; i < count; i++)
                 {
-                    if (Mathf.Abs(rolls[i]) < 1e-4f) continue;
-                    var f = frames[i]; var q = Quaternion.AngleAxis(rolls[i], f.forward); // turned after the frames are carried along, so rolls never add up
+                    float roll = Mathf.LerpAngle(rolls[i], rolls[(i + 1) % n], 0.5f); // a piece turns as the middle of its two points
+                    if (Mathf.Abs(roll) < 1e-4f) continue;
+                    var f = frames[i]; var q = Quaternion.AngleAxis(roll, f.forward); // after the frames are carried along, so rolls never add up
                     f.up = q * f.up; f.right = q * f.right; frames[i] = f;
                 }
             return frames;
         }
 
         /// <summary>
-        /// A piece without mitres, for where its two mitred ends would cross (a short piece of a wide profile between corners
-        /// that turn up or down as well as sideways): the profile square to the piece, run on past each inner corner by the
-        /// profile's reach so it overlaps its neighbours there, as branches do at a junction. Ends of the path are not run on.
+        /// The profile where two pieces meet at point <paramref name="i"/>: the incoming piece's profile carried along it onto
+        /// the plane halving the turn (a mitre), so the piece is exactly its profile cut by two planes. At an end of an open
+        /// run the profile stands square to its piece.
+        /// </summary>
+        Vector3[] Ring(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, int i)
+        {
+            int n = p.Count, count = frames.Count;
+            int incoming = closed ? (i - 1 + count) % count : i - 1, outgoing = closed ? i % count : i;
+            var at = p[i];
+            Frame f; Vector3 plane;
+            if (incoming < 0) { f = frames[outgoing]; plane = f.forward; }           // the start of an open run
+            else if (outgoing >= count) { f = frames[incoming]; plane = f.forward; } // its end
+            else
+            {
+                f = frames[incoming];
+                var halfway = frames[incoming].forward + frames[outgoing].forward;
+                plane = halfway.sqrMagnitude > 1e-6f ? halfway.normalized : f.forward; // a U-turn: square
+            }
+            var ring = new Vector3[part.Length];
+            float along = Vector3.Dot(f.forward, plane);
+            for (int k = 0; k < part.Length; k++)
+            {
+                var q = at + f.right * part[k].x + f.up * part[k].y;
+                float t = Mathf.Abs(along) > 1e-4f ? -Vector3.Dot(q - at, plane) / along : 0f;
+                ring[k] = q + f.forward * t;
+            }
+            return ring;
+        }
+
+        /// <summary>
+        /// A piece without mitres, for where its two mitred ends would cross (a short piece of a wide profile between sharp
+        /// turns): the profile square to the piece, run on past each inner corner by half its width so it overlaps its
+        /// neighbours there, as branches do at a junction. Ends of the path are not run on.
         /// </summary>
         BrushPolyhedron Unmitred(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, int k)
         {
             int n = p.Count, next = (k + 1) % n;
-            Vector3 a = p[k], b = p[next];
-            var dir = (b - a).normalized;
-            var up = frames[k].up + frames[next].up; up -= dir * Vector3.Dot(up, dir);
-            if (up.sqrMagnitude < 1e-8f) up = frames[k].up - dir * Vector3.Dot(frames[k].up, dir);
-            if (up.sqrMagnitude < 1e-8f) return null;
-            up.Normalize();
-            var f = new Frame { forward = dir, right = Vector3.Cross(up, dir).normalized, up = up, stretch = 1f };
+            var f = frames[k];
             bool startInside = closed || k > 0, endInside = closed || next < n - 1;
-            return Hull(Ring(a - dir * (startInside ? reach : 0f), f, part), Ring(b + dir * (endInside ? reach : 0f), f, part));
+            return Hull(Square(p[k] - f.forward * (startInside ? reach : 0f), f, part), Square(p[next] + f.forward * (endInside ? reach : 0f), f, part));
         }
 
-        Vector3[] Ring(Vector3 at, Frame f, Vector2[] part)
+        static Vector3[] Square(Vector3 at, Frame f, Vector2[] part)
         {
             var ring = new Vector3[part.Length];
-            for (int i = 0; i < part.Length; i++)
-            {
-                var o = f.right * part[i].x + f.up * part[i].y;
-                if (f.stretch > 1f) o += f.bend * (Vector3.Dot(o, f.bend) * (f.stretch - 1f)); // the mitre: wider across the turn
-                ring[i] = at + o;
-            }
+            for (int k = 0; k < part.Length; k++) ring[k] = at + f.right * part[k].x + f.up * part[k].y;
             return ring;
         }
 
         void Sweep(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, BrushOperation op, string name, ref int count, List<BrushSpec> into)
         {
-            int n = p.Count, pieces = closed ? n : n - 1;
+            int n = p.Count, pieces = frames.Count;
             var rings = new Vector3[n][];
-            for (int i = 0; i < n; i++) rings[i] = Ring(p[i], frames[i], part);
+            for (int i = 0; i < n; i++) rings[i] = Ring(p, frames, closed, part, i);
             for (int k = 0; k < pieces; k++)
             {
                 if ((p[(k + 1) % n] - p[k]).sqrMagnitude < 1e-10f) continue;
                 var poly = Hull(rings[k], rings[(k + 1) % n]);
-                if (poly == null) poly = Unmitred(p, frames, closed, part, reach, k); // the mitres cross: a straight section that overlaps its neighbours
+                if (poly == null) { poly = Unmitred(p, frames, closed, part, reach, k); unmitredPieces++; } // the mitres cross: a straight section that overlaps its neighbours
                 if (poly == null) { droppedPieces++; continue; }
                 into.Add(new BrushSpec { name = name + " " + (++count), operation = op, polyhedron = poly, material = material });
             }
         }
 
         /// <summary>
-        /// The convex hull of two rings of the same convex profile: the rings as end caps, each side a quad, or two triangles
-        /// split along the diagonal that keeps the hull convex. Null when it comes out unsound.
+        /// The convex hull of two rings of a convex profile (at a piece's two ends). Neighbouring pieces share a ring, which is
+        /// a face of both, so they meet exactly; the hull is right however the rings are turned against each other (a path
+        /// that rises or falls while it turns). Null when it comes out unsound.
         /// </summary>
         public static BrushPolyhedron Hull(Vector3[] a, Vector3[] b)
+        {
+            var pts = new List<Vector3>(a.Length + b.Length); pts.AddRange(a); pts.AddRange(b);
+            float scale = 1f; foreach (var q in pts) scale = Mathf.Max(scale, Mathf.Abs(q.x), Mathf.Abs(q.y), Mathf.Abs(q.z));
+            var faces = CsgBrush.Colliders.ConvexPolytope.ConvexHullFaces(pts, 1e-5f * scale);
+            if (faces == null) { LastHullProblem = "flat"; return null; }
+            // only the points on the hull, in their first order
+            var map = new Dictionary<int, int>(); var verts = new List<Vector3>();
+            var polys = new BrushPolyhedron.Face[faces.Count];
+            for (int f = 0; f < faces.Count; f++)
+            {
+                var idx = new int[faces[f].Length];
+                for (int k = 0; k < idx.Length; k++)
+                {
+                    if (!map.TryGetValue(faces[f][k], out int m)) { m = verts.Count; verts.Add(pts[faces[f][k]]); map[faces[f][k]] = m; }
+                    idx[k] = m;
+                }
+                polys[f] = new BrushPolyhedron.Face(idx);
+            }
+            var poly = new BrushPolyhedron { vertices = verts.ToArray(), faces = polys };
+            poly.EnsureOutward();
+            if (poly.IsSound(out var why)) return poly;
+            LastHullProblem = why;
+            return null;
+        }
+
+        /// <summary>The hull of two rings by pairing their points in order: quads, or triangle pairs split to stay convex. Kept for reference.</summary>
+        static BrushPolyhedron HullByPairs(Vector3[] a, Vector3[] b)
         {
             int m = a.Length;
             var v = new Vector3[m * 2];
