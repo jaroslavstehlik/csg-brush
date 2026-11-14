@@ -475,7 +475,7 @@ namespace CsgBrush
                     var into2 = Trimmed(run, -Mathf.Max(0f, pullStart[r] - runOnStart), -Mathf.Max(0f, pullEnd[r] - runOnEnd), out var intoRolls);
                     foreach (var part in outer) SweepWhole(into2, Frames(into2, run.closed, intoRolls), run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
                 }
-                else foreach (var part in outer) SweepWhole(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into, capStart, capEnd, reachOut);
+                else foreach (var part in outer) SweepWhole(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into, capStart && !half, capEnd && !half, reachOut); // (a half profile's domes are cut at the joint: below)
                 // the profile where the run meets its hubs, or where it crosses one it passes through
                 foreach (var hub in hubs)
                     foreach (var arm in hub.arms)
@@ -511,7 +511,29 @@ namespace CsgBrush
             foreach (var hub in hubs)
             {
                 hubCount++;
-                if (decked) Deck(hub, "Junction " + hubCount, into, cuts); // (a round profile's joints are its runs' domes)
+                if (decked) { Deck(hub, "Junction " + hubCount, into, cuts); continue; } // (a round profile's joints are its runs' domes)
+                if (!half) continue;
+                // a half profile's domes, each its own brush, cut by any other arm's top that passes above this arm's own
+                // top on this arm's side: where the arms meet over a crest a dome's flat top would stand above the next
+                // arm's; in a valley it lies below it, and the domes add up as they are
+                foreach (var arm in hub.arms)
+                {
+                    if (arm.through >= 0 || arm.outer.Count == 0) continue;
+                    var ring = arm.outer[0];
+                    var pts = new List<Vector3>(ring);
+                    foreach (var dome in Dome(ring, arm.end, -arm.direction, reachOut)) pts.AddRange(dome);
+                    var poly = HullOf(pts);
+                    var ownSide = hub.at + arm.direction * reachOut;
+                    foreach (var other in hub.arms)
+                    {
+                        if (poly == null) break;
+                        if (other == arm) continue;
+                        var top = other.frame.up;
+                        if (Vector3.Dot(ownSide - hub.at, top) > 1e-4f) continue; // the other's top passes below this arm's: a valley
+                        poly = Clip(poly, hub.at, top, 0f);
+                    }
+                    if (poly != null) into.Add(new BrushSpec { name = "Junction " + hubCount, operation = BrushOperation.Add, polyhedron = poly, material = material });
+                }
             }
             into.AddRange(cuts); // every inside after every solid piece: branches open into each other
         }
@@ -1481,6 +1503,63 @@ namespace CsgBrush
         /// A hull's faces given every vertex that lies on one of their edges: where coplanar points merge into one face,
         /// a point on an edge is a corner of the face on one side but not of the face on the other, and the hull is open.
         /// </summary>
+        /// <summary>
+        /// A convex brush cut to the side of a plane where <c>dot(q - at, direction)</c> is at most <paramref name="limit"/>;
+        /// null when nothing is left. Exact: each face cut by the plane, the cut closed by a face through the crossings.
+        /// </summary>
+        static BrushPolyhedron Clip(BrushPolyhedron poly, Vector3 at, Vector3 direction, float limit)
+        {
+            var v = poly.vertices; var d = new float[v.Length];
+            bool any = false, all = true;
+            for (int i = 0; i < v.Length; i++)
+            {
+                d[i] = Vector3.Dot(v[i] - at, direction) - limit;
+                if (Mathf.Abs(d[i]) < 1e-6f) d[i] = 0f;
+                if (d[i] > 0f) any = true; else all = false;
+            }
+            if (!any) return poly;
+            if (all) return null;
+            var verts = new List<Vector3>(); var faces = new List<BrushPolyhedron.Face>();
+            int Weld(Vector3 p)
+            {
+                for (int i = 0; i < verts.Count; i++) if ((verts[i] - p).sqrMagnitude < 1e-10f) return i;
+                verts.Add(p); return verts.Count - 1;
+            }
+            var cap = new List<int>();
+            foreach (var f in poly.faces)
+            {
+                var kept = new List<int>(f.indices.Length + 2);
+                for (int k = 0; k < f.indices.Length; k++)
+                {
+                    int i = f.indices[k], j = f.indices[(k + 1) % f.indices.Length];
+                    if (d[i] <= 0f) kept.Add(Weld(v[i]));
+                    if (d[i] == 0f) { cap.Add(Weld(v[i])); continue; }
+                    if ((d[i] < 0f && d[j] > 0f) || (d[i] > 0f && d[j] < 0f))
+                    {
+                        int x = Weld(Vector3.Lerp(v[i], v[j], d[i] / (d[i] - d[j])));
+                        kept.Add(x); cap.Add(x);
+                    }
+                }
+                var loop = new List<int>(kept.Count);
+                foreach (int i in kept) if (loop.Count == 0 || loop[loop.Count - 1] != i) loop.Add(i);
+                if (loop.Count > 1 && loop[0] == loop[loop.Count - 1]) loop.RemoveAt(loop.Count - 1);
+                if (loop.Count >= 3) faces.Add(new BrushPolyhedron.Face(loop.ToArray()) { group = f.group });
+            }
+            var unique = new List<int>(); foreach (int i in cap) if (!unique.Contains(i)) unique.Add(i);
+            if (unique.Count >= 3)
+            {
+                var centre = Vector3.zero; foreach (int i in unique) centre += verts[i]; centre /= unique.Count;
+                var u = Vector3.Cross(direction, Mathf.Abs(direction.y) < 0.9f ? Vector3.up : Vector3.right).normalized; var w = Vector3.Cross(direction, u);
+                unique.Sort((i, j) => Mathf.Atan2(Vector3.Dot(verts[i] - centre, w), Vector3.Dot(verts[i] - centre, u)).CompareTo(Mathf.Atan2(Vector3.Dot(verts[j] - centre, w), Vector3.Dot(verts[j] - centre, u))));
+                faces.Add(new BrushPolyhedron.Face(unique.ToArray()));
+            }
+            var result = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+            if (!result.IsClosed()) MendEdges(result, 1e-4f);
+            result.EnsureOutward();
+            if (result.IsClosed() && result.IsSound(out _)) return result;
+            return HullOf(new List<Vector3>(verts)); // (the cap ordered by angle only: wound wrong, a hull of the same corners)
+        }
+
         static void MendEdges(BrushPolyhedron poly, float eps)
         {
             var v = poly.vertices;
