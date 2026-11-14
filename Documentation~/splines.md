@@ -38,10 +38,10 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 | **Where** | **Result** |
 | :--- | :--- |
 | A corner | The pieces meet at a mitre, like the corner of a picture frame: each piece is its profile cut by the planes halving the turns at its ends. |
-| A corner sharper than 120 degrees | The two sides stop where they part, and a joining piece fills the corner, ending flat half the profile's width past the point. |
-| An **Upright** corner that climbs or falls while it turns | A joining piece fills the corner. Keeping both sides level would twist one of them, so inside the joint the profile turns from one side's to the other's a few degrees at a time. Make the corner Smooth for a clean curve. |
-| A point where three or more links meet | Each link stops where its sides part from its neighbours', and joining pieces fill the junction, mitred between every two neighbouring links. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
-| A junction of hollow links or channels | The insides are cut after all the solid pieces, so the branches open into each other, and only the outer walls are left. |
+| A corner sharper than 120 degrees, or an **Upright** corner that climbs or falls while it turns | The corner is built as a junction of two links (see below). A sharp corner ends flat just past the point. |
+| A point where three or more links meet | Each link stops a little past where its sides part from its neighbours', and a junction piece fills the space between. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
+| A junction of **U Channel** or solid **Rectangle** links | The junction is built as its own floor, with walls along its outline between the links. The floor follows the links' heights and slopes, and dips or rises with the point itself, so links at different heights meet without steps. |
+| A junction of **Circle** or hollow links | Each link's profile is carried in to where it meets the others, mitred between every two. The insides are cut after all the solid pieces, so the branches open into each other. |
 | An end of a hollow spline or a channel | Open, or capped by the wall thickness, as set by **Ends**. |
 
 ## Spline component reference

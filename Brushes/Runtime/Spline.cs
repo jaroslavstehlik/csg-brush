@@ -453,6 +453,8 @@ namespace CsgBrush
             float reachOut = HalfWidth(false), reachIn = HalfWidth(true);
             const float Hair = 0.01f;
             var hubs = Hubs(runs, reachOut);
+            bool decked = Decked;
+            if (decked) DeckPulls(runs, hubs);
             var pullStart = new float[runs.Count]; var pullEnd = new float[runs.Count];
             foreach (var hub in hubs)
                 foreach (var arm in hub.arms)
@@ -475,6 +477,7 @@ namespace CsgBrush
                         {
                             int i = arm.atStart ? 0 : solid.Count - 1;
                             arm.frame = Away(frames[arm.atStart ? 0 : frames.Count - 1], arm.direction);
+                            arm.end = solid[i];
                             foreach (var part in outer) arm.outer.Add(Ring(solid, frames, false, part, i));
                             foreach (var part in inner) arm.inner.Add(Ring(solid, frames, false, part, i));
                             continue;
@@ -485,6 +488,7 @@ namespace CsgBrush
                         foreach (var part in outer) arm.outer.Add(RingAlong(solid, frames, run.closed, from, arm.sign, arm.pull, part, out frame));
                         foreach (var part in inner) arm.inner.Add(RingAlong(solid, frames, run.closed, from, arm.sign, arm.pull, part, out frame));
                         arm.frame = Away(frame, arm.direction);
+                        arm.end = RingAlong(solid, frames, run.closed, from, arm.sign, arm.pull, new[] { Vector2.zero }, out _)[0];
                     }
                 if (inner.Count == 0) continue;
                 // inside: a hair into its hubs; past an open end by a hair, short of a closed one by the wall
@@ -499,6 +503,7 @@ namespace CsgBrush
             foreach (var hub in hubs)
             {
                 hubCount++;
+                if (decked) { Deck(hub, "Junction " + hubCount, into, cuts); continue; }
                 for (int k = 0; k < outer.Count; k++)
                     foreach (var poly in HubPieces(hub, k, false, outer[k], reachOut))
                         into.Add(new BrushSpec { name = "Junction " + hubCount, operation = BrushOperation.Add, polyhedron = poly, material = material });
@@ -667,6 +672,307 @@ namespace CsgBrush
             return pts.Count >= 4 ? HullOf(pts) : null;
         }
 
+        // ------------------------------------------------------------------ junction decks
+
+        /// <summary>
+        /// Profiles with a flat floor and straight sides (a U Channel, a solid Rectangle) join at hubs with a deck: a floor
+        /// built over the junction's outline, following the arms' slopes, with walls along the outline between the arms.
+        /// Nothing is carried in from the arms, so arms at different heights and slopes still meet without steps or stubs.
+        /// </summary>
+        bool Decked => profile == Profile.UChannel || (profile == Profile.Rectangle && !hollow);
+
+        /// <summary>The deck's top in the profile (its floor for a channel), and how deep it is below that.</summary>
+        float DeckTop => profile == Profile.UChannel ? -size.y * 0.5f + thickness : size.y * 0.5f;
+        float DeckDepth => profile == Profile.UChannel ? thickness : size.y;
+
+        /// <summary>A corner of a deck's outline; <see cref="opening"/>: the edge from it to the next is an arm's end, not a wall.</summary>
+        struct DeckVertex { public Vector3 p, up; public Vector2 q; public bool opening, end; }
+
+        /// <summary>
+        /// Each arm's pull for a deck: where its sides meet its neighbours' (the deck's corners between arms), measured
+        /// along its own direction and slope from the hub, within what its run has to spare.
+        /// </summary>
+        void DeckPulls(List<Run> runs, List<Hub> hubs)
+        {
+            var frames = new List<Frame>[runs.Count];
+            foreach (var hub in hubs)
+            {
+                foreach (var arm in hub.arms)
+                {
+                    var run = runs[arm.run];
+                    var fr = frames[arm.run] ??= Frames(run.points, run.closed, run.rolls);
+                    int k = arm.through < 0 ? (arm.atStart ? 0 : fr.Count - 1) : (arm.sign > 0 ? arm.through : arm.through - 1);
+                    arm.frame = Away(fr[((k % fr.Count) + fr.Count) % fr.Count], arm.direction);
+                    arm.end = hub.at;
+                }
+                var need = new float[hub.arms.Count];
+                Outline(hub, need, out _, out _, out _);
+                // a little past where its sides meet its neighbours': the corner between two arms is then its own, and the
+                // floor slopes there between the arms' heights instead of one arm's end standing above or below the other's
+                float margin = 0.25f * size.x;
+                for (int i = 0; i < hub.arms.Count; i++) hub.arms[i].pull = Mathf.Clamp(need[i] + margin, 0f, hub.arms[i].room);
+            }
+        }
+
+        /// <summary>
+        /// A deck's outline, counter-clockwise round the hub's up (<paramref name="up"/>, with <paramref name="x"/> and
+        /// <paramref name="y"/> across it). Going round: each arm's end, then the corner to the next arm: where their facing
+        /// sides meet; or, where arms leave a side open, where their outer sides meet, cut off flat at half the width times
+        /// the square root of two beyond the point (a sharp corner's end). Each corner's height is from the arms' floors.
+        /// <paramref name="need"/>, when given, gets how far along each arm its corners are from its end.
+        /// </summary>
+        List<DeckVertex> Outline(Hub hub, float[] need, out Vector3 up, out Vector3 x, out Vector3 y)
+        {
+            float half = HalfWidth(false), top = DeckTop, cap = half * 1.41421356f;
+            up = Vector3.zero; foreach (var arm in hub.arms) up += arm.frame.up;
+            up = up.sqrMagnitude > 1e-6f ? up.normalized : Vector3.up;
+            x = Vector3.ProjectOnPlane(hub.arms.Count > 0 ? hub.arms[0].frame.forward : Vector3.right, up);
+            if (x.sqrMagnitude < 1e-6f) x = Vector3.ProjectOnPlane(Vector3.right, up);
+            x.Normalize(); y = Vector3.Cross(up, x).normalized;
+            var verts = new List<DeckVertex>();
+            int n = hub.arms.Count;
+            if (n < 2) return verts;
+            Vector3 X = x, Y = y, at = hub.at;
+            Vector2 P(Vector3 v) => new Vector2(Vector3.Dot(v - at, X), Vector3.Dot(v - at, Y));
+            Vector2 D(Vector3 v) => new Vector2(Vector3.Dot(v, X), Vector3.Dot(v, Y));
+            float Angle(Arm a) { var d = D(a.frame.forward); return Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg; }
+            var order = new List<int>(); for (int i = 0; i < n; i++) order.Add(i);
+            order.Sort((i, j) => Angle(hub.arms[i]).CompareTo(Angle(hub.arms[j])));
+            Vector3 Side(Arm a, int side) => a.end + a.frame.right * (side * half) + a.frame.up * top; // the floor's edge at the arm's end
+            int Ccw(Arm a) => Cross2(D(a.frame.forward), D(a.frame.right)) > 0f ? 1 : -1; // which side faces the next arm round
+            void Add(Vector3 p, Vector3 normal, bool opening, bool end = false) => verts.Add(new DeckVertex { p = p, up = normal, q = P(p), opening = opening, end = end });
+            float ToCap(Vector2 p, Vector2 d, Vector2 o)
+            {
+                float along = Vector2.Dot(d, o);
+                return Mathf.Abs(along) < 1e-4f ? -Vector2.Dot(p, d) / Mathf.Max(d.sqrMagnitude, 1e-9f) : (cap - Vector2.Dot(p, o)) / along;
+            }
+            for (int k = 0; k < n; k++)
+            {
+                int ai = order[k], bi = order[(k + 1) % n];
+                Arm a = hub.arms[ai], b = hub.arms[bi];
+                int sa = Ccw(a), sb = -Ccw(b);
+                Vector3 oa = Side(a, sa), ob = Side(b, sb);
+                Add(Side(a, -sa), a.frame.up, true, true);
+                Add(oa, a.frame.up, false, true);
+                Vector2 da = D(a.frame.forward), db = D(b.frame.forward);
+                float gap = Mathf.Repeat(Angle(b) - Angle(a), 360f);
+                if (gap < 1e-3f) gap = 360f;
+                bool hit = Hit(P(oa), da, P(ob), db, out float ta, out float tb);
+                Vector3 meet = (oa + a.frame.forward * ta + ob + b.frame.forward * tb) * 0.5f;
+                if (gap < 179.9f)
+                {
+                    if (!hit) continue;
+                    Add(meet, (a.frame.up + b.frame.up).normalized, false);
+                    if (need != null) { need[ai] = Mathf.Max(need[ai], ta); need[bi] = Mathf.Max(need[bi], tb); }
+                    continue;
+                }
+                float mid = (Angle(a) + gap * 0.5f) * Mathf.Deg2Rad;
+                var o = new Vector2(Mathf.Cos(mid), Mathf.Sin(mid));
+                if (hit && Vector2.Dot(P(meet), o) <= cap + 1e-4f) Add(meet, (a.frame.up + b.frame.up).normalized, false);
+                else { Add(oa + a.frame.forward * ToCap(P(oa), da, o), a.frame.up, false); Add(ob + b.frame.forward * ToCap(P(ob), db, o), b.frame.up, false); }
+            }
+            // corners closer than MergeCorners: one corner (where an arm ends, if either is), with the later one's edge onward;
+            // a wall a few centimetres long would stand at a random angle
+            const float Merge = MergeCorners * MergeCorners;
+            var outline = new List<DeckVertex>();
+            foreach (var v in verts)
+            {
+                if (outline.Count > 0 && (outline[outline.Count - 1].q - v.q).sqrMagnitude < Merge) outline[outline.Count - 1] = Merged(outline[outline.Count - 1], v);
+                else outline.Add(v);
+            }
+            while (outline.Count > 1 && (outline[outline.Count - 1].q - outline[0].q).sqrMagnitude < Merge)
+            {
+                var last = outline[outline.Count - 1]; outline.RemoveAt(outline.Count - 1);
+                var first = outline[0];
+                if (last.end && !first.end) { first.p = last.p; first.q = last.q; first.end = true; }
+                outline[0] = first; // the first keeps its own edge onward; the last's edge led to it
+            }
+            return outline;
+        }
+
+        /// <summary>Metres: outline corners closer than this are one corner.</summary>
+        const float MergeCorners = 0.05f;
+
+        static DeckVertex Merged(DeckVertex earlier, DeckVertex later)
+        {
+            var m = earlier.end || !later.end ? earlier : later; // keep where an arm ends, so the deck meets the arm
+            m.end = earlier.end || later.end;
+            m.opening = later.opening;
+            return m;
+        }
+
+        static float Cross2(Vector2 a, Vector2 b) => a.x * b.y - a.y * b.x;
+
+        /// <summary>Where two lines cross: <paramref name="ta"/> along the first from <paramref name="pa"/>, <paramref name="tb"/> along the second.</summary>
+        static bool Hit(Vector2 pa, Vector2 da, Vector2 pb, Vector2 db, out float ta, out float tb)
+        {
+            float den = Cross2(da, db);
+            ta = tb = 0f;
+            if (Mathf.Abs(den) < 1e-6f * Mathf.Max(da.sqrMagnitude * db.sqrMagnitude, 1e-12f) || Mathf.Abs(den) < 1e-9f) return false;
+            ta = Cross2(pb - pa, db) / den; tb = Cross2(pb - pa, da) / den;
+            return true;
+        }
+
+        /// <summary>
+        /// A hub's deck: floor slabs over its outline (each triangle a convex brush, so the floor follows the arms' slopes
+        /// without steps); for a channel, a wall along each outline edge between arms, mitred where walls meet, from the
+        /// floor's underside up, the floor inside them, and the inside cut clear above that floor on the same triangles,
+        /// which also clears walls of nearby junctions that stand in it.
+        /// </summary>
+        void Deck(Hub hub, string name, List<BrushSpec> into, List<BrushSpec> cuts)
+        {
+            var v = Outline(hub, null, out var up, out var x, out var y);
+            int n = v.Count;
+            if (n < 3) return;
+            float depth = DeckDepth;
+            var q = new List<Vector2>(n); foreach (var c in v) q.Add(c.q);
+            void Add(List<BrushSpec> list, BrushOperation op, string what, List<Vector3> pts)
+            {
+                var poly = HullOf(pts);
+                if (poly != null) list.Add(new BrushSpec { name = what, operation = op, polyhedron = poly, material = material });
+            }
+            void Slabs(List<Vector3[]> tris)
+            {
+                foreach (var t in tris)
+                {
+                    var pts = new List<Vector3>(6);
+                    foreach (var p in t) { pts.Add(p); pts.Add(p - up * depth); }
+                    Add(into, BrushOperation.Add, name, pts);
+                }
+            }
+            // the point itself is a corner of the floor too: a junction point moved down takes the floor down with it
+            var middle = hub.at + up * DeckTop;
+            if (profile != Profile.UChannel)
+            {
+                var tops = new List<Vector3>(n); foreach (var c in v) tops.Add(c.p);
+                Slabs(WithMiddle(q, tops, middle));
+                return;
+            }
+            // the inside: each corner moved in by the wall's thickness from its walls (along an arm's end where it meets one);
+            // where two arms' ends meet at a corner, a piece of wall joins their walls there
+            float t2 = thickness, wall = size.y - thickness;
+            var innerIn = new Vector3[n]; var innerOut = new Vector3[n];
+            var inner = new List<Vector3>(n + 4); var innerQ = new List<Vector2>(n + 4);
+            Vector3 At(int i, Vector2 r) => v[i].p + x * (r.x - q[i].x) + y * (r.y - q[i].y);
+            void Wall(Vector3 upA, Vector3 upB, params Vector3[] footprint) // standing as the arms' walls do: up the first half from upA, the rest from upB
+            {
+                var pts = new List<Vector3>(footprint.Length * 2);
+                for (int k = 0; k < footprint.Length; k++) { var u = k < footprint.Length / 2 ? upA : upB; pts.Add(footprint[k] - u * depth); pts.Add(footprint[k] + u * wall); }
+                Add(into, BrushOperation.Add, name, pts);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int prev = (i - 1 + n) % n, next = (i + 1) % n;
+                Vector2 a = q[prev], b = q[i], c = q[next];
+                bool wallIn = !v[prev].opening, wallOut = !v[i].opening;
+                Vector2 dIn = b - a, dOut = c - b;
+                Vector2 nIn = new Vector2(-dIn.y, dIn.x).normalized, nOut = new Vector2(-dOut.y, dOut.x).normalized; // inward: the outline runs counter-clockwise
+                if (!wallIn && !wallOut)
+                {
+                    if (Cross2(dIn, dOut) > 1e-4f * dIn.magnitude * dOut.magnitude && dIn.magnitude > t2 && dOut.magnitude > t2)
+                    {
+                        // two arms' ends meeting at a corner: their walls end square to them, so the wedge between is filled
+                        Vector2 pIn = b - dIn.normalized * t2, pOut = b + dOut.normalized * t2;
+                        var m = Hit(pIn, nIn, pOut, nOut, out float sm, out _) ? pIn + nIn * sm : (pIn + pOut) * 0.5f;
+                        if ((m - b).magnitude > 4f * t2) m = (pIn + pOut) * 0.5f;
+                        Vector3 pIn3 = Vector3.Lerp(v[i].p, v[prev].p, t2 / dIn.magnitude), pOut3 = Vector3.Lerp(v[i].p, v[next].p, t2 / dOut.magnitude), m3 = At(i, m);
+                        Wall(v[i].up, v[i].up, v[i].p, pIn3, m3, pOut3);
+                        inner.Add(pIn3); innerQ.Add(pIn); inner.Add(m3); innerQ.Add(m); inner.Add(pOut3); innerQ.Add(pOut);
+                        innerIn[i] = innerOut[i] = m3;
+                        continue;
+                    }
+                    innerIn[i] = innerOut[i] = v[i].p; inner.Add(v[i].p); innerQ.Add(b);
+                    continue;
+                }
+                Vector2 qIn = b + (wallIn ? nIn * t2 : Vector2.zero), qOut = b + (wallOut ? nOut * t2 : Vector2.zero);
+                var r = Hit(qIn, dIn, qOut, dOut, out float s, out _) ? qIn + dIn * s : b + (wallIn ? nIn : nOut) * t2;
+                if ((r - b).magnitude > 4f * t2) r = b + (r - b).normalized * (4f * t2); // a very sharp corner: bevelled
+                innerIn[i] = innerOut[i] = At(i, r);
+                inner.Add(innerIn[i]); innerQ.Add(r);
+            }
+            for (int i = 0; i < n; i++)
+            {
+                if (v[i].opening) continue;
+                int j = (i + 1) % n;
+                Wall(v[i].up, v[j].up, v[i].p, innerOut[i], v[j].p, innerIn[j]);
+            }
+            // the floor on the same triangles as the cut above it, so the cut never dips into it; the walls stand on the rest
+            var tris = WithMiddle(innerQ, inner, middle);
+            Slabs(tris);
+            float clear = wall + OpenTop * size.y + 0.01f;
+            foreach (var t in tris)
+                Add(cuts, BrushOperation.Subtract, name + " inside", new List<Vector3> { t[0], t[0] + up * clear, t[1], t[1] + up * clear, t[2], t[2] + up * clear });
+        }
+
+        /// <summary>
+        /// A polygon's triangles (as their corners), with <paramref name="middle"/> (the hub's own floor point, at the plan's
+        /// origin) a corner: fanned from it when it sees every edge, else a corner of the triangle it falls in.
+        /// </summary>
+        static List<Vector3[]> WithMiddle(List<Vector2> plan, IList<Vector3> pts, Vector3 middle)
+        {
+            var tris = new List<Vector3[]>();
+            // every edge seen from the middle: a fan from it, so the floor runs straight from each arm's end to the point
+            float area = 0f; for (int i = 0; i < plan.Count; i++) area += Cross2(plan[i], plan[(i + 1) % plan.Count]);
+            bool star = plan.Count >= 3;
+            for (int i = 0; i < plan.Count && star; i++)
+            {
+                Vector2 a = plan[i], b = plan[(i + 1) % plan.Count];
+                if ((b - a).sqrMagnitude < 1e-8f) continue;
+                if (Mathf.Sign(area) * Cross2(b - a, -a) / (b - a).magnitude < 0.05f) star = false;
+            }
+            if (star)
+            {
+                for (int i = 0; i < plan.Count; i++)
+                    if ((plan[(i + 1) % plan.Count] - plan[i]).sqrMagnitude >= 1e-8f) tris.Add(new[] { pts[i], pts[(i + 1) % plan.Count], middle });
+                return tris;
+            }
+            foreach (var t in Triangulate(plan))
+            {
+                Vector2 a = plan[t[0]], b = plan[t[1]], c = plan[t[2]];
+                float s = Mathf.Sign(Cross2(b - a, c - a));
+                float da = s * Cross2(b - a, -a) / (b - a).magnitude, db = s * Cross2(c - b, -b) / (c - b).magnitude, dc = s * Cross2(a - c, -c) / (a - c).magnitude; // the origin's distance inside each edge
+                if (da > 0.05f && db > 0.05f && dc > 0.05f)
+                {
+                    tris.Add(new[] { pts[t[0]], pts[t[1]], middle });
+                    tris.Add(new[] { pts[t[1]], pts[t[2]], middle });
+                    tris.Add(new[] { pts[t[2]], pts[t[0]], middle });
+                }
+                else tris.Add(new[] { pts[t[0]], pts[t[1]], pts[t[2]] });
+            }
+            return tris;
+        }
+
+        /// <summary>A simple polygon (counter-clockwise or not) cut into triangles by clipping ears.</summary>
+        static List<int[]> Triangulate(List<Vector2> p)
+        {
+            var tris = new List<int[]>();
+            var idx = new List<int>(); for (int i = 0; i < p.Count; i++) idx.Add(i);
+            float area = 0f; for (int i = 0; i < p.Count; i++) area += Cross2(p[i], p[(i + 1) % p.Count]);
+            if (area < 0f) idx.Reverse();
+            for (int guard = 0; idx.Count > 3 && guard < 4 * p.Count * p.Count; guard++)
+            {
+                bool clipped = false;
+                for (int k = 0; k < idx.Count && !clipped; k++)
+                {
+                    int a = idx[(k - 1 + idx.Count) % idx.Count], b = idx[k], c = idx[(k + 1) % idx.Count];
+                    float turn = Cross2(p[b] - p[a], p[c] - p[b]);
+                    if (Mathf.Abs(turn) < 1e-7f) { idx.RemoveAt(k); clipped = true; break; } // straight on: no triangle
+                    if (turn < 0f) continue; // a reflex corner
+                    bool empty = true;
+                    foreach (int o in idx)
+                    {
+                        if (o == a || o == b || o == c) continue;
+                        if (Cross2(p[b] - p[a], p[o] - p[a]) >= 0f && Cross2(p[c] - p[b], p[o] - p[b]) >= 0f && Cross2(p[a] - p[c], p[o] - p[c]) >= 0f) { empty = false; break; }
+                    }
+                    if (!empty) continue;
+                    tris.Add(new[] { a, b, c }); idx.RemoveAt(k); clipped = true;
+                }
+                if (!clipped) break;
+            }
+            if (idx.Count == 3 && Mathf.Abs(Cross2(p[idx[1]] - p[idx[0]], p[idx[2]] - p[idx[1]])) > 1e-7f) tris.Add(idx.ToArray());
+            return tris;
+        }
+
         /// <summary>
         /// A place where runs meet and can't simply be mitred: a junction, or a corner too sharp or too twisted for one. Its
         /// arms are pulled back to where they stop overlapping, and the gap is filled by one convex piece: the hull of the
@@ -689,6 +995,10 @@ namespace CsgBrush
             public Frame frame;
             /// <summary>How far from the hub the arm's end is: where its sides stop crossing its neighbours'.</summary>
             public float pull;
+            /// <summary>How far it may be pulled back: what its run has to spare.</summary>
+            public float room;
+            /// <summary>The middle of the arm's end (on the path), where its <see cref="frame"/> is.</summary>
+            public Vector3 end;
             public readonly List<Vector3[]> outer = new List<Vector3[]>(), inner = new List<Vector3[]>();
         }
 
@@ -733,6 +1043,7 @@ namespace CsgBrush
                     float room;
                     if (arm.through >= 0) room = run.closed ? 0.45f * RunLength(run) : 0.9f * Along(run.points, arm.through, arm.sign);
                     else room = RunLength(run) * ((arm.atStart ? run.endIsEnd : run.startIsEnd) ? 0.9f : 0.45f); // shared with a hub at its other end
+                    arm.room = room;
                     arm.pull = Mathf.Clamp(pull, 0f, room);
                 }
             return hubs;

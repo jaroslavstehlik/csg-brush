@@ -359,14 +359,42 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void AJunctionOfArmsAtDifferentHeightsHasAFloorWithoutSteps()
+        {
+            var s = Channel(new Vector3(0f, 1f, 0f), new Vector3(-7f, 1.6f, -1f));
+            int hub = s.pointIds[0];
+            var ends = new[] { new Vector3(7f, 2.2f, 1f), new Vector3(1f, 0.4f, -7f) };
+            foreach (var e in ends) s.AddLink(hub, s.AddPoint(e));
+            Rebuild(s);
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            // walk from each arm through the point into each other one, down the middle: the floor rises and falls, but never jumps, and no wall stands in the way
+            var arms = new[] { new Vector3(-7f, 0f, -1f).normalized, new Vector3(7f, 0f, 1f).normalized, new Vector3(1f, 0f, -7f).normalized };
+            for (int i = 0; i < arms.Length; i++)
+                for (int j = i + 1; j < arms.Length; j++)
+                {
+                    Vector3 from = arms[i] * 3f, to = arms[j] * 3f;
+                    float last = float.NaN;
+                    for (float t = 0f; t <= 1f; t += 0.01f)
+                    {
+                        var at = t < 0.5f ? Vector3.Lerp(from, Vector3.zero, t * 2f) : Vector3.Lerp(Vector3.zero, to, t * 2f - 1f); // in along one arm, out along the other
+                        Assert.IsTrue(Physics.Raycast(at + Vector3.up * 10f, Vector3.down, out var hit, 20f), "a floor between arms " + i + " and " + j + " at " + at);
+                        if (!float.IsNaN(last)) Assert.Less(Mathf.Abs(hit.point.y - last), 0.06f, "no step or wall between arms " + i + " and " + j + " at " + at);
+                        last = hit.point.y;
+                    }
+                }
+        }
+
+        [Test]
         public void ASharpCornerEndsFlatJustPastItsPoint()
         {
             var s = Channel(new Vector3(0f, 1f, -3f), new Vector3(8f, 1f, 0f), new Vector3(0f, 1f, 3f));
             Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
             Assert.IsFalse(Solid(new Vector3(8f, 1f, 0f)), "the channel reaches the point");
             Assert.IsTrue(Solid(new Vector3(8.5f, 0.75f, 0f)), "with a floor past it");
-            Assert.IsTrue(Solid(new Vector3(8.95f, 1f, 0f)), "an end wall half the width past it");
-            Assert.IsFalse(Solid(new Vector3(9.1f, 1f, 0f)), "and no spike beyond");
+            float end = 8f + Mathf.Sqrt(2f); // the outer sides cut off flat where a right-angled corner would have its own
+            Assert.IsTrue(Solid(new Vector3(end - 0.05f, 1f, 0f)), "an end wall past it");
+            Assert.IsFalse(Solid(new Vector3(end - 0.15f, 1f, 0f)), "inside it the channel");
+            Assert.IsFalse(Solid(new Vector3(end + 0.1f, 1f, 0f)), "and no spike beyond");
             // the two sides part where their outsides meet, 1 / sin(half the angle) from the point
             float meet = 1f / Mathf.Sin(Mathf.Atan2(3f, 8f));
             Assert.IsTrue(Solid(new Vector3(8f - meet + 0.15f, 1f, 0f)), "a wall between the sides");
