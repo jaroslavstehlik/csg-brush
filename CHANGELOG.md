@@ -23,6 +23,8 @@
 - Fixed: pressing Q (the View tool) while a point, marquee or handle of an edit mode or tool held the mouse left the
   mouse held, blocking Unity's own controls until the next click. A hold no handler ended is now let go when the button
   comes up.
+- Fixed: in floor plan and spline edit mode, pressing a Move, Rotate or Scale gizmo handle where it crossed a point or a
+  + added a point or selected another one. The gizmo now comes first; points and + still answer a click elsewhere.
 - Fixed: undo after scaling a brush with the Scale tool (or typing a scale in the Inspector) left it at the new size.
   The scale becomes the brush's size when you let go, and that change is now part of the same undo step, so one undo
   (and redo) takes back the whole scale.
