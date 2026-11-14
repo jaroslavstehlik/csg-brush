@@ -240,6 +240,49 @@ namespace CsgBrush.Tests
             Assert.AreEqual(4, rep.container.childCount, "per run: the runs of 2, 2 and 3 m get a copy at 0.3, the 3 m one also at 2.3");
         }
 
+        /// <summary>A short piece of a wide profile between corners that turn up or down as well as sideways: its mitres cross.</summary>
+        [Test]
+        public void ALoweredCornerKeepsEveryPieceAndStaysSolidAllAlong([Values(Spline.Profile.Rectangle, Spline.Profile.UChannel)] Spline.Profile profile, [Values(Spline.Orientation.Upright, Spline.Orientation.Follow)] Spline.Orientation orientation, [Values(1f, 3f)] float drop)
+        {
+            var s = Make(profile, new Vector2(1.2f, 0.3f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f - drop, 0.5f), new Vector3(6f, 1f, -2f), new Vector3(3f, 1f, -5f), new Vector3(-1f, 1f, -3f));
+            s.AddLink(s.pointIds[4], s.pointIds[0]);
+            s.orientation = orientation; s.thickness = 0.1f; Rebuild(s);
+            Specs(s);
+            Assert.AreEqual(0, s.droppedPieces, "no piece left out");
+            float probe = profile == Spline.Profile.UChannel ? -0.1f : 0f; // a channel is solid at its bottom
+            for (int link = 0; link < s.links.Count; link++)
+            {
+                float len = s.CurveLength(link);
+                for (float d = 0.3f; d < len - 0.3f; d += 0.25f)
+                {
+                    Assert.IsTrue(s.PoseAt(link, d, out var pose));
+                    Assert.IsTrue(Solid(s.transform.TransformPoint(pose.position + pose.up * probe)), "solid on link " + link + " at " + d.ToString("F2"));
+                }
+            }
+        }
+
+        [Test]
+        public void RollTurnsTheProfileAboutThePath()
+        {
+            var s = Make(Spline.Profile.UChannel, new Vector2(0.6f, 0.6f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
+            s.thickness = 0.05f; Rebuild(s);
+            var mid = new Vector3(2f, 1f, 0f);
+            Assert.IsFalse(Solid(mid + Vector3.up * 0.275f), "a channel is open on top");
+            Assert.IsTrue(Solid(mid + Vector3.down * 0.275f), "its bottom");
+            Undo.IncrementCurrentGroup();
+            Undo.RecordObject(s, "Roll");
+            s.SetRoll(s.pointIds[0], 90f); s.SetRoll(s.pointIds[1], 90f); Rebuild(s);
+            Assert.IsTrue(Solid(mid + Vector3.up * 0.275f) && Solid(mid + Vector3.down * 0.275f), "turned a quarter about the path: its sides are on top and underneath");
+            Assert.IsTrue(Solid(mid + Vector3.forward * 0.275f) != Solid(mid + Vector3.back * 0.275f), "its bottom on one side, open on the other");
+            s.SetRoll(s.pointIds[1], 0f); Rebuild(s);
+            Assert.That(s.Roll(s.pointIds[0]), Is.EqualTo(90f)); Assert.AreEqual(1, s.rolls.Count, "0 removes a point's roll");
+            Assert.IsTrue(Solid(new Vector3(0.3f, 1f, 0f) + Vector3.up * 0.275f), "near the rolled point: turned");
+            Assert.IsFalse(Solid(new Vector3(3.7f, 1f, 0f) + Vector3.up * 0.275f), "near the other: open on top again");
+            Undo.PerformUndo(); Rebuild(s);
+            Assert.AreEqual(0, s.rolls.Count, "undo takes the rolls back");
+            s.RemovePointAt(1); Assert.AreEqual(0, s.rolls.FindAll(r => r.id == 2).Count);
+        }
+
         [Test]
         public void DrawingOnALinkSplitsItAndBranchesFromThere()
         {

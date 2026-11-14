@@ -549,6 +549,15 @@ namespace CsgBrush.Editor
         /// does not, the gizmo sits on it.
         /// </summary>
         static int s_PressedPoint = -1; static Vector3 s_Grab; static bool s_Moved;
+        /// <summary>The level a point drag slides on: the plan's floor, or for a spline the height of the point pressed.</summary>
+        static Plane s_DragPlane;
+
+        static bool MouseOnDragPlane(Vector2 mouse, out Vector3 world)
+        {
+            var ray = HandleUtility.GUIPointToWorldRay(mouse);
+            if (s_DragPlane.Raycast(ray, out float t) && t > 0f) { world = ray.GetPoint(t); return true; }
+            world = default; return false;
+        }
         static readonly int s_DragHash = "FloorPlanPointDrag".GetHashCode();
         static readonly Color AddColor = new Color(0.55f, 0.85f, 1f, 1f); // light blue: not a point (white), not selected (yellow)
 
@@ -620,7 +629,9 @@ namespace CsgBrush.Editor
 
         static void StartPointDrag(PointGraph plan, Selection sel, Event e, int dragId, int pressed)
         {
-            if (!FloorPlanTools.MouseOnFloor(plan, e.mousePosition, out s_Grab)) return;
+            // a spline's point slides level with itself (it may be high above or below the spline's own floor)
+            s_DragPlane = plan.Flat || pressed < 0 || pressed >= plan.points.Count ? FloorPlanTools.Floor(plan) : new Plane(plan.transform.up, FloorPlanTools.World(plan, plan.points[pressed]));
+            if (!MouseOnDragPlane(e.mousePosition, out s_Grab)) return;
             EditModeMouse.Take(dragId);
             s_PressedPoint = pressed; s_Moved = false;
             BeginDrag(plan, new HashSet<int>(sel.vertices));
@@ -631,7 +642,7 @@ namespace CsgBrush.Editor
             switch (e.GetTypeForControl(dragId))
             {
                 case EventType.MouseDrag:
-                    if (GUIUtility.hotControl == dragId && Dragging(plan) && FloorPlanTools.MouseOnFloor(plan, e.mousePosition, out var now))
+                    if (GUIUtility.hotControl == dragId && Dragging(plan) && MouseOnDragPlane(e.mousePosition, out var now))
                     {
                         var local = plan.transform.InverseTransformVector(now - s_Grab); local.y = 0f;
                         TransformPoints(plan, dragStart, dragMoving, q => q + local);
@@ -784,6 +795,7 @@ namespace CsgBrush.Editor
             var e = Event.current;
             foreach (var (plan, moving, centre, _) in Targets())
             {
+                if (plan is Spline spline && FloorPlanEditState.Mode == BrushEditMode.Vertex) { RollRing(spline, moving, centre); continue; } // a spline's points: roll the profile
                 var up = plan.transform.up;
                 float radius = HandleUtility.GetHandleSize(centre);
                 int id = GUIUtility.GetControlID(FocusType.Passive);
@@ -825,6 +837,41 @@ namespace CsgBrush.Editor
                         break;
                 }
             }
+        }
+
+        static Quaternion s_Disc = Quaternion.identity;
+
+        /// <summary>
+        /// Rotate on a spline's points: a ring around the path's direction at the selection; dragging it turns the profile
+        /// about the path there (each point's roll), in rotation-snap steps. Undoable.
+        /// </summary>
+        static void RollRing(Spline spline, HashSet<int> moving, Vector3 centre)
+        {
+            Vector3 axis = Vector3.zero;
+            foreach (var i in moving) if (i < spline.pointIds.Count && spline.PointDirection(spline.pointIds[i], out var f)) axis += Vector3.Dot(f, axis) < 0f ? -f : f;
+            if (axis.sqrMagnitude < 1e-8f) return;
+            axis = spline.transform.TransformDirection(axis.normalized);
+            if (GUIUtility.hotControl == 0) s_Disc = Quaternion.identity;
+            var s = BrushSettings.instance;
+            Handles.color = Handles.zAxisColor;
+            EditorGUI.BeginChangeCheck();
+            var rotation = Handles.Disc(s_Disc, centre, axis, HandleUtility.GetHandleSize(centre), false, s.snapToGrid ? s.rotationSnapDegrees : 0f);
+            if (!EditorGUI.EndChangeCheck()) return;
+            (rotation * Quaternion.Inverse(s_Disc)).ToAngleAxis(out float angle, out var turnedAbout);
+            if (angle > 180f) angle -= 360f;
+            if (Vector3.Dot(turnedAbout, axis) < 0f) angle = -angle;
+            s_Disc = rotation;
+            if (Mathf.Abs(angle) < 1e-4f) return;
+            Undo.RecordObject(spline, "Roll spline points");
+            foreach (var i in moving)
+            {
+                if (i >= spline.pointIds.Count) continue;
+                int id = spline.pointIds[i];
+                if (!spline.PointDirection(id, out var f)) continue;
+                float sign = Vector3.Dot(spline.transform.TransformDirection(f), axis) >= 0f ? 1f : -1f; // the way its own run passes it
+                spline.SetRoll(id, spline.Roll(id) + sign * angle);
+            }
+            BrushGenerators.MarkDirty(spline);
         }
 
         /// <summary>The mouse on the plan's floor through the centre, as a direction from the centre.</summary>

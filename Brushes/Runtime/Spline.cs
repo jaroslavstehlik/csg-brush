@@ -46,6 +46,35 @@ namespace CsgBrush
 
         public override bool Flat => false;
 
+        /// <summary>A point's roll: how far the profile is turned about the path there, degrees, by the point's id.</summary>
+        [System.Serializable]
+        public struct PointRoll
+        {
+            public int id;
+            public float degrees;
+            public PointRoll(int id, float degrees) { this.id = id; this.degrees = degrees; }
+        }
+
+        /// <summary>The points with a roll; every other point has none. Between points the roll changes evenly along the path.</summary>
+        [HideInInspector] public List<PointRoll> rolls = new List<PointRoll>();
+
+        /// <summary>A point's roll (by id), degrees: 0 unless set.</summary>
+        public float Roll(int id) { foreach (var r in rolls) if (r.id == id) return r.degrees; return 0f; }
+
+        /// <summary>Set a point's roll (by id), degrees; 0 removes it.</summary>
+        public void SetRoll(int id, float degrees)
+        {
+            rolls.RemoveAll(r => r.id == id);
+            degrees = Mathf.Repeat(degrees + 180f, 360f) - 180f;
+            if (Mathf.Abs(degrees) > 1e-4f) rolls.Add(new PointRoll(id, degrees));
+        }
+
+        protected override void AfterEnsureGraph()
+        {
+            if (rolls == null) rolls = new List<PointRoll>();
+            rolls.RemoveAll(r => PointIndex(r.id) < 0);
+        }
+
         /// <summary>Does the profile have an inside to cut (a channel is open already)?</summary>
         public bool IsHollow => hollow && profile != Profile.UChannel;
 
@@ -67,6 +96,7 @@ namespace CsgBrush
                 h = h * 31 + sides; h = h * 31 + (hollow ? 1 : 0); h = h * 31 + Mathf.RoundToInt(thickness * 1e5f);
                 h = h * 31 + (int)ends; h = h * 31 + (int)orientation; h = h * 31 + Mathf.RoundToInt(Tolerance * 1e5f);
                 h = h * 31 + (material != null ? material.GetHashCode() : 0);
+                foreach (var r in rolls) { h = h * 31 + r.id; h = h * 31 + Mathf.RoundToInt(r.degrees * 1e3f); }
                 return h;
             }
         }
@@ -131,6 +161,8 @@ namespace CsgBrush
         public sealed class Run
         {
             public readonly List<Vector3> points = new List<Vector3>();
+            /// <summary>The roll at each of <see cref="points"/>, degrees: the points' own, changing evenly along the path between them.</summary>
+            public readonly List<float> rolls = new List<float>();
             /// <summary>The links it runs along, in order: which way, and the indices of their first and last points in <see cref="points"/> (the last may be <c>points.Count</c> on a closed run: its first point again).</summary>
             public readonly List<(int link, bool forward, int from, int to)> spans = new List<(int, bool, int, int)>();
             public bool closed;
@@ -204,10 +236,16 @@ namespace CsgBrush
                         var path = Curve(link);
                         bool forward = links[link].start == at;
                         int from = Mathf.Max(0, run.points.Count - 1);
+                        float r0 = Roll(at), r1 = Roll(Far(link, at)), total = PathLength(path), along = 0f;
                         for (int k = 0; k < path.Length; k++)
                         {
                             var q = path[forward ? k : path.Length - 1 - k];
-                            if (run.points.Count == 0 || (run.points[run.points.Count - 1] - q).sqrMagnitude > 1e-10f) run.points.Add(q);
+                            if (k > 0) along += (q - path[forward ? k - 1 : path.Length - k]).magnitude;
+                            if (run.points.Count == 0 || (run.points[run.points.Count - 1] - q).sqrMagnitude > 1e-10f)
+                            {
+                                run.points.Add(q);
+                                run.rolls.Add(Mathf.LerpAngle(r0, r1, total > 1e-6f ? along / total : 0f));
+                            }
                         }
                         run.spans.Add((link, forward, from, run.points.Count - 1));
                         at = Far(link, at);
@@ -216,7 +254,7 @@ namespace CsgBrush
                         if (used[next]) { run.closed = pass == 1 && at == startId; break; }
                         link = next;
                     }
-                    if (run.closed && run.points.Count > 1 && (run.points[0] - run.points[run.points.Count - 1]).sqrMagnitude < 1e-10f) run.points.RemoveAt(run.points.Count - 1); // the last span ends on points.Count: the first point
+                    if (run.closed && run.points.Count > 1 && (run.points[0] - run.points[run.points.Count - 1]).sqrMagnitude < 1e-10f) { run.points.RemoveAt(run.points.Count - 1); run.rolls.RemoveAt(run.rolls.Count - 1); } // the last span ends on points.Count: the first point
                     if (run.points.Count >= 2) runs.Add(run);
                 }
             return runs;
@@ -249,10 +287,23 @@ namespace CsgBrush
                     int n = run.points.Count;
                     float len = 0f; for (int i = span.from; i < span.to; i++) len += (run.points[(i + 1) % n] - run.points[i % n]).magnitude;
                     float d = Mathf.Clamp(span.forward ? distance : len - distance, 0f, len);
-                    pose = OnRun(run, Frames(run.points, run.closed), span.from, span.to, d);
+                    pose = OnRun(run, Frames(run.points, run.closed, run.rolls), span.from, span.to, d);
                     if (!span.forward) { pose.forward = -pose.forward; pose.right = -pose.right; } // facing the link's own way
                     return true;
                 }
+            return false;
+        }
+
+        /// <summary>The direction the path runs through a point (by id), as its roll turns about it; false when no run passes it.</summary>
+        public bool PointDirection(int id, out Vector3 forward)
+        {
+            forward = Vector3.forward;
+            int index = PointIndex(id);
+            if (index < 0) return false;
+            var at = Point(index);
+            foreach (var run in Runs())
+                for (int i = 0; i < run.points.Count; i++)
+                    if ((run.points[i] - at).sqrMagnitude < 1e-10f) { forward = Frames(run.points, run.closed)[i].forward; return true; }
             return false;
         }
 
@@ -269,7 +320,7 @@ namespace CsgBrush
         public Pose PoseAlong(Run run, float distance)
         {
             int n = run.points.Count;
-            return OnRun(run, Frames(run.points, run.closed), 0, run.closed ? n : n - 1, Mathf.Clamp(distance, 0f, RunLength(run)));
+            return OnRun(run, Frames(run.points, run.closed, run.rolls), 0, run.closed ? n : n - 1, Mathf.Clamp(distance, 0f, RunLength(run)));
         }
 
         /// <summary>The place <paramref name="d"/> along a run from point <paramref name="from"/>, going no further than point <paramref name="to"/>.</summary>
@@ -335,8 +386,12 @@ namespace CsgBrush
 
         // ------------------------------------------------------------------ the sweep
 
+        /// <summary>Pieces the last build could not make (their two ends gave no sound shape). Should be 0.</summary>
+        [System.NonSerialized] public int droppedPieces;
+
         public override void Describe(List<BrushSpec> into)
         {
+            droppedPieces = 0;
             var runs = Runs();
             var outer = ProfileParts(false); var inner = IsHollow ? ProfileParts(true) : new List<Vector2[]>();
             float reachOut = Reach(false), reachIn = Reach(true);
@@ -348,15 +403,15 @@ namespace CsgBrush
                 var run = runs[r];
                 // solid: on past a junction or sharp corner, so the branches overlap
                 var solid = Extended(run, run.startIsEnd ? 0f : reachOut, run.endIsEnd ? 0f : reachOut);
-                var frames = Frames(solid, run.closed);
-                foreach (var part in outer) Sweep(solid, frames, run.closed, part, BrushOperation.Add, "Piece", ref piece, into);
+                var frames = Frames(solid, run.closed, run.rolls);
+                foreach (var part in outer) Sweep(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
                 if (inner.Count == 0) continue;
                 // inside: to the middle of junctions; past an open end by a hair, short of a closed one by the wall
                 float s = run.startIsEnd ? (ends == Ends.Open ? Hair : -thickness) : reachIn;
                 float e = run.endIsEnd ? (ends == Ends.Open ? Hair : -thickness) : reachIn;
                 var hole = Extended(run, s, e);
-                var holeFrames = Frames(hole, run.closed);
-                foreach (var part in inner) Sweep(hole, holeFrames, run.closed, part, BrushOperation.Subtract, "Inside", ref piece, cuts);
+                var holeFrames = Frames(hole, run.closed, run.rolls);
+                foreach (var part in inner) Sweep(hole, holeFrames, run.closed, part, reachIn, BrushOperation.Subtract, "Inside", ref piece, cuts);
             }
             into.AddRange(cuts); // every inside after every solid piece: branches open into each other
         }
@@ -382,7 +437,7 @@ namespace CsgBrush
         /// <summary>Per point: the joint's direction, the profile's right and up there, and the mitre (stretch across the turn).</summary>
         struct Frame { public Vector3 forward, right, up, bend; public float stretch; }
 
-        List<Frame> Frames(List<Vector3> p, bool closed)
+        List<Frame> Frames(List<Vector3> p, bool closed, List<float> rolls = null)
         {
             int n = p.Count;
             var frames = new List<Frame>(n);
@@ -424,7 +479,33 @@ namespace CsgBrush
                     f.up = q * f.up; f.right = q * f.right; frames[i] = f;
                 }
             }
+            if (rolls != null)
+                for (int i = 0; i < n && i < rolls.Count; i++)
+                {
+                    if (Mathf.Abs(rolls[i]) < 1e-4f) continue;
+                    var f = frames[i]; var q = Quaternion.AngleAxis(rolls[i], f.forward); // turned after the frames are carried along, so rolls never add up
+                    f.up = q * f.up; f.right = q * f.right; frames[i] = f;
+                }
             return frames;
+        }
+
+        /// <summary>
+        /// A piece without mitres, for where its two mitred ends would cross (a short piece of a wide profile between corners
+        /// that turn up or down as well as sideways): the profile square to the piece, run on past each inner corner by the
+        /// profile's reach so it overlaps its neighbours there, as branches do at a junction. Ends of the path are not run on.
+        /// </summary>
+        BrushPolyhedron Unmitred(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, int k)
+        {
+            int n = p.Count, next = (k + 1) % n;
+            Vector3 a = p[k], b = p[next];
+            var dir = (b - a).normalized;
+            var up = frames[k].up + frames[next].up; up -= dir * Vector3.Dot(up, dir);
+            if (up.sqrMagnitude < 1e-8f) up = frames[k].up - dir * Vector3.Dot(frames[k].up, dir);
+            if (up.sqrMagnitude < 1e-8f) return null;
+            up.Normalize();
+            var f = new Frame { forward = dir, right = Vector3.Cross(up, dir).normalized, up = up, stretch = 1f };
+            bool startInside = closed || k > 0, endInside = closed || next < n - 1;
+            return Hull(Ring(a - dir * (startInside ? reach : 0f), f, part), Ring(b + dir * (endInside ? reach : 0f), f, part));
         }
 
         Vector3[] Ring(Vector3 at, Frame f, Vector2[] part)
@@ -439,7 +520,7 @@ namespace CsgBrush
             return ring;
         }
 
-        void Sweep(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, BrushOperation op, string name, ref int count, List<BrushSpec> into)
+        void Sweep(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, BrushOperation op, string name, ref int count, List<BrushSpec> into)
         {
             int n = p.Count, pieces = closed ? n : n - 1;
             var rings = new Vector3[n][];
@@ -448,7 +529,8 @@ namespace CsgBrush
             {
                 if ((p[(k + 1) % n] - p[k]).sqrMagnitude < 1e-10f) continue;
                 var poly = Hull(rings[k], rings[(k + 1) % n]);
-                if (poly == null) continue;
+                if (poly == null) poly = Unmitred(p, frames, closed, part, reach, k); // the mitres cross: a straight section that overlaps its neighbours
+                if (poly == null) { droppedPieces++; continue; }
                 into.Add(new BrushSpec { name = name + " " + (++count), operation = op, polyhedron = poly, material = material });
             }
         }
@@ -482,7 +564,12 @@ namespace CsgBrush
             }
             var poly = new BrushPolyhedron { vertices = v, faces = faces.ToArray() };
             poly.EnsureOutward();
-            return poly.IsSound(out _) ? poly : null;
+            if (poly.IsSound(out var why)) return poly;
+            LastHullProblem = why;
+            return null;
         }
+
+        /// <summary>Why the last hull that came out unsound was refused (for diagnosis).</summary>
+        public static string LastHullProblem;
     }
 }

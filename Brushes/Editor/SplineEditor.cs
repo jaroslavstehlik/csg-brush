@@ -52,6 +52,30 @@ namespace CsgBrush.Editor
                 else { PointGraphEditContext.Exit(); ToolManager.SetActiveTool<SplineDrawTool>(); }
             }
             EditorGUILayout.EndHorizontal();
+            if (editing && targets.Length == 1 && FloorPlanEditState.Mode == BrushEditMode.Vertex) DrawRoll(spline);
+            if (spline.droppedPieces > 0) EditorGUILayout.HelpBox(spline.droppedPieces + " pieces could not be made here: the path folds too sharply for the profile.", MessageType.Warning);
+        }
+
+        /// <summary>Edit mode: the roll of the selected points, degrees (Rotate turns it in the Scene view).</summary>
+        static void DrawRoll(Spline spline)
+        {
+            var sel = FloorPlanEditState.Sel(spline);
+            if (sel.vertices.Count == 0) return;
+            float first = 0f; bool mixed = false, any = false;
+            foreach (var i in sel.vertices)
+            {
+                float r = spline.Roll(spline.pointIds[i]);
+                if (!any) { first = r; any = true; } else if (!Mathf.Approximately(r, first)) mixed = true;
+            }
+            EditorGUILayout.LabelField("Selected points (" + sel.vertices.Count + ")", EditorStyles.boldLabel);
+            EditorGUI.showMixedValue = mixed;
+            EditorGUI.BeginChangeCheck();
+            float value = EditorGUILayout.FloatField(new GUIContent("Roll", "Degrees the profile is turned about the path at these points. Rotate turns it in the Scene view."), first);
+            EditorGUI.showMixedValue = false;
+            if (!EditorGUI.EndChangeCheck()) return;
+            Undo.RecordObject(spline, "Roll spline points");
+            foreach (var i in sel.vertices) spline.SetRoll(spline.pointIds[i], value);
+            BrushGenerators.MarkDirty(spline);
         }
 
         /// <summary>Does the path bend anywhere more tightly than half the profile's width (its inside would fold)?</summary>

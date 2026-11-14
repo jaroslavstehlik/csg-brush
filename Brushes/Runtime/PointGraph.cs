@@ -83,7 +83,11 @@ namespace CsgBrush
             if (smoothPoints == null) smoothPoints = new List<int>();
             var known = new HashSet<int>();
             for (int i = smoothPoints.Count - 1; i >= 0; i--) if (PointIndex(smoothPoints[i]) < 0 || !known.Add(smoothPoints[i])) smoothPoints.RemoveAt(i);
+            AfterEnsureGraph();
         }
+
+        /// <summary>Per-point data of a subclass, by point id: drop what belongs to points that are gone.</summary>
+        protected virtual void AfterEnsureGraph() { }
 
         /// <summary>The index of the point with an id, or -1.</summary>
         public int PointIndex(int id) { for (int i = 0; i < pointIds.Count; i++) if (pointIds[i] == id) return i; return -1; }

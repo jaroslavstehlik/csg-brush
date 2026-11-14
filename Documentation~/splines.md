@@ -29,13 +29,15 @@ To continue drawing a Spline, select it and click **Draw** in the Inspector. To 
 
 Click **Edit** in the Spline Inspector. Spline edit mode works like [floor plan edit mode](floor-plan-edit-mode.md): select points (**1**) or links (**2**), and use **Move**, **Rotate**, and **Scale** on the selection. **Move** also has an up arrow, because spline points can be at any height. Points snap to the grid.
 
+To turn the profile about the path, select points and use the **Rotate** tool: drag the ring around the path's direction. Rotation snaps to the rotation snap angle. You can also type the angle in **Roll** in the Inspector, under **Selected points**. Between two points, the roll changes evenly along the path. Use it to open a U Channel to one side, or to bank a road.
+
 To curve the path, select points and press **S**, or click **Smooth**. Smooth points are round marks, corners are square. See [Curve walls](floor-plan-edit-mode.md#curve-walls) for how smooth points and the curve tolerance work.
 
 ## Branches, corners, and ends
 
 | **Where** | **Result** |
 | :--- | :--- |
-| A corner | The pieces meet at a mitre, like the corner of a picture frame. A corner sharper than 120 degrees is filled by overlapping the two sides instead. |
+| A corner | The pieces meet at a mitre, like the corner of a picture frame. A corner sharper than 120 degrees is filled by overlapping the two sides instead. Where a short piece of a wide profile turns up or down as well as sideways, its mitres would cross, so that piece overlaps its neighbours instead. |
 | A smooth point where three or more links meet | The two links that are most nearly opposite run through it in one piece. The other links end there. |
 | A corner where three or more links meet | Every link ends there. |
 | A junction of hollow links | The insides are cut after all the solid pieces, so the branches open into each other. |
