@@ -14,8 +14,8 @@
   different heights meet without steps, stubs or spikes; a sharp corner ends flat just past its point. Each run of a
   spline is one brush (it still collides as convex pieces), and a junction a few, so a spline builds several times
   faster and has no seams along its runs. Circles can be halved (**Half**): a half cylinder, or a half pipe open on
-  top when hollow. Every Corner point is a joint: the profile turned about the point (for a circle, a link's own end
-  ring turned onto the next's, so the joint meets the tubes' edges exactly) and, for a
+  top when hollow. Every Corner point is a joint: for a circle each run ends there in a dome made of its own end
+  ring (a capsule), the runs' domes adding up to the joint; for a
   channel or rectangle, an arc of half the width round the outside, so the road is as wide round a corner as along
   it; junctions' open sides are arcs too. **Ends** has a **Rounded** option: half a ball or half a disc.
 - Objects on splines: **GameObject** > **Brush** > **Attach to Spline** keeps an object on the nearest spline (its

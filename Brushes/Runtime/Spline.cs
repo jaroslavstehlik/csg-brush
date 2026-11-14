@@ -466,13 +466,16 @@ namespace CsgBrush
                 // a little (no further than the deck runs on straight along the arm), so no wedge is left between them
                 float runOn = decked && DeckChannel ? Mathf.Min(size.y, 0.125f * size.x) : 0f; // (a solid deck's ends lean as its arms' do)
                 bool freeStart = run.startIsEnd && ends != Ends.Rounded, freeEnd = run.endIsEnd && ends != Ends.Rounded; // (a rounded end is a joint)
+                // a round profile's run is a capsule: domed where it meets a joint (or ends rounded), the domes made of its
+                // own end rings, so runs overlapping at a joint add up to the joint: a sweep of the profile's ball
+                bool capStart = !decked && !run.closed && !freeStart, capEnd = !decked && !run.closed && !freeEnd;
                 float runOnStart = freeStart ? 0f : runOn, runOnEnd = freeEnd ? 0f : runOn;
                 if (runOn > 0f && !run.closed)
                 {
                     var into2 = Trimmed(run, -Mathf.Max(0f, pullStart[r] - runOnStart), -Mathf.Max(0f, pullEnd[r] - runOnEnd), out var intoRolls);
                     foreach (var part in outer) SweepWhole(into2, Frames(into2, run.closed, intoRolls), run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
                 }
-                else foreach (var part in outer) SweepWhole(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
+                else foreach (var part in outer) SweepWhole(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into, capStart, capEnd, reachOut);
                 // the profile where the run meets its hubs, or where it crosses one it passes through
                 foreach (var hub in hubs)
                     foreach (var arm in hub.arms)
@@ -501,118 +504,18 @@ namespace CsgBrush
                 float e = freeEnd ? (ends == Ends.Open ? Hair : -thickness) : Hair + runOnEnd - pullEnd[r];
                 var hole = Trimmed(run, s, e, out var holeRolls);
                 var holeFrames = Frames(hole, run.closed, holeRolls);
-                foreach (var part in inner) SweepWhole(hole, holeFrames, run.closed, part, reachIn, BrushOperation.Subtract, "Inside", ref piece, cuts);
+                foreach (var part in inner) SweepWhole(hole, holeFrames, run.closed, part, reachIn, BrushOperation.Subtract, "Inside", ref piece, cuts, capStart, capEnd, reachIn);
             }
             // each hub: solid pieces joining its arms' ends, and pieces cutting their insides through
             int hubCount = 0;
             foreach (var hub in hubs)
             {
                 hubCount++;
-                if (decked) { Deck(hub, "Junction " + hubCount, into, cuts); continue; }
-                for (int k = 0; k < outer.Count; k++)
-                    foreach (var poly in JointPieces(hub, k, false))
-                        into.Add(new BrushSpec { name = "Junction " + hubCount, operation = BrushOperation.Add, polyhedron = poly, material = material });
-                for (int k = 0; k < inner.Count; k++)
-                    foreach (var poly in JointPieces(hub, k, true))
-                        cuts.Add(new BrushSpec { name = "Junction inside " + hubCount, operation = BrushOperation.Subtract, polyhedron = poly, material = material });
+                if (decked) Deck(hub, "Junction " + hubCount, into, cuts); // (a round profile's joints are its runs' domes)
             }
             into.AddRange(cuts); // every inside after every solid piece: branches open into each other
         }
 
-        /// <summary>
-        /// A round profile's joint. Its arms run right to the point, and each open side of it (the outside of a corner,
-        /// behind a branch, a rounded end) is filled by an arm's own end ring turned about the point onto the next arm's,
-        /// in steps no coarser than the curve tolerance, its roll eased from one arm's to the other's: so the joint starts
-        /// on one arm's end edges and finishes on the other's, as a welded elbow does, and a half pipe's rim turns without
-        /// a step. Where neighbouring arms meet at under 180 degrees the arms themselves cover the middle.
-        /// </summary>
-        IEnumerable<BrushPolyhedron> JointPieces(Hub hub, int part, bool inside)
-        {
-            int n = hub.arms.Count;
-            foreach (var arm in hub.arms) if (part >= (inside ? arm.inner : arm.outer).Count) yield break;
-            var up = Vector3.zero; foreach (var arm in hub.arms) up += arm.frame.up;
-            up = HubUp(up);
-            var x = Vector3.ProjectOnPlane(hub.arms[0].direction, up);
-            if (x.sqrMagnitude < 1e-6f) x = Vector3.ProjectOnPlane(Vector3.right, up);
-            x.Normalize(); var y = Vector3.Cross(up, x);
-            float Angle(Vector3 d) => Mathf.Atan2(Vector3.Dot(d, y), Vector3.Dot(d, x)) * Mathf.Rad2Deg;
-            var order = new List<int>(); for (int i = 0; i < n; i++) order.Add(i);
-            order.Sort((i, j) => Angle(hub.arms[i].direction).CompareTo(Angle(hub.arms[j].direction)));
-            float step = ArcStepDegrees(HalfWidth(inside));
-            for (int k = 0; k < n; k++)
-            {
-                Arm a = hub.arms[order[k]], b = hub.arms[order[(k + 1) % n]];
-                float gap = Mathf.Repeat(Angle(b.direction) - Angle(a.direction), 360f);
-                if (n == 1 || gap < 1e-3f) gap = 360f;
-                if (gap < 180f) continue; // the arms cover it
-                if (n > 1 && Vector3.Angle(a.direction, b.direction) > 178f) continue; // straight on: the two arms cover it
-                var ringA = (inside ? a.inner : a.outer)[part];
-                var ringB = n == 1 ? null : (inside ? b.inner : b.outer)[part];
-                // the turn taking a onto b through the open side (one arm: half a turn about its up, its far half)
-                var mid = Quaternion.AngleAxis(Angle(a.direction) + gap * 0.5f, up) * x; // the middle of the open side
-                Vector3 axis; float total;
-                if (n == 1) { axis = Vector3.ProjectOnPlane(a.frame.up, a.direction).normalized; total = 180f; }
-                else
-                {
-                    var c = Vector3.Cross(a.direction, b.direction);
-                    axis = c.sqrMagnitude > 1e-8f ? c.normalized : Vector3.ProjectOnPlane(up, a.direction).normalized;
-                    float ang = Vector3.Angle(a.direction, b.direction);
-                    total = 0f; float best = float.MaxValue;
-                    foreach (float t in new[] { ang, -ang, 360f - ang, ang - 360f })
-                    {
-                        var q = Quaternion.AngleAxis(t, axis);
-                        if ((q * a.direction - b.direction).sqrMagnitude > 1e-4f) continue;
-                        float side = -Vector3.Dot(Quaternion.AngleAxis(t * 0.5f, axis) * a.direction, mid); // through the open side
-                        if (side < best) { best = side; total = t; }
-                    }
-                    if (total == 0f) continue;
-                }
-                var end = Quaternion.AngleAxis(total, axis);
-                float roll = n == 1 ? 0f : Vector3.SignedAngle(end * a.frame.up, b.frame.up, b.direction);
-                // only the half of the ring that moves out into the open side turns: the other half would move into the
-                // arms, and its corners (at the full radius) would poke out of their flat faces
-                var sweepAxis = axis * Mathf.Sign(total); var openSide = n == 1 ? -a.direction : (Vector3)mid;
-                var halfRing = new List<Vector3>(ringA.Length + 2);
-                float Outward(Vector3 q) => Vector3.Dot(Vector3.Cross(sweepAxis, q - hub.at), openSide);
-                for (int j = 0; j < ringA.Length; j++)
-                {
-                    Vector3 p0 = ringA[j], p1 = ringA[(j + 1) % ringA.Length];
-                    float d0 = Outward(p0), d1 = Outward(p1);
-                    if (d0 >= -1e-6f) halfRing.Add(p0);
-                    if ((d0 > 1e-6f && d1 < -1e-6f) || (d0 < -1e-6f && d1 > 1e-6f)) halfRing.Add(Vector3.Lerp(p0, p1, d0 / (d0 - d1)));
-                }
-                if (halfRing.Count < 3) continue;
-                ringA = halfRing.ToArray(); ringB = null; // (its far end is the turned half: the half of b's ring on that side)
-                int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(total) / step));
-                Vector3[] At(int i)
-                {
-                    if (i == steps && ringB != null) return ringB;
-                    float f = i / (float)steps;
-                    var q = Quaternion.AngleAxis(total * f, axis);
-                    var turn = Quaternion.AngleAxis(roll * f, q * a.direction) * q;
-                    var ring = new Vector3[ringA.Length];
-                    for (int j = 0; j < ringA.Length; j++) ring[j] = hub.at + turn * (ringA[j] - hub.at);
-                    return ring;
-                }
-                Vector3[] last = At(0), before = null;
-                for (int i = 1; i <= steps; i++)
-                {
-                    var next = At(i);
-                    var pts = new List<Vector3>(last.Length * 3); pts.AddRange(last); pts.AddRange(next);
-                    var piece = HullOf(pts);
-                    if (piece == null && i < steps) continue; // too thin a wedge to make: one step wider
-                    if (piece == null)
-                    {
-                        // the last one: the ring a hair smaller, which takes it off the points it shares with the one before
-                        // (on the axis) that can leave the hull open
-                        pts.Clear(); pts.AddRange(last); foreach (var q in next) pts.Add(hub.at + (q - hub.at) * 0.9995f);
-                        piece = HullOf(pts);
-                    }
-                    if (piece != null) yield return piece;
-                    before = last; last = next;
-                }
-            }
-        }
 
         /// <summary>A frame turned to run along <paramref name="direction"/> (the profile is the same either way: it is symmetric).</summary>
         static Frame Away(Frame f, Vector3 direction) => Vector3.Dot(f.forward, direction) >= 0f ? f : new Frame { forward = -f.forward, right = -f.right, up = f.up };
@@ -1194,7 +1097,7 @@ namespace CsgBrush
                     if (arm.through >= 0) room = run.closed ? 0.45f * RunLength(run) : 0.9f * Along(run.points, arm.through, arm.sign);
                     else room = RunLength(run) * ((arm.atStart ? run.endIsEnd : run.startIsEnd) ? 0.9f : 0.45f); // shared with a hub at its other end
                     arm.room = room;
-                    arm.pull = Decked ? Mathf.Clamp(pull, 0f, room) : 0f; // a round profile's arms run to the point (see JointPieces)
+                    arm.pull = Decked ? Mathf.Clamp(pull, 0f, room) : 0f; // a round profile's runs run to the point, domed there
                 }
             return hubs;
         }
@@ -1373,14 +1276,47 @@ namespace CsgBrush
         /// pieces share their rings, so there are no seams between them, and one brush is far cheaper to build than many.
         /// Where it comes out unsound (mitres crossing on a tight bend), the run is swept in convex pieces instead.
         /// </summary>
-        void SweepWhole(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, BrushOperation op, string name, ref int count, List<BrushSpec> into)
+        void SweepWhole(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, BrushOperation op, string name, ref int count, List<BrushSpec> into, bool capStart = false, bool capEnd = false, float capRadius = 0f)
         {
-            var poly = Swept(p, frames, closed, part);
+            var poly = Swept(p, frames, closed, part, capStart, capEnd, capRadius);
             if (poly != null) { into.Add(new BrushSpec { name = name + " " + (++count), operation = op, polyhedron = poly, material = material }); return; }
             Sweep(p, frames, closed, part, reach, op, name, ref count, into);
+            // (in pieces: each dome its own brush)
+            if (closed || p.Count < 2) return;
+            int last = p.Count - 1;
+            foreach (var (on, at, outward) in new[] { (capStart, 0, (p[0] - p[1]).normalized), (capEnd, last, (p[last] - p[last - 1]).normalized) })
+            {
+                if (!on) continue;
+                var ring = Ring(p, frames, false, part, at); var centre = p[at];
+                var pts = new List<Vector3>(ring);
+                foreach (var dome in Dome(ring, centre, outward, capRadius)) pts.AddRange(dome);
+                var hull = HullOf(pts);
+                if (hull != null) into.Add(new BrushSpec { name = name + " " + (++count), operation = op, polyhedron = hull, material = material });
+            }
         }
 
-        BrushPolyhedron Swept(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part)
+        /// <summary>
+        /// The rings of a dome on an end <paramref name="ring"/> (centred on <paramref name="centre"/>, square to the path):
+        /// the ring itself scaled in and moved out along <paramref name="outward"/> a quarter turn at a time, then the pole.
+        /// Its rings share the ring's own corners, scaled, so the dome meets the sweep exactly: a capsule's end, as fine as
+        /// the profile's circle.
+        /// </summary>
+        List<Vector3[]> Dome(Vector3[] ring, Vector3 centre, Vector3 outward, float radius)
+        {
+            int steps = Mathf.Max(2, (CircleSides + 3) / 4);
+            var rings = new List<Vector3[]>(steps);
+            for (int k = 1; k < steps; k++)
+            {
+                float a = 0.5f * Mathf.PI * k / steps, c = Mathf.Cos(a), sn = Mathf.Sin(a);
+                var r = new Vector3[ring.Length];
+                for (int j = 0; j < ring.Length; j++) r[j] = centre + (ring[j] - centre) * c + outward * (radius * sn);
+                rings.Add(r);
+            }
+            rings.Add(new[] { centre + outward * radius });
+            return rings;
+        }
+
+        BrushPolyhedron Swept(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, bool capStart = false, bool capEnd = false, float capRadius = 0f)
         {
             int n = p.Count, m = part.Length;
             var at = new List<int>(n); // the points that start a piece of some length (and the last)
@@ -1415,9 +1351,35 @@ namespace CsgBrush
             }
             if (!closed)
             {
-                var start = new int[m]; var end = new int[m];
-                for (int j = 0; j < m; j++) { start[j] = m - 1 - j; end[j] = (rings - 1) * m + j; }
-                faces.Add(new BrushPolyhedron.Face(start) { group = 0 }); faces.Add(new BrushPolyhedron.Face(end) { group = bands - 1 });
+                // each end flat, or a dome (a capsule's end) whose rings are the end ring's own corners scaled in
+                void Domed(int baseRing, Vector3 centre, Vector3 outward, bool atStart, int group)
+                {
+                    int prev = baseRing * m;
+                    foreach (var r in Dome(verts.GetRange(baseRing * m, m).ToArray(), centre, outward, capRadius))
+                    {
+                        if (r.Length == 1)
+                        {
+                            int pole = verts.Count; verts.Add(r[0]);
+                            for (int j = 0; j < m; j++)
+                            {
+                                int j1 = (j + 1) % m;
+                                faces.Add(new BrushPolyhedron.Face(atStart ? new[] { pole, prev + j1, prev + j } : new[] { prev + j, prev + j1, pole }) { group = group });
+                            }
+                            break;
+                        }
+                        int next = verts.Count; verts.AddRange(r);
+                        for (int j = 0; j < m; j++)
+                        {
+                            int j1 = (j + 1) % m;
+                            AddQuad(faces, verts, atStart ? new[] { next + j, next + j1, prev + j1, prev + j } : new[] { prev + j, prev + j1, next + j1, next + j }, group);
+                        }
+                        prev = next;
+                    }
+                }
+                if (capStart) Domed(0, p[at[0]], (p[at[0]] - p[at[1]]).normalized, true, bands);
+                else { var start = new int[m]; for (int j = 0; j < m; j++) start[j] = m - 1 - j; faces.Add(new BrushPolyhedron.Face(start) { group = 0 }); }
+                if (capEnd) Domed(rings - 1, p[at[rings - 1]], (p[at[rings - 1]] - p[at[rings - 2]]).normalized, false, bands + 1);
+                else { var end = new int[m]; for (int j = 0; j < m; j++) end[j] = (rings - 1) * m + j; faces.Add(new BrushPolyhedron.Face(end) { group = bands - 1 }); }
             }
             var poly = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
             poly.EnsureOutward();
