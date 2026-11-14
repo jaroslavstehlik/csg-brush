@@ -2,7 +2,7 @@
 
 A **Spline** sweeps a profile along a path: pipes, beams, rails, gutters, and tunnels. Points are joined by links like the walls of a [floor plan](floor-plans.md), but in 3D, and a point can join any number of links, so a spline can branch. Smooth points curve the path.
 
-The pieces are generated brushes. They're hidden in the Hierarchy, and when you click one in the Scene view, Unity selects the Spline. When you change the path or the Spline properties, the pieces update.
+The pieces are generated brushes: one for each run of the path between junctions and ends, and a few for each junction. They're hidden in the Hierarchy, and when you click one in the Scene view, Unity selects the Spline. When you change the path or the Spline properties, the pieces update.
 
 ## Draw a spline
 

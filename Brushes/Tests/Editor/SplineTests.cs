@@ -390,6 +390,51 @@ namespace CsgBrush.Tests
                 }
         }
 
+        /// <summary>
+        /// Random channel networks (points on a jittered grid at random heights, a random tree of links plus a few loops, a
+        /// third of the points Smooth): along the middle of every link, the first surface under the path is its floor.
+        /// </summary>
+        [Test]
+        public void RandomChannelNetworksHaveTheirFloorAllAlong([Values(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)] int seed)
+        {
+            BrushSettings.instance.snapToGrid = false;
+            var rnd = new System.Random(seed);
+            float R(float a, float b) => a + (float)rnd.NextDouble() * (b - a);
+            var s = new GameObject("Spline").AddComponent<Spline>();
+            s.profile = Spline.Profile.UChannel; s.size = new Vector2(3f, 0.6f); s.thickness = 0.15f;
+            s.orientation = rnd.Next(4) == 0 ? Spline.Orientation.Follow : Spline.Orientation.Upright;
+            const int Cols = 3, Rows = 3;
+            var grid = new int[Cols * Rows];
+            for (int gx = 0; gx < Cols; gx++)
+                for (int gz = 0; gz < Rows; gz++)
+                    grid[gx * Rows + gz] = s.AddPoint(new Vector3(gx * 9f + R(-2.5f, 2.5f), R(0f, 2f), gz * 9f + R(-2.5f, 2.5f)));
+            var linked = new HashSet<long>();
+            void Link(int a, int b) { long k = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a; if (a != b && linked.Add(k)) s.AddLink(a, b); }
+            var edges = new List<(int, int)>();
+            for (int gx = 0; gx < Cols; gx++) for (int gz = 0; gz < Rows; gz++) { int i = gx * Rows + gz; if (gx + 1 < Cols) edges.Add((i, i + Rows)); if (gz + 1 < Rows) edges.Add((i, i + 1)); }
+            var inTree = new HashSet<int> { 0 };
+            while (inTree.Count < Cols * Rows)
+            {
+                var (a, b) = edges[rnd.Next(edges.Count)];
+                if (inTree.Contains(a) != inTree.Contains(b)) { Link(grid[a], grid[b]); inTree.Add(a); inTree.Add(b); }
+            }
+            for (int k = 0; k < 2; k++) { var (a, b) = edges[rnd.Next(edges.Count)]; Link(grid[a], grid[b]); }
+            foreach (var id in grid) if (rnd.Next(3) == 0) s.SetSmooth(id, true);
+            Rebuild(s);
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            for (int link = 0; link < s.links.Count; link++)
+            {
+                float len = s.CurveLength(link);
+                for (float d = 0.1f; d < len - 0.1f; d += 0.1f)
+                {
+                    s.CurvePoint(link, d, out var p, out _);
+                    Assert.IsTrue(Physics.Raycast(p + Vector3.up * 0.35f, Vector3.down, out var hit, 1.5f), "a floor on link " + link + " at " + d.ToString("F1"));
+                    float below = p.y - hit.point.y; // the floor's top is 0.15 under the path, lower on a slope or bank
+                    Assert.IsTrue(below > 0.05f && below < 0.45f, "the floor, not a wall or a hole, on link " + link + " at " + d.ToString("F1") + ": " + below.ToString("F2") + " m under the path, on " + hit.collider.name);
+                }
+            }
+        }
+
         [Test]
         public void ASharpCornerEndsFlatJustPastItsPoint()
         {

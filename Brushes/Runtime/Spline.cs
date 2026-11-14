@@ -732,12 +732,18 @@ namespace CsgBrush
             var verts = new List<DeckVertex>();
             int n = hub.arms.Count;
             if (n < 2) return verts;
-            Vector3 X = x, Y = y, at = hub.at;
+            Vector3 X = x, Y = y, U = up, at = hub.at;
             Vector2 P(Vector3 v) => new Vector2(Vector3.Dot(v - at, X), Vector3.Dot(v - at, Y));
             Vector2 D(Vector3 v) => new Vector2(Vector3.Dot(v, X), Vector3.Dot(v, Y));
             float Angle(Arm a) { var d = D(a.frame.forward); return Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg; }
             var order = new List<int>(); for (int i = 0; i < n; i++) order.Add(i);
             order.Sort((i, j) => Angle(hub.arms[i]).CompareTo(Angle(hub.arms[j])));
+            Vector3 OnFloor(Arm a, Vector3 point) // straight along the hub's up onto the plane of the arm's floor
+            {
+                var o = a.end + a.frame.up * top; var nrm = a.frame.up;
+                float along = Vector3.Dot(U, nrm);
+                return Mathf.Abs(along) < 1e-3f ? point : point + U * (Vector3.Dot(o - point, nrm) / along);
+            }
             Vector3 Side(Arm a, int side) => a.end + a.frame.right * (side * half) + a.frame.up * top; // the floor's edge at the arm's end
             int Ccw(Arm a) => Cross2(D(a.frame.forward), D(a.frame.right)) > 0f ? 1 : -1; // which side faces the next arm round
             void Add(Vector3 p, Vector3 normal, bool opening, bool end = false) => verts.Add(new DeckVertex { p = p, up = normal, q = P(p), opening = opening, end = end });
@@ -769,7 +775,14 @@ namespace CsgBrush
                 float mid = (Angle(a) + gap * 0.5f) * Mathf.Deg2Rad;
                 var o = new Vector2(Mathf.Cos(mid), Mathf.Sin(mid));
                 if (hit && Vector2.Dot(P(meet), o) <= cap + 1e-4f) Add(meet, (a.frame.up + b.frame.up).normalized, false);
-                else { Add(oa + a.frame.forward * ToCap(P(oa), da, o), a.frame.up, false); Add(ob + b.frame.forward * ToCap(P(ob), db, o), b.frame.up, false); }
+                else
+                {
+                    // the two ends of the flat end: each on both arms' floors, halfway, so the two stand at heights that agree
+                    var ea = oa + a.frame.forward * ToCap(P(oa), da, o); var eb = ob + b.frame.forward * ToCap(P(ob), db, o);
+                    Vector3 Between(Vector3 point) => (OnFloor(a, point) + OnFloor(b, point)) * 0.5f;
+                    var normal = (a.frame.up + b.frame.up).normalized;
+                    Add(Between(ea), normal, false); Add(Between(eb), normal, false);
+                }
             }
             // corners closer than MergeCorners: one corner (where an arm ends, if either is), with the later one's edge onward;
             // a wall a few centimetres long would stand at a random angle
@@ -834,7 +847,8 @@ namespace CsgBrush
             foreach (var c in v) { outerQ.Add(c.q); outerP.Add(c.p); outerUp.Add(c.up); }
             if (profile != Profile.UChannel)
             {
-                Add(into, BrushOperation.Add, name, Prism(outerQ, outerP, outerUp, middle, up, DeckDepth, 0f));
+                var level = new List<Vector3>(n); foreach (var _ in outerUp) level.Add(up);
+                Add(into, BrushOperation.Add, name, Prism(outerQ, outerP, level, middle, up, DeckDepth, 0f));
                 return;
             }
             // the inside: each corner moved in by the wall's thickness from its walls (along an arm's end where it meets one);
@@ -886,15 +900,18 @@ namespace CsgBrush
                 Add(into, BrushOperation.Add, name, Prism(q2, p2, u2, null, up, DeckDepth, wall));
             }
             // the floor inside the walls, and the inside cut on the same triangles, so it never dips into the floor
-            Add(into, BrushOperation.Add, name, Prism(innerQ, innerP, innerUp, middle, up, DeckDepth, 0f));
-            Add(cuts, BrushOperation.Subtract, name + " inside", Prism(innerQ, innerP, innerUp, middle, up, 0f, wall + OpenTop * size.y + 0.01f));
+            // (both straight along the junction's up: offsets along each corner's own would let a thin floor fold through itself)
+            var common = new List<Vector3>(innerUp.Count); foreach (var _ in innerUp) common.Add(up);
+            Add(into, BrushOperation.Add, name, Prism(innerQ, innerP, common, middle, up, DeckDepth, 0f));
+            Add(cuts, BrushOperation.Subtract, name + " inside", Prism(innerQ, innerP, common, middle, up, 0f, wall + OpenTop * size.y + 0.01f));
         }
 
         /// <summary>
         /// A closed polygon (<paramref name="plan"/>, corners <paramref name="pts"/> standing along <paramref name="ups"/>) as a
         /// prism from <paramref name="below"/> under it to <paramref name="above"/> over it: one brush, concave where the
         /// polygon is. Its top and bottom run through <paramref name="middle"/> (the junction point) where that is inside.
-        /// Corners on a straight line are dropped first (the triangles skip them, which would leave the top open).
+        /// Corners on a straight line are dropped first (the triangles skip them, which would leave the top open), and corners
+        /// closer than <see cref="MergeCorners"/> merged.
         /// </summary>
         BrushPolyhedron Prism(List<Vector2> plan, List<Vector3> pts, List<Vector3> ups, Vector3? middle, Vector3 middleUp, float below, float above)
         {
@@ -904,7 +921,12 @@ namespace CsgBrush
                 int prev = (i - 1 + q.Count) % q.Count, next = (i + 1) % q.Count;
                 Vector2 dIn = q[i] - q[prev], dOut = q[next] - q[i];
                 bool straight = Mathf.Abs(Cross2(dIn, dOut)) < 1e-4f * dIn.magnitude * dOut.magnitude && Vector2.Dot(dIn, dOut) > 0f;
-                if (straight || dIn.sqrMagnitude < 1e-8f) { q.RemoveAt(i); p.RemoveAt(i); u.RemoveAt(i); i = 0; continue; }
+                if (dIn.sqrMagnitude < MergeCorners * MergeCorners) // two corners all but on top of each other: one, halfway (a notch that small breaks the triangles)
+                {
+                    q[prev] = (q[prev] + q[i]) * 0.5f; p[prev] = (p[prev] + p[i]) * 0.5f; u[prev] = (u[prev] + u[i]).normalized;
+                    q.RemoveAt(i); p.RemoveAt(i); u.RemoveAt(i); i = 0; continue;
+                }
+                if (straight) { q.RemoveAt(i); p.RemoveAt(i); u.RemoveAt(i); i = 0; continue; }
                 i++;
             }
             int n = q.Count;
@@ -936,7 +958,7 @@ namespace CsgBrush
             var poly = new BrushPolyhedron { vertices = verts, faces = faces.ToArray() };
             poly.EnsureOutward();
             if (poly.IsSound(out var why)) return poly;
-            LastHullProblem = "deck: " + why;
+            LastHullProblem = "deck: " + why + " (" + n + " corners" + (usesMiddle ? ", through the point" : "") + ")";
             return null;
         }
 
