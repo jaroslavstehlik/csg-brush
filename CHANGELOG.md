@@ -19,8 +19,8 @@
   also used the keys for edit mode (S made the selected points smooth), and letting go of the right mouse after flying
   opened the edit mode's menu. The keys now only move the view while flying, and the menu opens on a right click only.
 - Fixed: pressing Q (the View tool) while a point, marquee or handle of an edit mode or tool held the mouse left the
-  mouse held. Unity then started the next fly-through without its Scene view, and every fly key threw a
-  NullReferenceException in SceneViewMotion. A hold no handler ended is now let go when the button comes up.
+  mouse held, blocking Unity's own controls until the next click. A hold no handler ended is now let go when the button
+  comes up.
 - Fixed: undo after scaling a brush with the Scale tool (or typing a scale in the Inspector) left it at the new size.
   The scale becomes the brush's size when you let go, and that change is now part of the same undo step, so one undo
   (and redo) takes back the whole scale.
