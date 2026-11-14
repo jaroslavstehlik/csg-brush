@@ -467,7 +467,7 @@ namespace CsgBrush
                 // solid: pulled back from its hubs to where it no longer overlaps the other arms there
                 var solid = Trimmed(run, -pullStart[r], -pullEnd[r], out var solidRolls);
                 var frames = Frames(solid, run.closed, solidRolls);
-                foreach (var part in outer) Sweep(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
+                foreach (var part in outer) SweepWhole(solid, frames, run.closed, part, reachOut, BrushOperation.Add, "Piece", ref piece, into);
                 // the profile where the run meets its hubs, or where it crosses one it passes through
                 foreach (var hub in hubs)
                     foreach (var arm in hub.arms)
@@ -496,7 +496,7 @@ namespace CsgBrush
                 float e = run.endIsEnd ? (ends == Ends.Open ? Hair : -thickness) : Hair - pullEnd[r];
                 var hole = Trimmed(run, s, e, out var holeRolls);
                 var holeFrames = Frames(hole, run.closed, holeRolls);
-                foreach (var part in inner) Sweep(hole, holeFrames, run.closed, part, reachIn, BrushOperation.Subtract, "Inside", ref piece, cuts);
+                foreach (var part in inner) SweepWhole(hole, holeFrames, run.closed, part, reachIn, BrushOperation.Subtract, "Inside", ref piece, cuts);
             }
             // each hub: solid pieces joining its arms' ends, and pieces cutting their insides through
             int hubCount = 0;
@@ -814,130 +814,164 @@ namespace CsgBrush
         }
 
         /// <summary>
-        /// A hub's deck: floor slabs over its outline (each triangle a convex brush, so the floor follows the arms' slopes
-        /// without steps); for a channel, a wall along each outline edge between arms, mitred where walls meet, from the
-        /// floor's underside up, the floor inside them, and the inside cut clear above that floor on the same triangles,
-        /// which also clears walls of nearby junctions that stand in it.
+        /// A hub's deck, as two brushes. Solid: the outline as a prism from the floor's underside to the tops of the walls
+        /// (a solid Rectangle: to its top). Cut, for a channel: the outline moved in by the wall's thickness from its walls,
+        /// from the floor up and clear above the walls, which also clears walls of nearby junctions that stand in it. What
+        /// is left between the two is the junction's walls, mitred where they meet. Each corner stands as its arm does
+        /// (its up), and the floor runs through the junction point too, so it follows the arms' heights and slopes.
         /// </summary>
         void Deck(Hub hub, string name, List<BrushSpec> into, List<BrushSpec> cuts)
         {
             var v = Outline(hub, null, out var up, out var x, out var y);
             int n = v.Count;
             if (n < 3) return;
-            float depth = DeckDepth;
-            var q = new List<Vector2>(n); foreach (var c in v) q.Add(c.q);
-            void Add(List<BrushSpec> list, BrushOperation op, string what, List<Vector3> pts)
+            var middle = hub.at + up * DeckTop;
+            void Add(List<BrushSpec> list, BrushOperation op, string what, BrushPolyhedron poly)
             {
-                var poly = HullOf(pts);
                 if (poly != null) list.Add(new BrushSpec { name = what, operation = op, polyhedron = poly, material = material });
             }
-            void Slabs(List<Vector3[]> tris)
-            {
-                foreach (var t in tris)
-                {
-                    var pts = new List<Vector3>(6);
-                    foreach (var p in t) { pts.Add(p); pts.Add(p - up * depth); }
-                    Add(into, BrushOperation.Add, name, pts);
-                }
-            }
-            // the point itself is a corner of the floor too: a junction point moved down takes the floor down with it
-            var middle = hub.at + up * DeckTop;
+            var outerQ = new List<Vector2>(n); var outerP = new List<Vector3>(n); var outerUp = new List<Vector3>(n);
+            foreach (var c in v) { outerQ.Add(c.q); outerP.Add(c.p); outerUp.Add(c.up); }
             if (profile != Profile.UChannel)
             {
-                var tops = new List<Vector3>(n); foreach (var c in v) tops.Add(c.p);
-                Slabs(WithMiddle(q, tops, middle));
+                Add(into, BrushOperation.Add, name, Prism(outerQ, outerP, outerUp, middle, up, DeckDepth, 0f));
                 return;
             }
             // the inside: each corner moved in by the wall's thickness from its walls (along an arm's end where it meets one);
-            // where two arms' ends meet at a corner, a piece of wall joins their walls there
+            // where two arms' ends meet at a corner, a wedge of wall stands between their walls
             float t2 = thickness, wall = size.y - thickness;
-            var innerIn = new Vector3[n]; var innerOut = new Vector3[n];
-            var inner = new List<Vector3>(n + 4); var innerQ = new List<Vector2>(n + 4);
-            Vector3 At(int i, Vector2 r) => v[i].p + x * (r.x - q[i].x) + y * (r.y - q[i].y);
-            void Wall(Vector3 upA, Vector3 upB, params Vector3[] footprint) // standing as the arms' walls do: up the first half from upA, the rest from upB
-            {
-                var pts = new List<Vector3>(footprint.Length * 2);
-                for (int k = 0; k < footprint.Length; k++) { var u = k < footprint.Length / 2 ? upA : upB; pts.Add(footprint[k] - u * depth); pts.Add(footprint[k] + u * wall); }
-                Add(into, BrushOperation.Add, name, pts);
-            }
+            var innerQ = new List<Vector2>(n + 4); var innerP = new List<Vector3>(n + 4); var innerUp = new List<Vector3>(n + 4);
+            var cornerQ = new Vector2[n]; var cornerP = new Vector3[n]; // each outline corner's inner point
+            void Inner(int i, Vector2 r, Vector3 p) { innerQ.Add(r); innerP.Add(p); innerUp.Add(v[i].up); }
+            Vector3 At(int i, Vector2 r) => v[i].p + x * (r.x - v[i].q.x) + y * (r.y - v[i].q.y);
             for (int i = 0; i < n; i++)
             {
                 int prev = (i - 1 + n) % n, next = (i + 1) % n;
-                Vector2 a = q[prev], b = q[i], c = q[next];
+                Vector2 a = v[prev].q, b = v[i].q, c = v[next].q;
                 bool wallIn = !v[prev].opening, wallOut = !v[i].opening;
                 Vector2 dIn = b - a, dOut = c - b;
                 Vector2 nIn = new Vector2(-dIn.y, dIn.x).normalized, nOut = new Vector2(-dOut.y, dOut.x).normalized; // inward: the outline runs counter-clockwise
                 if (!wallIn && !wallOut)
                 {
+                    cornerQ[i] = b; cornerP[i] = v[i].p;
                     if (Cross2(dIn, dOut) > 1e-4f * dIn.magnitude * dOut.magnitude && dIn.magnitude > t2 && dOut.magnitude > t2)
                     {
-                        // two arms' ends meeting at a corner: their walls end square to them, so the wedge between is filled
                         Vector2 pIn = b - dIn.normalized * t2, pOut = b + dOut.normalized * t2;
                         var m = Hit(pIn, nIn, pOut, nOut, out float sm, out _) ? pIn + nIn * sm : (pIn + pOut) * 0.5f;
                         if ((m - b).magnitude > 4f * t2) m = (pIn + pOut) * 0.5f;
                         Vector3 pIn3 = Vector3.Lerp(v[i].p, v[prev].p, t2 / dIn.magnitude), pOut3 = Vector3.Lerp(v[i].p, v[next].p, t2 / dOut.magnitude), m3 = At(i, m);
-                        Wall(v[i].up, v[i].up, v[i].p, pIn3, m3, pOut3);
-                        inner.Add(pIn3); innerQ.Add(pIn); inner.Add(m3); innerQ.Add(m); inner.Add(pOut3); innerQ.Add(pOut);
-                        innerIn[i] = innerOut[i] = m3;
+                        Inner(i, pIn, pIn3); Inner(i, m, m3); Inner(i, pOut, pOut3);
+                        var ups = new List<Vector3> { v[i].up, v[i].up, v[i].up, v[i].up };
+                        Add(into, BrushOperation.Add, name, Prism(new List<Vector2> { b, pIn, m, pOut }, new List<Vector3> { v[i].p, pIn3, m3, pOut3 }, ups, null, up, DeckDepth, wall));
                         continue;
                     }
-                    innerIn[i] = innerOut[i] = v[i].p; inner.Add(v[i].p); innerQ.Add(b);
+                    Inner(i, b, v[i].p);
                     continue;
                 }
                 Vector2 qIn = b + (wallIn ? nIn * t2 : Vector2.zero), qOut = b + (wallOut ? nOut * t2 : Vector2.zero);
                 var r = Hit(qIn, dIn, qOut, dOut, out float s, out _) ? qIn + dIn * s : b + (wallIn ? nIn : nOut) * t2;
                 if ((r - b).magnitude > 4f * t2) r = b + (r - b).normalized * (4f * t2); // a very sharp corner: bevelled
-                innerIn[i] = innerOut[i] = At(i, r);
-                inner.Add(innerIn[i]); innerQ.Add(r);
+                cornerQ[i] = r; cornerP[i] = At(i, r);
+                Inner(i, r, cornerP[i]);
             }
-            for (int i = 0; i < n; i++)
+            // the walls: each stretch of outline between two arms, as one brush from the floor's underside to the top
+            for (int start = 0; start < n; start++)
             {
-                if (v[i].opening) continue;
-                int j = (i + 1) % n;
-                Wall(v[i].up, v[j].up, v[i].p, innerOut[i], v[j].p, innerIn[j]);
+                if (v[start].opening || !v[(start - 1 + n) % n].opening) continue; // a stretch starts after an arm's end
+                var chain = new List<int> { start };
+                for (int i = start; !v[i].opening && chain.Count <= n; ) { i = (i + 1) % n; chain.Add(i); }
+                var q2 = new List<Vector2>(); var p2 = new List<Vector3>(); var u2 = new List<Vector3>();
+                foreach (int i in chain) { q2.Add(v[i].q); p2.Add(v[i].p); u2.Add(v[i].up); }
+                for (int k = chain.Count - 1; k >= 0; k--) { int i = chain[k]; q2.Add(cornerQ[i]); p2.Add(cornerP[i]); u2.Add(v[i].up); }
+                Add(into, BrushOperation.Add, name, Prism(q2, p2, u2, null, up, DeckDepth, wall));
             }
-            // the floor on the same triangles as the cut above it, so the cut never dips into it; the walls stand on the rest
-            var tris = WithMiddle(innerQ, inner, middle);
-            Slabs(tris);
-            float clear = wall + OpenTop * size.y + 0.01f;
-            foreach (var t in tris)
-                Add(cuts, BrushOperation.Subtract, name + " inside", new List<Vector3> { t[0], t[0] + up * clear, t[1], t[1] + up * clear, t[2], t[2] + up * clear });
+            // the floor inside the walls, and the inside cut on the same triangles, so it never dips into the floor
+            Add(into, BrushOperation.Add, name, Prism(innerQ, innerP, innerUp, middle, up, DeckDepth, 0f));
+            Add(cuts, BrushOperation.Subtract, name + " inside", Prism(innerQ, innerP, innerUp, middle, up, 0f, wall + OpenTop * size.y + 0.01f));
         }
 
         /// <summary>
-        /// A polygon's triangles (as their corners), with <paramref name="middle"/> (the hub's own floor point, at the plan's
-        /// origin) a corner: fanned from it when it sees every edge, else a corner of the triangle it falls in.
+        /// A closed polygon (<paramref name="plan"/>, corners <paramref name="pts"/> standing along <paramref name="ups"/>) as a
+        /// prism from <paramref name="below"/> under it to <paramref name="above"/> over it: one brush, concave where the
+        /// polygon is. Its top and bottom run through <paramref name="middle"/> (the junction point) where that is inside.
+        /// Corners on a straight line are dropped first (the triangles skip them, which would leave the top open).
         /// </summary>
-        static List<Vector3[]> WithMiddle(List<Vector2> plan, IList<Vector3> pts, Vector3 middle)
+        BrushPolyhedron Prism(List<Vector2> plan, List<Vector3> pts, List<Vector3> ups, Vector3? middle, Vector3 middleUp, float below, float above)
         {
-            var tris = new List<Vector3[]>();
-            // every edge seen from the middle: a fan from it, so the floor runs straight from each arm's end to the point
-            float area = 0f; for (int i = 0; i < plan.Count; i++) area += Cross2(plan[i], plan[(i + 1) % plan.Count]);
-            bool star = plan.Count >= 3;
-            for (int i = 0; i < plan.Count && star; i++)
+            var q = new List<Vector2>(plan); var p = new List<Vector3>(pts); var u = new List<Vector3>(ups);
+            for (int i = 0; i < q.Count && q.Count > 3;)
             {
-                Vector2 a = plan[i], b = plan[(i + 1) % plan.Count];
-                if ((b - a).sqrMagnitude < 1e-8f) continue;
-                if (Mathf.Sign(area) * Cross2(b - a, -a) / (b - a).magnitude < 0.05f) star = false;
+                int prev = (i - 1 + q.Count) % q.Count, next = (i + 1) % q.Count;
+                Vector2 dIn = q[i] - q[prev], dOut = q[next] - q[i];
+                bool straight = Mathf.Abs(Cross2(dIn, dOut)) < 1e-4f * dIn.magnitude * dOut.magnitude && Vector2.Dot(dIn, dOut) > 0f;
+                if (straight || dIn.sqrMagnitude < 1e-8f) { q.RemoveAt(i); p.RemoveAt(i); u.RemoveAt(i); i = 0; continue; }
+                i++;
+            }
+            int n = q.Count;
+            if (n < 3) return null;
+            float area = 0f; for (int i = 0; i < n; i++) area += Cross2(q[i], q[(i + 1) % n]);
+            if (area < 0f) return null; // the outline runs counter-clockwise; anything else went wrong
+            var tris = TriangleIndices(q, middle.HasValue, out bool usesMiddle);
+            if (tris.Count == 0) return null;
+            int count = usesMiddle ? n + 1 : n;
+            var verts = new Vector3[2 * count];
+            for (int i = 0; i < n; i++) { verts[i] = p[i] - u[i] * below; verts[count + i] = p[i] + u[i] * above; }
+            if (usesMiddle) { verts[n] = middle.Value - middleUp * below; verts[count + n] = middle.Value + middleUp * above; }
+            // each triangle is a convex block (top, bottom and the outline edge it holds): the colliders' pieces
+            var faces = new List<BrushPolyhedron.Face>();
+            var edgeOwner = new Dictionary<long, int>();
+            for (int k = 0; k < tris.Count; k++)
+            {
+                var t = tris[k];
+                faces.Add(new BrushPolyhedron.Face(new[] { count + t[0], count + t[1], count + t[2] }) { group = k }); // top
+                faces.Add(new BrushPolyhedron.Face(new[] { t[2], t[1], t[0] }) { group = k });                         // bottom
+                for (int e = 0; e < 3; e++) edgeOwner[((long)t[e] << 32) | (uint)t[(e + 1) % 3]] = k;
+            }
+            var list = new List<Vector3>(verts);
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                AddQuad(faces, list, new[] { i, j, count + j, count + i }, edgeOwner.TryGetValue(((long)i << 32) | (uint)j, out int owner) ? owner : 0);
+            }
+            var poly = new BrushPolyhedron { vertices = verts, faces = faces.ToArray() };
+            poly.EnsureOutward();
+            if (poly.IsSound(out var why)) return poly;
+            LastHullProblem = "deck: " + why;
+            return null;
+        }
+
+        /// <summary>
+        /// A counter-clockwise polygon's triangles (corner indices; <c>plan.Count</c> is the middle, the plan's origin):
+        /// fanned from the middle when it sees every edge, else clipped as ears, with the middle a corner of the triangle
+        /// it falls in when it is well inside one.
+        /// </summary>
+        static List<int[]> TriangleIndices(List<Vector2> plan, bool withMiddle, out bool usesMiddle)
+        {
+            int n = plan.Count, mid = n;
+            var tris = new List<int[]>();
+            usesMiddle = false;
+            bool star = withMiddle;
+            for (int i = 0; i < n && star; i++)
+            {
+                Vector2 a = plan[i], b = plan[(i + 1) % n];
+                if (Cross2(b - a, -a) / Mathf.Max((b - a).magnitude, 1e-6f) < 0.05f) star = false;
             }
             if (star)
             {
-                for (int i = 0; i < plan.Count; i++)
-                    if ((plan[(i + 1) % plan.Count] - plan[i]).sqrMagnitude >= 1e-8f) tris.Add(new[] { pts[i], pts[(i + 1) % plan.Count], middle });
+                usesMiddle = true;
+                for (int i = 0; i < n; i++) tris.Add(new[] { i, (i + 1) % n, mid });
                 return tris;
             }
             foreach (var t in Triangulate(plan))
             {
                 Vector2 a = plan[t[0]], b = plan[t[1]], c = plan[t[2]];
-                float s = Mathf.Sign(Cross2(b - a, c - a));
-                float da = s * Cross2(b - a, -a) / (b - a).magnitude, db = s * Cross2(c - b, -b) / (c - b).magnitude, dc = s * Cross2(a - c, -c) / (a - c).magnitude; // the origin's distance inside each edge
-                if (da > 0.05f && db > 0.05f && dc > 0.05f)
+                float da = Cross2(b - a, -a) / (b - a).magnitude, db = Cross2(c - b, -b) / (c - b).magnitude, dc = Cross2(a - c, -c) / (a - c).magnitude;
+                if (withMiddle && da > 0.05f && db > 0.05f && dc > 0.05f)
                 {
-                    tris.Add(new[] { pts[t[0]], pts[t[1]], middle });
-                    tris.Add(new[] { pts[t[1]], pts[t[2]], middle });
-                    tris.Add(new[] { pts[t[2]], pts[t[0]], middle });
+                    usesMiddle = true;
+                    tris.Add(new[] { t[0], t[1], mid }); tris.Add(new[] { t[1], t[2], mid }); tris.Add(new[] { t[2], t[0], mid });
                 }
-                else tris.Add(new[] { pts[t[0]], pts[t[1]], pts[t[2]] });
+                else tris.Add(t);
             }
             return tris;
         }
@@ -1216,6 +1250,78 @@ namespace CsgBrush
             var ring = new Vector3[part.Length];
             for (int k = 0; k < part.Length; k++) ring[k] = at + f.right * part[k].x + f.up * part[k].y;
             return ring;
+        }
+
+        /// <summary>
+        /// A run swept as one brush: its profile at every point (the mitres) joined by bands, closed by its two ends. The
+        /// pieces share their rings, so there are no seams between them, and one brush is far cheaper to build than many.
+        /// Where it comes out unsound (mitres crossing on a tight bend), the run is swept in convex pieces instead.
+        /// </summary>
+        void SweepWhole(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, BrushOperation op, string name, ref int count, List<BrushSpec> into)
+        {
+            var poly = Swept(p, frames, closed, part);
+            if (poly != null) { into.Add(new BrushSpec { name = name + " " + (++count), operation = op, polyhedron = poly, material = material }); return; }
+            Sweep(p, frames, closed, part, reach, op, name, ref count, into);
+        }
+
+        BrushPolyhedron Swept(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part)
+        {
+            int n = p.Count, m = part.Length;
+            var at = new List<int>(n); // the points that start a piece of some length (and the last)
+            for (int i = 0; i < n; i++)
+            {
+                bool lastOpen = !closed && i == n - 1;
+                if (lastOpen || (p[(i + 1) % n] - p[i]).sqrMagnitude >= 1e-10f) at.Add(i);
+                else if (!closed && i == n - 2) { at.Add(n - 1); break; } // the last piece has no length: end on the last point
+            }
+            if (at.Count < 2 || m < 3) return null;
+            var verts = new List<Vector3>(at.Count * m);
+            foreach (int i in at) verts.AddRange(Ring(p, frames, closed, part, i));
+            var faces = new List<BrushPolyhedron.Face>();
+            int rings = at.Count, bands = closed ? rings : rings - 1;
+            for (int k = 0; k < bands; k++)
+            {
+                int a = k * m, b = ((k + 1) % rings) * m;
+                for (int j = 0; j < m; j++)
+                {
+                    int j1 = (j + 1) % m;
+                    int[] quad = { a + j, a + j1, b + j1, b + j };
+                    AddQuad(faces, verts, quad, k);
+                }
+            }
+            if (!closed)
+            {
+                var start = new int[m]; var end = new int[m];
+                for (int j = 0; j < m; j++) { start[j] = m - 1 - j; end[j] = (rings - 1) * m + j; }
+                faces.Add(new BrushPolyhedron.Face(start) { group = 0 }); faces.Add(new BrushPolyhedron.Face(end) { group = bands - 1 });
+            }
+            var poly = new BrushPolyhedron { vertices = verts.ToArray(), faces = faces.ToArray() };
+            poly.EnsureOutward();
+            if (poly.IsSound(out var why)) return poly;
+            LastHullProblem = "whole sweep: " + why;
+            return null;
+        }
+
+        /// <summary>
+        /// A quad face, or two triangles where it isn't flat. <paramref name="group"/>: the convex block it bounds; the
+        /// colliders take each block's hull as one piece, so a one-brush sweep collides as its convex pieces would.
+        /// </summary>
+        static void AddQuad(List<BrushPolyhedron.Face> faces, List<Vector3> verts, int[] quad, int group)
+        {
+            if (Planar(verts, quad)) faces.Add(new BrushPolyhedron.Face(quad) { group = group });
+            else
+            {
+                faces.Add(new BrushPolyhedron.Face(new[] { quad[0], quad[1], quad[2] }) { group = group });
+                faces.Add(new BrushPolyhedron.Face(new[] { quad[0], quad[2], quad[3] }) { group = group });
+            }
+        }
+
+        static bool Planar(List<Vector3> v, int[] quad)
+        {
+            var n = Vector3.Cross(v[quad[1]] - v[quad[0]], v[quad[2]] - v[quad[0]]) + Vector3.Cross(v[quad[2]] - v[quad[0]], v[quad[3]] - v[quad[0]]);
+            if (n.sqrMagnitude < 1e-12f) return false;
+            n.Normalize();
+            return Mathf.Abs(Vector3.Dot(v[quad[3]] - v[quad[0]], n)) < BrushPolyhedron.Epsilon && Mathf.Abs(Vector3.Dot(v[quad[1]] - v[quad[0]], n)) < BrushPolyhedron.Epsilon;
         }
 
         void Sweep(List<Vector3> p, List<Frame> frames, bool closed, Vector2[] part, float reach, BrushOperation op, string name, ref int count, List<BrushSpec> into)

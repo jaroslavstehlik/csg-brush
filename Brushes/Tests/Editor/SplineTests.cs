@@ -27,6 +27,9 @@ namespace CsgBrush.Tests
 
         static bool Solid(Vector3 p) => Physics.OverlapBox(p, Vector3.one * 0.01f, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore).Length > 0;
 
+        /// <summary>The convex blocks a brush's faces are grouped into: the pieces it collides as.</summary>
+        static int Blocks(BrushPolyhedron poly) { var set = new HashSet<int>(); foreach (var f in poly.faces) set.Add(f.group); return set.Count; }
+
         static List<BrushGenerator.BrushSpec> Specs(Spline s) { var list = new List<BrushGenerator.BrushSpec>(); s.Describe(list); return list; }
 
         [Test]
@@ -51,15 +54,16 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ASmoothBendIsSolidAllAlongAndEveryPieceIsConvex([Values(Spline.Orientation.Follow, Spline.Orientation.Upright)] Spline.Orientation orientation)
+        public void ASmoothBendIsOneBrushSolidAllAlongThatCollidesAsConvexPieces([Values(Spline.Orientation.Follow, Spline.Orientation.Upright)] Spline.Orientation orientation)
         {
             var s = Make(Spline.Profile.Rectangle, new Vector2(0.6f, 0.3f), false, new Vector3(0f, 0.5f, 0f), new Vector3(3f, 0.5f, 0f), new Vector3(3f, 1.5f, 3f));
             s.orientation = orientation;
             s.SetSmooth(s.pointIds[1], true);
             Rebuild(s);
             var specs = Specs(s);
-            Assert.Greater(specs.Count, 4, "the bend is cut into pieces");
-            foreach (var spec in specs) Assert.IsTrue(spec.polyhedron.IsConvex(), spec.name + " is convex: one collider");
+            Assert.AreEqual(1, specs.Count, "the whole run is one brush");
+            Assert.IsTrue(specs[0].polyhedron.IsSound(out var why), why);
+            Assert.Greater(Blocks(specs[0].polyhedron), 4, "the bend collides as one convex piece per straight piece of it");
             for (int link = 0; link < s.links.Count; link++)
             {
                 float len = s.CurveLength(link);
@@ -119,7 +123,9 @@ namespace CsgBrush.Tests
             Rebuild(s);
             var runs = s.Runs();
             Assert.AreEqual(1, runs.Count); Assert.IsTrue(runs[0].closed);
-            foreach (var spec in Specs(s)) Assert.IsTrue(spec.polyhedron.IsConvex(), spec.name);
+            var specs = Specs(s);
+            Assert.AreEqual(2, specs.Count, "one brush round the loop, one inside cut");
+            foreach (var spec in specs) Assert.IsTrue(spec.polyhedron.IsSound(out var why), spec.name + ": " + why);
             for (int link = 0; link < s.links.Count; link++)
             {
                 s.CurvePoint(link, s.CurveLength(link) * 0.5f, out var p, out var dir);
