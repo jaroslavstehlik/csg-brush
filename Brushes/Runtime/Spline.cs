@@ -510,54 +510,108 @@ namespace CsgBrush
                 hubCount++;
                 if (decked) { Deck(hub, "Junction " + hubCount, into, cuts); continue; }
                 for (int k = 0; k < outer.Count; k++)
-                {
-                    var poly = Knuckle(hub, k, false);
-                    if (poly != null) into.Add(new BrushSpec { name = "Junction " + hubCount, operation = BrushOperation.Add, polyhedron = poly, material = material });
-                }
+                    foreach (var poly in JointPieces(hub, k, false))
+                        into.Add(new BrushSpec { name = "Junction " + hubCount, operation = BrushOperation.Add, polyhedron = poly, material = material });
                 for (int k = 0; k < inner.Count; k++)
-                {
-                    var poly = Knuckle(hub, k, true);
-                    if (poly != null) cuts.Add(new BrushSpec { name = "Junction inside " + hubCount, operation = BrushOperation.Subtract, polyhedron = poly, material = material });
-                }
+                    foreach (var poly in JointPieces(hub, k, true))
+                        cuts.Add(new BrushSpec { name = "Junction inside " + hubCount, operation = BrushOperation.Subtract, polyhedron = poly, material = material });
             }
             into.AddRange(cuts); // every inside after every solid piece: branches open into each other
         }
 
         /// <summary>
-        /// A round profile's joint: its arms run right to the point, and a ball of the profile's size (half of one for Half)
-        /// joins them there. An arm's square end is a disc through the ball's middle, so it lies inside it: arms and ball are
-        /// a sweep of the ball along the path, at any angles and slopes; the inside the same with the inner size.
+        /// A round profile's joint. Its arms run right to the point, and each open side of it (the outside of a corner,
+        /// behind a branch, a rounded end) is filled by an arm's own end ring turned about the point onto the next arm's,
+        /// in steps no coarser than the curve tolerance, its roll eased from one arm's to the other's: so the joint starts
+        /// on one arm's end edges and finishes on the other's, as a welded elbow does, and a half pipe's rim turns without
+        /// a step. Where neighbouring arms meet at under 180 degrees the arms themselves cover the middle.
         /// </summary>
-        BrushPolyhedron Knuckle(Hub hub, int part, bool inside)
+        IEnumerable<BrushPolyhedron> JointPieces(Hub hub, int part, bool inside)
         {
-            if (part > 0) return null;
-            float r = HalfWidth(inside);
-            if (r <= 1e-3f) return null;
+            int n = hub.arms.Count;
+            foreach (var arm in hub.arms) if (part >= (inside ? arm.inner : arm.outer).Count) yield break;
             var up = Vector3.zero; foreach (var arm in hub.arms) up += arm.frame.up;
             up = HubUp(up);
-            var x = Vector3.ProjectOnPlane(hub.arms.Count > 0 ? hub.arms[0].frame.forward : Vector3.right, up);
+            var x = Vector3.ProjectOnPlane(hub.arms[0].direction, up);
             if (x.sqrMagnitude < 1e-6f) x = Vector3.ProjectOnPlane(Vector3.right, up);
-            x.Normalize(); var z = Vector3.Cross(up, x);
-            // a ball (the lower half for Half), as fine round as the profile; a half pipe's inside reaches up past the top
-            int around = Mathf.Max(6, CircleSides), down = Mathf.Max(2, (around + 3) / 4);
-            var pts = new List<Vector3>();
-            for (int i = -down; i <= (half ? 0 : down); i++)
+            x.Normalize(); var y = Vector3.Cross(up, x);
+            float Angle(Vector3 d) => Mathf.Atan2(Vector3.Dot(d, y), Vector3.Dot(d, x)) * Mathf.Rad2Deg;
+            var order = new List<int>(); for (int i = 0; i < n; i++) order.Add(i);
+            order.Sort((i, j) => Angle(hub.arms[i].direction).CompareTo(Angle(hub.arms[j].direction)));
+            float step = ArcStepDegrees(HalfWidth(inside));
+            for (int k = 0; k < n; k++)
             {
-                float lat = 0.5f * Mathf.PI * i / down, ring = Mathf.Cos(lat) * r, height = Mathf.Sin(lat) * r;
-                if (Mathf.Abs(ring) < 1e-4f) { pts.Add(hub.at + up * height); continue; }
-                for (int k = 0; k < around; k++)
+                Arm a = hub.arms[order[k]], b = hub.arms[order[(k + 1) % n]];
+                float gap = Mathf.Repeat(Angle(b.direction) - Angle(a.direction), 360f);
+                if (n == 1 || gap < 1e-3f) gap = 360f;
+                if (gap < 180f) continue; // the arms cover it
+                if (n > 1 && Vector3.Angle(a.direction, b.direction) > 178f) continue; // straight on: the two arms cover it
+                var ringA = (inside ? a.inner : a.outer)[part];
+                var ringB = n == 1 ? null : (inside ? b.inner : b.outer)[part];
+                // the turn taking a onto b through the open side (one arm: half a turn about its up, its far half)
+                var mid = Quaternion.AngleAxis(Angle(a.direction) + gap * 0.5f, up) * x; // the middle of the open side
+                Vector3 axis; float total;
+                if (n == 1) { axis = Vector3.ProjectOnPlane(a.frame.up, a.direction).normalized; total = 180f; }
+                else
                 {
-                    float a = 2f * Mathf.PI * k / around;
-                    pts.Add(hub.at + up * height + (x * Mathf.Cos(a) + z * Mathf.Sin(a)) * ring);
+                    var c = Vector3.Cross(a.direction, b.direction);
+                    axis = c.sqrMagnitude > 1e-8f ? c.normalized : Vector3.ProjectOnPlane(up, a.direction).normalized;
+                    float ang = Vector3.Angle(a.direction, b.direction);
+                    total = 0f; float best = float.MaxValue;
+                    foreach (float t in new[] { ang, -ang, 360f - ang, ang - 360f })
+                    {
+                        var q = Quaternion.AngleAxis(t, axis);
+                        if ((q * a.direction - b.direction).sqrMagnitude > 1e-4f) continue;
+                        float side = -Vector3.Dot(Quaternion.AngleAxis(t * 0.5f, axis) * a.direction, mid); // through the open side
+                        if (side < best) { best = side; total = t; }
+                    }
+                    if (total == 0f) continue;
+                }
+                var end = Quaternion.AngleAxis(total, axis);
+                float roll = n == 1 ? 0f : Vector3.SignedAngle(end * a.frame.up, b.frame.up, b.direction);
+                // only the half of the ring that moves out into the open side turns: the other half would move into the
+                // arms, and its corners (at the full radius) would poke out of their flat faces
+                var sweepAxis = axis * Mathf.Sign(total); var openSide = n == 1 ? -a.direction : (Vector3)mid;
+                var halfRing = new List<Vector3>(ringA.Length + 2);
+                float Outward(Vector3 q) => Vector3.Dot(Vector3.Cross(sweepAxis, q - hub.at), openSide);
+                for (int j = 0; j < ringA.Length; j++)
+                {
+                    Vector3 p0 = ringA[j], p1 = ringA[(j + 1) % ringA.Length];
+                    float d0 = Outward(p0), d1 = Outward(p1);
+                    if (d0 >= -1e-6f) halfRing.Add(p0);
+                    if ((d0 > 1e-6f && d1 < -1e-6f) || (d0 < -1e-6f && d1 > 1e-6f)) halfRing.Add(Vector3.Lerp(p0, p1, d0 / (d0 - d1)));
+                }
+                if (halfRing.Count < 3) continue;
+                ringA = halfRing.ToArray(); ringB = null; // (its far end is the turned half: the half of b's ring on that side)
+                int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(total) / step));
+                Vector3[] At(int i)
+                {
+                    if (i == steps && ringB != null) return ringB;
+                    float f = i / (float)steps;
+                    var q = Quaternion.AngleAxis(total * f, axis);
+                    var turn = Quaternion.AngleAxis(roll * f, q * a.direction) * q;
+                    var ring = new Vector3[ringA.Length];
+                    for (int j = 0; j < ringA.Length; j++) ring[j] = hub.at + turn * (ringA[j] - hub.at);
+                    return ring;
+                }
+                Vector3[] last = At(0), before = null;
+                for (int i = 1; i <= steps; i++)
+                {
+                    var next = At(i);
+                    var pts = new List<Vector3>(last.Length * 3); pts.AddRange(last); pts.AddRange(next);
+                    var piece = HullOf(pts);
+                    if (piece == null && i < steps) continue; // too thin a wedge to make: one step wider
+                    if (piece == null)
+                    {
+                        // the last one: the ring a hair smaller, which takes it off the points it shares with the one before
+                        // (on the axis) that can leave the hull open
+                        pts.Clear(); pts.AddRange(last); foreach (var q in next) pts.Add(hub.at + (q - hub.at) * 0.9995f);
+                        piece = HullOf(pts);
+                    }
+                    if (piece != null) yield return piece;
+                    before = last; last = next;
                 }
             }
-            if (half && inside)
-                for (int k = 0; k < around; k++)
-                {
-                    float a = 2f * Mathf.PI * k / around;
-                    pts.Add(hub.at + up * (size.x * 0.5f * OpenTop + 0.01f) + (x * Mathf.Cos(a) + z * Mathf.Sin(a)) * r);
-                }
-            return HullOf(pts);
         }
 
         /// <summary>A frame turned to run along <paramref name="direction"/> (the profile is the same either way: it is symmetric).</summary>
@@ -1140,7 +1194,7 @@ namespace CsgBrush
                     if (arm.through >= 0) room = run.closed ? 0.45f * RunLength(run) : 0.9f * Along(run.points, arm.through, arm.sign);
                     else room = RunLength(run) * ((arm.atStart ? run.endIsEnd : run.startIsEnd) ? 0.9f : 0.45f); // shared with a hub at its other end
                     arm.room = room;
-                    arm.pull = Decked ? Mathf.Clamp(pull, 0f, room) : 0f; // a round profile's arms run to the point (see Knuckle)
+                    arm.pull = Decked ? Mathf.Clamp(pull, 0f, room) : 0f; // a round profile's arms run to the point (see JointPieces)
                 }
             return hubs;
         }
@@ -1427,7 +1481,7 @@ namespace CsgBrush
             // can come out open
             {
                 float s0 = 1f; foreach (var q in pts) s0 = Mathf.Max(s0, Mathf.Abs(q.x), Mathf.Abs(q.y), Mathf.Abs(q.z));
-                float weld = 1e-5f * s0, weld2 = weld * weld;
+                float weld = Mathf.Max(1e-3f, 1e-5f * s0), weld2 = weld * weld; // a millimetre at least: far below the grid
                 var unique = new List<Vector3>(pts.Count);
                 foreach (var q in pts)
                 {
