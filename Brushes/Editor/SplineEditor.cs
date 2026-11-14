@@ -30,15 +30,11 @@ namespace CsgBrush.Editor
                 {
                     EditorGUI.indentLevel++;
                     EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
-                    EditorGUILayout.PropertyField(serializedObject.FindProperty("ends"));
                     EditorGUI.indentLevel--;
                 }
             }
-            else
-            {
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("ends"));
-            }
+            else EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("ends"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("orientation"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("material"));
             serializedObject.ApplyModifiedProperties();
@@ -99,7 +95,7 @@ namespace CsgBrush.Editor
                     float angle = Vector3.Angle(b - a, c - b) * Mathf.Deg2Rad;
                     if (angle < 1e-3f) continue;
                     float radius = Mathf.Min((b - a).magnitude, (c - b).magnitude) * 0.5f / Mathf.Tan(angle * 0.5f); // the arc through the joint
-                    if (radius < half && angle < Spline.SharpTurnDegrees * Mathf.Deg2Rad) return true;
+                    if (radius < half && angle < 120f * Mathf.Deg2Rad) return true; // (a sharper fold is the curve's own business)
                 }
             }
             return false;

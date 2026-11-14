@@ -37,12 +37,12 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 
 | **Where** | **Result** |
 | :--- | :--- |
-| A corner | The pieces meet at a mitre, like the corner of a picture frame: each piece is its profile cut by the planes halving the turns at its ends. |
-| A corner sharper than 120 degrees, or (for a **U Channel** or **Rectangle**) an **Upright** corner that climbs or falls while it turns | The corner is built as a junction of two links (see below). A sharp corner ends flat just past the point. A **Circle** sweeps round any other corner in one piece, its profile turning gradually. |
-| A point where three or more links meet | Each link stops a little past where its sides part from its neighbours', and a junction piece fills the space between. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
-| A junction of **U Channel** or **Rectangle** links | The junction is built as its own floor, with walls along its outline between the links, and for a hollow **Rectangle** a roof. The floor follows the links' heights and slopes, and dips or rises with the point itself, so links at different heights meet without steps. |
-| A junction of **Circle** links | Each link runs right to the point, and a ball of the profile's size (half a ball for **Half**) joins them there, like a pipe fitting. The insides are cut after all the solid pieces, so the branches open into each other. |
-| An end of a hollow spline or a channel | Open, or capped by the wall thickness, as set by **Ends**. |
+| A Smooth point | The path curves through it, and the profile is swept along the curve in one piece. |
+| A Corner point | A joint: the profile turned about the point joins the two links. For a **Circle** that is a ball of the tube's size (half a ball for **Half**), so the corner is a round elbow. For a **U Channel** or **Rectangle** the outside of the corner is an arc of half the width round the point, so the road is as wide round the corner as along it; the inside of the corner is sharp. |
+| A point where three or more links meet | A junction. Between links that meet at less than 180 degrees the walls meet in a sharp corner; an open side (behind a T, the outside of a Y) is an arc of half the width round the point. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
+| A junction or corner of **U Channel** or **Rectangle** links | Built as its own floor, with walls along its outline between the links, and for a hollow **Rectangle** a roof. The floor follows the links' heights and slopes, and dips or rises with the point itself, so links at different heights meet without steps. |
+| A junction or corner of **Circle** links | Each link runs right to the point, and a ball of the profile's size (half a ball for **Half**) joins them there, like a pipe fitting. The insides are cut after all the solid pieces, so the branches open into each other. |
+| An end of the path | As set by **Ends**: open, capped by the wall thickness, or rounded (half a ball for a **Circle**, half a disc for a **U Channel** or **Rectangle**). |
 
 ## Spline component reference
 
@@ -54,7 +54,7 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 | **Half** | Only the lower half of the circle, its flat top level with the path: a half cylinder, or a half pipe open on top when **Hollow** is enabled. Visible for **Circle**. |
 | **Hollow** | Cuts out the inside, leaving a wall of the thickness below. Not available for **U Channel**, which always has its channel cut out. |
 | **Thickness** | The wall of a hollow profile or a channel, in metres. |
-| **Ends** | Whether a hollow spline or a channel is open or capped where the path ends. |
+| **Ends** | What the path's ends are.<br/>&#8226; **Open**: The inside of a hollow profile or a channel is open.<br/>&#8226; **Closed**: Capped by the wall thickness.<br/>&#8226; **Rounded**: Half a ball for a **Circle**, half a disc for a **U Channel** or **Rectangle**, closed. |
 | **Orientation** | How the profile turns along the path.<br/>&#8226; **Follow**: The profile turns with the path without twisting. This is the default.<br/>&#8226; **Upright**: The top of the profile stays up. |
 | **Material** | The material of every piece. When empty, pieces use the project's default material. |
 | **Override tolerance** | Uses its own curve tolerance instead of the project's **Curve tolerance** (**Project Settings** > **Brushes**). |

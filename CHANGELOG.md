@@ -14,7 +14,9 @@
   different heights meet without steps, stubs or spikes; a sharp corner ends flat just past its point. Each run of a
   spline is one brush (it still collides as convex pieces), and a junction a few, so a spline builds several times
   faster and has no seams along its runs. Circles can be halved (**Half**): a half cylinder, or a half pipe open on
-  top when hollow; circle links run right to a junction and join in a ball there, like a pipe fitting.
+  top when hollow. Every Corner point is a joint: the profile turned about the point, a ball for a circle and, for a
+  channel or rectangle, an arc of half the width round the outside, so the road is as wide round a corner as along
+  it; junctions' open sides are arcs too. **Ends** has a **Rounded** option: half a ball or half a disc.
 - Objects on splines: **GameObject** > **Brush** > **Attach to Spline** keeps an object on the nearest spline (its
   distance along it, its angle round the profile, its offset from the surface) when the path changes; moved by hand
   it takes the nearest place, or comes off when pulled away. **Spline Repeat** places a copy of an object or prefab

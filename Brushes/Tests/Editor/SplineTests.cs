@@ -100,8 +100,8 @@ namespace CsgBrush.Tests
             var s = Make(Spline.Profile.Rectangle, new Vector2(0.6f, 0.6f), true, new Vector3(0f, 1f, 0f), new Vector3(3f, 1f, 0f), new Vector3(3f, 1f, 3f));
             Assert.IsFalse(Solid(new Vector3(3f, 1f, 0f)), "open at the corner");
             Assert.IsFalse(Solid(new Vector3(2.8f, 1f, 0f)) || Solid(new Vector3(3f, 1f, 0.2f)), "the passage goes round it");
-            Assert.IsTrue(Solid(new Vector3(3.27f, 1f, -0.27f)), "the outer corner is filled");
-            Assert.IsFalse(Solid(new Vector3(3.4f, 1f, -0.4f)), "and no more");
+            Assert.IsTrue(Solid(new Vector3(3.19f, 1f, -0.19f)), "the outer corner is walled round, half the width from the point");
+            Assert.IsFalse(Solid(new Vector3(3.27f, 1f, -0.27f)), "and no pointed corner past that");
         }
 
         [Test]
@@ -322,8 +322,8 @@ namespace CsgBrush.Tests
         {
             var s = Channel(new Vector3(-5f, 1f, 0f), new Vector3(0f, 1f, 0f), new Vector3(0f, 1f, 5f));
             Assert.IsFalse(Solid(new Vector3(0f, 1f, 0f)) || Solid(new Vector3(-0.5f, 1f, 0.5f)) || Solid(new Vector3(0.5f, 1f, -0.5f)), "the channel goes round the corner");
-            Assert.IsTrue(Solid(new Vector3(0.95f, 1f, -0.95f)), "the outer corner is walled");
-            Assert.IsFalse(Solid(new Vector3(1.1f, 1f, -1.1f)) || Solid(new Vector3(1.1f, 1f, 0f)) || Solid(new Vector3(0f, 1f, -1.1f)), "with nothing sticking out");
+            Assert.IsTrue(Solid(new Vector3(0.67f, 1f, -0.67f)), "the outer corner is walled round, half the width from the point");
+            Assert.IsFalse(Solid(new Vector3(0.8f, 1f, -0.8f)) || Solid(new Vector3(1.1f, 1f, 0f)) || Solid(new Vector3(0f, 1f, -1.1f)), "with nothing past that: the road is as wide round the corner as along it");
             Assert.IsTrue(Solid(new Vector3(-0.95f, 1f, 0.95f)), "and the inner corner");
         }
 
@@ -511,13 +511,42 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ASharpCornerEndsFlatJustPastItsPoint()
+        public void ACircleCornerIsABallJoint([Values(false, true)] bool hollow)
+        {
+            var s = Make(Spline.Profile.Circle, new Vector2(2f, 2f), hollow, new Vector3(-5f, 1f, 0f), new Vector3(0f, 1f, 0f), new Vector3(0f, 1f, 5f));
+            s.thickness = 0.2f; s.sides = 32; Rebuild(s);
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            var outside = new Vector3(Mathf.Sqrt(0.5f), 0f, -Mathf.Sqrt(0.5f)); // the outside of the corner
+            var at = new Vector3(0f, 1f, 0f);
+            Assert.IsTrue(Solid(at + outside * 0.92f) && Solid(at + Vector3.up * 0.92f), "round the outside and over the top: the tube's own radius");
+            Assert.IsFalse(Solid(at + outside * 1.06f), "and no further: no pointed elbow");
+            Assert.AreEqual(!hollow, Solid(at), hollow ? "open through the joint" : "solid through the joint");
+        }
+
+        [Test]
+        public void RoundedEndsAreHalfABallOrHalfADisc()
+        {
+            var tube = Make(Spline.Profile.Circle, new Vector2(2f, 2f), false, new Vector3(0f, 1f, 0f), new Vector3(6f, 1f, 0f));
+            tube.sides = 32; tube.ends = Spline.Ends.Rounded; Rebuild(tube);
+            Assert.IsTrue(Solid(new Vector3(-0.9f, 1f, 0f)) && Solid(new Vector3(-0.6f, 1.6f, 0f)), "a tube ends in half a ball");
+            Assert.IsFalse(Solid(new Vector3(-1.08f, 1f, 0f)), "of its own radius");
+            Object.DestroyImmediate(tube.gameObject); Physics.SyncTransforms();
+            var road = Channel(new Vector3(0f, 1f, 0f), new Vector3(6f, 1f, 0f));
+            road.ends = Spline.Ends.Rounded; Rebuild(road);
+            Assert.IsTrue(Solid(new Vector3(-0.95f, 1f, 0f)) && Solid(new Vector3(-0.67f, 1f, 0.67f)), "a channel ends in a wall round half a disc");
+            Assert.IsFalse(Solid(new Vector3(-0.7f, 1f, 0f)), "open inside it");
+            Assert.IsTrue(Solid(new Vector3(-0.5f, 0.75f, 0f)), "on its floor");
+            Assert.IsFalse(Solid(new Vector3(-1.1f, 1f, 0f)), "and nothing past the half width");
+        }
+
+        [Test]
+        public void ASharpCornerEndsRoundJustPastItsPoint()
         {
             var s = Channel(new Vector3(0f, 1f, -3f), new Vector3(8f, 1f, 0f), new Vector3(0f, 1f, 3f));
             Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
             Assert.IsFalse(Solid(new Vector3(8f, 1f, 0f)), "the channel reaches the point");
             Assert.IsTrue(Solid(new Vector3(8.5f, 0.75f, 0f)), "with a floor past it");
-            float end = 8f + Mathf.Sqrt(2f); // the outer sides cut off flat where a right-angled corner would have its own
+            float end = 8f + 1f; // the end is an arc of the half width round the point
             Assert.IsTrue(Solid(new Vector3(end - 0.05f, 1f, 0f)), "an end wall past it");
             Assert.IsFalse(Solid(new Vector3(end - 0.15f, 1f, 0f)), "inside it the channel");
             Assert.IsFalse(Solid(new Vector3(end + 0.1f, 1f, 0f)), "and no spike beyond");
