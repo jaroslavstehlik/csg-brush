@@ -13,7 +13,8 @@
   junction is its own floor following the links' heights and slopes, with walls along its outline, so links at
   different heights meet without steps, stubs or spikes; a sharp corner ends flat just past its point. Each run of a
   spline is one brush (it still collides as convex pieces), and a junction a few, so a spline builds several times
-  faster and has no seams along its runs.
+  faster and has no seams along its runs. Circles can be halved (**Half**): a half cylinder, or a half pipe open on
+  top when hollow.
 - Objects on splines: **GameObject** > **Brush** > **Attach to Spline** keeps an object on the nearest spline (its
   distance along it, its angle round the profile, its offset from the surface) when the path changes; moved by hand
   it takes the nearest place, or comes off when pulled away. **Spline Repeat** places a copy of an object or prefab

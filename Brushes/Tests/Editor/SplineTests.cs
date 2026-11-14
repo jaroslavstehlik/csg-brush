@@ -466,6 +466,50 @@ namespace CsgBrush.Tests
             }
         }
 
+        static Spline ThreeWay(Spline.Profile profile, bool hollow, bool half, Vector2 size, float thickness, params Vector3[] ends)
+        {
+            var s = new GameObject("Spline").AddComponent<Spline>();
+            s.profile = profile; s.hollow = hollow; s.half = half; s.size = size; s.thickness = thickness; s.orientation = Spline.Orientation.Upright;
+            int c = s.AddPoint(new Vector3(0f, 1f, 0f));
+            foreach (var e in ends) s.AddLink(c, s.AddPoint(e));
+            Rebuild(s);
+            return s;
+        }
+
+        [Test]
+        public void HalfPipesMeetingAtAJunctionOpenIntoEachOther()
+        {
+            var s = ThreeWay(Spline.Profile.Circle, true, true, new Vector2(2f, 2f), 0.2f, new Vector3(4.75f, 1f, -12.5f), new Vector3(-9.5f, 1f, 1.5f), new Vector3(-11f, 1f, -9.75f));
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            Assert.IsTrue(Solid(new Vector3(0f, 0.1f, 0f)), "a floor under the junction");
+            Assert.IsFalse(Solid(new Vector3(0f, 0.6f, 0f)) || Solid(new Vector3(0f, 1.2f, 0f)), "open in the middle and on top");
+            foreach (var e in new[] { new Vector3(4.75f, 0f, -12.5f), new Vector3(-9.5f, 0f, 1.5f), new Vector3(-11f, 0f, -9.75f) })
+            {
+                var along = new Vector3(0f, 1f, 0f) + e.normalized * 1.5f;
+                Assert.IsFalse(Solid(along + Vector3.down * 0.5f), "each half pipe open into the junction, toward " + e);
+            }
+        }
+
+        [Test]
+        public void HollowRectanglesMeetingAtAJunctionAreOpenInsideAndRoofed()
+        {
+            var s = ThreeWay(Spline.Profile.Rectangle, true, false, new Vector2(2f, 1f), 0.1f, new Vector3(6f, 1f, 0f), new Vector3(-6f, 1f, 0f), new Vector3(0f, 1f, -6f));
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, 0f)) || Solid(new Vector3(0f, 1f, -0.8f)) || Solid(new Vector3(0.8f, 1f, 0f)), "open inside where they meet");
+            Assert.IsTrue(Solid(new Vector3(0f, 1.45f, 0f)) && Solid(new Vector3(0f, 1.45f, -0.6f)), "a roof over the junction");
+            Assert.IsTrue(Solid(new Vector3(0f, 0.55f, 0f)), "a floor under it");
+            Assert.IsTrue(Solid(new Vector3(0f, 1f, 0.95f)), "the far wall");
+            Assert.IsFalse(Solid(new Vector3(0f, 1f, 1.1f)), "and nothing past it");
+        }
+
+        [Test]
+        public void TubesMeetingAtAJunctionClimbingDifferentlyLeaveNoNotchOnTop()
+        {
+            var s = ThreeWay(Spline.Profile.Circle, false, false, new Vector2(2f, 2f), 0.2f, new Vector3(-6f, 4f, 2f), new Vector3(6f, 1f, 1f), new Vector3(0f, 0f, -6f));
+            Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
+            Assert.IsTrue(Solid(new Vector3(0f, 1f, 0f)) && Solid(new Vector3(0f, 1.8f, 0f)), "solid through the middle, up to near the top");
+        }
+
         [Test]
         public void ASharpCornerEndsFlatJustPastItsPoint()
         {

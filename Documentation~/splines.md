@@ -40,8 +40,8 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 | A corner | The pieces meet at a mitre, like the corner of a picture frame: each piece is its profile cut by the planes halving the turns at its ends. |
 | A corner sharper than 120 degrees, or an **Upright** corner that climbs or falls while it turns | The corner is built as a junction of two links (see below). A sharp corner ends flat just past the point. |
 | A point where three or more links meet | Each link stops a little past where its sides part from its neighbours', and a junction piece fills the space between. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
-| A junction of **U Channel** or solid **Rectangle** links | The junction is built as its own floor, with walls along its outline between the links. The floor follows the links' heights and slopes, and dips or rises with the point itself, so links at different heights meet without steps. |
-| A junction of **Circle** or hollow links | Each link's profile is carried in to where it meets the others, mitred between every two. The insides are cut after all the solid pieces, so the branches open into each other. |
+| A junction of **U Channel** or **Rectangle** links | The junction is built as its own floor, with walls along its outline between the links, and for a hollow **Rectangle** a roof. The floor follows the links' heights and slopes, and dips or rises with the point itself, so links at different heights meet without steps. |
+| A junction of **Circle** links | Each link's profile is carried in to where it meets the others, mitred between every two, with a ball of the profile's size at the point. The insides are cut after all the solid pieces, so the branches open into each other. |
 | An end of a hollow spline or a channel | Open, or capped by the wall thickness, as set by **Ends**. |
 
 ## Spline component reference
@@ -51,6 +51,7 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 | **Profile** | The shape swept along the path.<br/>&#8226; **Circle**: A round tube.<br/>&#8226; **Rectangle**: A box section.<br/>&#8226; **U Channel**: An open channel facing up. |
 | **Size** | The width and height of the profile, in metres. A circle's diameter is the width. |
 | **Sides** | The number of sides of a circle. **0** works them out from the curve tolerance, with at least 6. Visible for **Circle**. |
+| **Half** | Only the lower half of the circle, its flat top level with the path: a half cylinder, or a half pipe open on top when **Hollow** is enabled. Visible for **Circle**. |
 | **Hollow** | Cuts out the inside, leaving a wall of the thickness below. Not available for **U Channel**, which always has its channel cut out. |
 | **Thickness** | The wall of a hollow profile or a channel, in metres. |
 | **Ends** | Whether a hollow spline or a channel is open or capped where the path ends. |

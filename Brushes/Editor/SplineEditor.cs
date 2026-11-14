@@ -17,7 +17,11 @@ namespace CsgBrush.Editor
             EditorGUILayout.PropertyField(profile);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("size"));
             var kind = (Spline.Profile)profile.enumValueIndex;
-            if (kind == Spline.Profile.Circle) EditorGUILayout.PropertyField(serializedObject.FindProperty("sides"));
+            if (kind == Spline.Profile.Circle)
+            {
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("sides"));
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("half"));
+            }
             if (kind != Spline.Profile.UChannel)
             {
                 var hollow = serializedObject.FindProperty("hollow");
