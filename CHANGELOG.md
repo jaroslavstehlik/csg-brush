@@ -27,6 +27,8 @@
   Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,
   windows and attached objects stay on a curved wall and face across it. A + on a curved wall adds a smooth point on
   the curve.
+- Fixed: in floor plan and spline edit mode, after a click on a + added a point, the Move tool's arrows took the
+  press but no longer moved the selected points.
 - Fixed: in brush, floor plan and spline edit mode, flying through the Scene view (right mouse held, W A S D Q E)
   also used the keys for edit mode (S made the selected points smooth), and letting go of the right mouse after flying
   opened the edit mode's menu. The keys now only move the view while flying, and the menu opens on a right click only.

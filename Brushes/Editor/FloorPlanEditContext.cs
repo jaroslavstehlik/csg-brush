@@ -591,10 +591,11 @@ namespace CsgBrush.Editor
                 }
                 StartPointDrag(plan, sel, e, dragId, v);
             }
-            if (Dragging(plan)) return; // no + while points move
+            bool dragging = Dragging(plan);
             for (int w = 0; w < ends.Length; w++)
             {
-                int id = GUIUtility.GetControlID(s_AddHash, FocusType.Passive);
+                int id = GUIUtility.GetControlID(s_AddHash, FocusType.Passive); // asked for even mid-drag: skipping it shifts the ids of the tool handles that follow
+                if (dragging) continue; // no + while points move
                 plan.CurvePoint(w, plan.CurveLength(w) * 0.5f, out var midLocal, out _);
                 var mid = FloorPlanTools.World(plan, midLocal); // the middle of the path: on a curve, on the curve
                 switch (e.GetTypeForControl(id))
