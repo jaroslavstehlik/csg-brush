@@ -2,22 +2,17 @@
 
 ## Unreleased
 
-- Splines: **GameObject** > **Brush** > **Spline** sweeps a Circle, Rectangle or U Channel profile along a branching
-  3D path, solid or hollow, open or capped, upright or following the path. Draw on surfaces (the profile rests on
-  them); edit with the floor plan's edit mode, Move also up and down; Smooth points curve the path. Hollow branches
-  open into each other. See the Splines page of the manual. The **Create** tool has a **Spline** entry with its own
-  icon: click to start a spline, or click a spline's point or link to continue it. Points can **Roll** the profile about
-  the path (Rotate in spline edit mode, or the Inspector): a U Channel opens to one side, a road banks. Every piece is
-  its profile cut by exact mitres, so pieces meet without overlapping. Junctions, and corners too sharp or too twisted
-  for one mitre, are built as junctions: links stop where their sides part, and for a U Channel or solid Rectangle the
-  junction is its own floor following the links' heights and slopes, with walls along its outline, so links at
-  different heights meet without steps, stubs or spikes; a sharp corner ends flat just past its point. Each run of a
-  spline is one brush (it still collides as convex pieces), and a junction a few, so a spline builds several times
-  faster and has no seams along its runs. Circles can be halved (**Half**): a half cylinder, or a half pipe open on
-  top when hollow. Every Corner point is a joint: for a circle each run ends there in a dome made of its own end
-  ring (a capsule), the runs' domes adding up to the joint; for a
-  channel or rectangle, an arc of half the width round the outside, so the road is as wide round a corner as along
-  it; junctions' open sides are arcs too. **Ends** has a **Rounded** option: half a ball or half a disc.
+- Splines: **GameObject** > **Brush** > **Spline** sweeps a Circle or Rectangle profile along a branching 3D path,
+  solid or hollow, whole or halved (**Half**: a half cylinder or half a box, open on top when hollow: a half pipe or a
+  channel), open, capped or rounded at its ends, upright or following the path. Draw on surfaces (the profile rests on
+  them); edit with the floor plan's edit mode, Move also up and down; Smooth points curve the path. See the Splines page
+  of the manual. The **Create** tool has a **Spline** entry with its own icon: click to start a spline, or click a
+  spline's point or link to continue it. Points can **Roll** the profile about the path (Rotate in spline edit mode, or
+  the Inspector): a channel opens to one side, a road banks. Each run of a spline, between joints, is one brush (it
+  still collides as convex pieces). Joints are the runs overlapping: a circle's runs end in domes made of their own end
+  rings (capsules, like a sweep of a ball), a rectangle's go on square past the point by half the width, each square
+  end cut where it would stand above or below another link; insides are cut after every solid piece, so branches open
+  into each other.
 - Objects on splines: **GameObject** > **Brush** > **Attach to Spline** keeps an object on the nearest spline (its
   distance along it, its angle round the profile, its offset from the surface) when the path changes; moved by hand
   it takes the nearest place, or comes off when pulled away. **Spline Repeat** places a copy of an object or prefab

@@ -22,7 +22,7 @@ namespace CsgBrush.Tests
         {
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             m_Spline = new GameObject("Spline").AddComponent<Spline>();
-            m_Spline.profile = Spline.Profile.UChannel; m_Spline.size = new Vector2(2f, 0.6f); m_Spline.thickness = 0.15f;
+            m_Spline.profile = Spline.Profile.Rectangle; m_Spline.size = new Vector2(2f, 0.6f); m_Spline.thickness = 0.15f;
             int a = m_Spline.AddPoint(new Vector3(10f, 0f, 10f)), b = m_Spline.AddPoint(new Vector3(16f, 0f, 10f)), c = m_Spline.AddPoint(new Vector3(16f, 0f, 16f));
             m_Spline.AddLink(a, b); m_Spline.AddLink(b, c);
             m_Spline.transform.position = new Vector3(-5f, 0f, -5f); // points away from the pivot, whose own Move handle would catch the presses

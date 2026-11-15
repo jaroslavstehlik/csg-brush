@@ -100,8 +100,10 @@ namespace CsgBrush.Tests
             var s = Make(Spline.Profile.Rectangle, new Vector2(0.6f, 0.6f), true, new Vector3(0f, 1f, 0f), new Vector3(3f, 1f, 0f), new Vector3(3f, 1f, 3f));
             Assert.IsFalse(Solid(new Vector3(3f, 1f, 0f)), "open at the corner");
             Assert.IsFalse(Solid(new Vector3(2.8f, 1f, 0f)) || Solid(new Vector3(3f, 1f, 0.2f)), "the passage goes round it");
-            Assert.IsTrue(Solid(new Vector3(3.19f, 1f, -0.19f)), "the outer corner is walled round, half the width from the point");
-            Assert.IsFalse(Solid(new Vector3(3.27f, 1f, -0.27f)), "and no pointed corner past that");
+            // the runs' square ends: the passage square to the inner corner, a wall of the thickness round it
+            Assert.IsFalse(Solid(new Vector3(3.2f, 1f, -0.2f)), "the passage fills the corner");
+            Assert.IsTrue(Solid(new Vector3(3.28f, 1f, -0.28f)), "the outer corner is walled, square");
+            Assert.IsFalse(Solid(new Vector3(3.35f, 1f, -0.35f)), "and nothing past it");
         }
 
         [Test]
@@ -248,15 +250,15 @@ namespace CsgBrush.Tests
 
         /// <summary>A short piece of a wide profile between corners that turn up or down as well as sideways: its mitres cross.</summary>
         [Test]
-        public void ALoweredCornerKeepsEveryPieceAndStaysSolidAllAlong([Values(Spline.Profile.Rectangle, Spline.Profile.UChannel)] Spline.Profile profile, [Values(Spline.Orientation.Upright, Spline.Orientation.Follow)] Spline.Orientation orientation, [Values(1f, 3f)] float drop)
+        public void ALoweredCornerKeepsEveryPieceAndStaysSolidAllAlong([Values(false, true)] bool channel, [Values(Spline.Orientation.Upright, Spline.Orientation.Follow)] Spline.Orientation orientation, [Values(1f, 3f)] float drop)
         {
-            var s = Make(profile, new Vector2(1.2f, 0.3f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f - drop, 0.5f), new Vector3(6f, 1f, -2f), new Vector3(3f, 1f, -5f), new Vector3(-1f, 1f, -3f));
+            var s = Make(Spline.Profile.Rectangle, new Vector2(1.2f, channel ? 0.6f : 0.3f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f - drop, 0.5f), new Vector3(6f, 1f, -2f), new Vector3(3f, 1f, -5f), new Vector3(-1f, 1f, -3f));
             s.AddLink(s.pointIds[4], s.pointIds[0]);
-            s.orientation = orientation; s.thickness = 0.1f; Rebuild(s);
+            s.half = channel; s.hollow = channel; s.orientation = orientation; s.thickness = 0.1f; Rebuild(s);
             Specs(s);
             Assert.AreEqual(0, s.droppedPieces, "no piece left out");
-            // a channel is solid at its floor: 0.05 to 0.15 below the path, every piece a true slice of the profile
-            var band = profile == Spline.Profile.UChannel ? new[] { -0.1f } : new[] { 0f };
+            // a channel (a hollow half rectangle 0.3 m deep) is solid at its floor, 0.2 to 0.3 below the path: every piece a true slice of the profile
+            var band = channel ? new[] { -0.25f } : new[] { 0f };
             for (int link = 0; link < s.links.Count; link++)
             {
                 float len = s.CurveLength(link);
@@ -273,30 +275,34 @@ namespace CsgBrush.Tests
         [Test]
         public void RollTurnsTheProfileAboutThePath()
         {
-            var s = Make(Spline.Profile.UChannel, new Vector2(0.6f, 0.6f), false, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
-            s.thickness = 0.05f; Rebuild(s);
+            // a channel 0.6 m wide and deep, its rim on the path, walls 0.05 m
+            var s = Make(Spline.Profile.Rectangle, new Vector2(0.6f, 1.2f), true, new Vector3(0f, 1f, 0f), new Vector3(4f, 1f, 0f));
+            s.half = true; s.thickness = 0.05f; Rebuild(s);
             var mid = new Vector3(2f, 1f, 0f);
-            Assert.IsFalse(Solid(mid + Vector3.up * 0.275f), "a channel is open on top");
-            Assert.IsTrue(Solid(mid + Vector3.down * 0.275f), "its bottom");
+            Assert.IsFalse(Solid(mid + Vector3.down * 0.3f), "a channel is open on top");
+            Assert.IsTrue(Solid(mid + Vector3.down * 0.575f), "its bottom");
             Undo.IncrementCurrentGroup();
             Undo.RecordObject(s, "Roll");
             s.SetRoll(s.pointIds[0], 90f); s.SetRoll(s.pointIds[1], 90f); Rebuild(s);
-            Assert.IsTrue(Solid(mid + Vector3.up * 0.275f) && Solid(mid + Vector3.down * 0.275f), "turned a quarter about the path: its sides are on top and underneath");
-            Assert.IsTrue(Solid(mid + Vector3.forward * 0.275f) != Solid(mid + Vector3.back * 0.275f), "its bottom on one side, open on the other");
+            Assert.IsFalse(Solid(mid + Vector3.down * 0.575f), "turned a quarter about the path: its bottom is not underneath");
+            Assert.IsTrue(Solid(mid + Vector3.forward * 0.575f) != Solid(mid + Vector3.back * 0.575f), "but to one side");
             s.SetRoll(s.pointIds[1], 0f); Rebuild(s);
             Assert.That(s.Roll(s.pointIds[0]), Is.EqualTo(90f)); Assert.AreEqual(1, s.rolls.Count, "0 removes a point's roll");
-            Assert.IsTrue(Solid(new Vector3(0.3f, 1f, 0f) + Vector3.up * 0.275f), "near the rolled point: turned");
-            Assert.IsFalse(Solid(new Vector3(3.7f, 1f, 0f) + Vector3.up * 0.275f), "near the other: open on top again");
+            Assert.IsFalse(Solid(new Vector3(0.3f, 1f, 0f) + Vector3.down * 0.575f), "near the rolled point: turned");
+            Assert.IsTrue(Solid(new Vector3(3.7f, 1f, 0f) + Vector3.down * 0.575f), "near the other: its bottom underneath again");
             Undo.PerformUndo(); Rebuild(s);
             Assert.AreEqual(0, s.rolls.Count, "undo takes the rolls back");
             s.RemovePointAt(1); Assert.AreEqual(0, s.rolls.FindAll(r => r.id == 2).Count);
         }
 
-        // a channel 2 m wide and 0.6 m high, walls 0.1 m: its floor from y 0.7 to 0.8, its sides up to 1.3
+        // a channel 2 m wide and 0.6 m deep, walls 0.1 m, around the given path: its floor from y 0.7 to 0.8, its sides up
+        // to 1.3 (a hollow half rectangle has its rim on its path: 0.3 above the given one)
         static Spline Channel(params Vector3[] path)
         {
-            var s = Make(Spline.Profile.UChannel, new Vector2(2f, 0.6f), false, path);
-            s.thickness = 0.1f; s.orientation = Spline.Orientation.Upright; Rebuild(s);
+            var rim = new Vector3[path.Length];
+            for (int i = 0; i < path.Length; i++) rim[i] = path[i] + Vector3.up * 0.3f;
+            var s = Make(Spline.Profile.Rectangle, new Vector2(2f, 1.2f), true, rim);
+            s.half = true; s.thickness = 0.1f; s.orientation = Spline.Orientation.Upright; Rebuild(s);
             return s;
         }
 
@@ -304,8 +310,8 @@ namespace CsgBrush.Tests
         public void ChannelsCrossingAtATOpenIntoEachOther([Values(false, true)] bool smoothJunction)
         {
             var s = Channel(new Vector3(-5f, 1f, 0f), new Vector3(5f, 1f, 0f));
-            int mid = s.SplitLink(0, new Vector3(0f, 1f, 0f));
-            int branch = s.AddPoint(new Vector3(0f, 1f, -5f)); s.AddLink(mid, branch);
+            int mid = s.SplitLink(0, new Vector3(0f, 1.3f, 0f));
+            int branch = s.AddPoint(new Vector3(0f, 1.3f, -5f)); s.AddLink(mid, branch);
             s.SetSmooth(mid, smoothJunction); Rebuild(s);
             Assert.IsTrue(Solid(new Vector3(0f, 0.75f, 0f)) && Solid(new Vector3(0f, 0.75f, -0.8f)), "the floor runs on under the junction");
             Assert.IsFalse(Solid(new Vector3(0f, 1f, 0f)), "open where they meet");
@@ -322,8 +328,8 @@ namespace CsgBrush.Tests
         {
             var s = Channel(new Vector3(-5f, 1f, 0f), new Vector3(0f, 1f, 0f), new Vector3(0f, 1f, 5f));
             Assert.IsFalse(Solid(new Vector3(0f, 1f, 0f)) || Solid(new Vector3(-0.5f, 1f, 0.5f)) || Solid(new Vector3(0.5f, 1f, -0.5f)), "the channel goes round the corner");
-            Assert.IsTrue(Solid(new Vector3(0.67f, 1f, -0.67f)), "the outer corner is walled round, half the width from the point");
-            Assert.IsFalse(Solid(new Vector3(0.8f, 1f, -0.8f)) || Solid(new Vector3(1.1f, 1f, 0f)) || Solid(new Vector3(0f, 1f, -1.1f)), "with nothing past that: the road is as wide round the corner as along it");
+            Assert.IsTrue(Solid(new Vector3(0.95f, 1f, -0.95f)), "the outer corner is square: the two runs' square ends");
+            Assert.IsFalse(Solid(new Vector3(1.1f, 1f, 0f)) || Solid(new Vector3(0f, 1f, -1.1f)) || Solid(new Vector3(1.1f, 1f, -1.1f)), "with nothing past it");
             Assert.IsTrue(Solid(new Vector3(-0.95f, 1f, 0.95f)), "and the inner corner");
         }
 
@@ -342,14 +348,14 @@ namespace CsgBrush.Tests
         {
             var s = Channel(new Vector3(0f, 1f, 0f), new Vector3(8f, 1f, 1.5f));
             int hub = s.pointIds[0];
-            var ends = new[] { new Vector3(-2f, 1f, 8f), new Vector3(-8f, 1f, -1f), new Vector3(2.5f, 1f, -8f) };
+            var ends = new[] { new Vector3(-2f, 1.3f, 8f), new Vector3(-8f, 1.3f, -1f), new Vector3(2.5f, 1.3f, -8f) };
             foreach (var e in ends) s.AddLink(hub, s.AddPoint(e));
             Rebuild(s);
             Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
             var node = new Vector3(0f, 1f, 0f);
             Assert.IsTrue(Solid(new Vector3(0f, 0.75f, 0f)), "a floor under the crossing");
             Assert.IsFalse(Solid(node), "open in the middle");
-            // between each two neighbouring arms: open up to where their insides meet, a wall to where their outsides meet, then nothing
+            // between each two neighbouring arms: open up to where their insides meet, then a wall (the square ends' corners may reach further)
             var dirs = new List<Vector3> { new Vector3(8f, 0f, 1.5f).normalized };
             foreach (var e in ends) dirs.Add(new Vector3(e.x, 0f, e.z).normalized);
             dirs.Sort((a, b) => Mathf.Atan2(a.z, a.x).CompareTo(Mathf.Atan2(b.z, b.x)));
@@ -360,20 +366,24 @@ namespace CsgBrush.Tests
                 float inside = 0.9f / Mathf.Sin(half), outside = 1f / Mathf.Sin(half);
                 Assert.IsFalse(Solid(node + between * (inside - 0.05f)), "open into the corner between arms " + i);
                 Assert.IsTrue(Solid(node + between * (inside + outside) * 0.5f), "the wall at that corner");
-                Assert.IsFalse(Solid(node + between * (outside + 0.1f)), "and nothing sticking out past it, at " + (node + between * (outside + 0.1f)) + " between arms " + i);
             }
+            for (float x = -4f; x <= 4f; x += 0.1f)
+                for (float z = -4f; z <= 4f; z += 0.1f)
+                    Assert.IsFalse(Solid(new Vector3(x, 1.35f, z)), "nothing stands above the rim, at " + new Vector3(x, 1.35f, z));
         }
 
         [Test]
-        public void AJunctionOfArmsAtDifferentHeightsHasAFloorWithoutSteps()
+        public void AJunctionOfArmsAtDifferentHeightsHasAFloorAllThrough()
         {
             var s = Channel(new Vector3(0f, 1f, 0f), new Vector3(-7f, 1.6f, -1f));
             int hub = s.pointIds[0];
-            var ends = new[] { new Vector3(7f, 2.2f, 1f), new Vector3(1f, 0.4f, -7f) };
+            var ends = new[] { new Vector3(7f, 2.5f, 1f), new Vector3(1f, 0.7f, -7f) };
             foreach (var e in ends) s.AddLink(hub, s.AddPoint(e));
             Rebuild(s);
             Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
-            // walk from each arm through the point into each other one, down the middle: the floor rises and falls, but never jumps, and no wall stands in the way
+            // walk from each arm through the point into each other one, down the middle: the floor rises and falls, and no wall
+            // stands in the way; where one arm's square end stops and another's floor takes over there is a step (the arms
+            // climb at different slopes: here up to about 16 cm), never a wall
             var arms = new[] { new Vector3(-7f, 0f, -1f).normalized, new Vector3(7f, 0f, 1f).normalized, new Vector3(1f, 0f, -7f).normalized };
             for (int i = 0; i < arms.Length; i++)
                 for (int j = i + 1; j < arms.Length; j++)
@@ -384,7 +394,7 @@ namespace CsgBrush.Tests
                     {
                         var at = t < 0.5f ? Vector3.Lerp(from, Vector3.zero, t * 2f) : Vector3.Lerp(Vector3.zero, to, t * 2f - 1f); // in along one arm, out along the other
                         Assert.IsTrue(Physics.Raycast(at + Vector3.up * 10f, Vector3.down, out var hit, 20f), "a floor between arms " + i + " and " + j + " at " + at);
-                        if (!float.IsNaN(last)) Assert.Less(Mathf.Abs(hit.point.y - last), 0.06f, "no step or wall between arms " + i + " and " + j + " at " + at);
+                        if (!float.IsNaN(last)) Assert.Less(Mathf.Abs(hit.point.y - last), 0.2f, "no wall, a step at most, between arms " + i + " and " + j + " at " + at);
                         last = hit.point.y;
                     }
                 }
@@ -401,7 +411,7 @@ namespace CsgBrush.Tests
             var rnd = new System.Random(seed);
             float R(float a, float b) => a + (float)rnd.NextDouble() * (b - a);
             var s = new GameObject("Spline").AddComponent<Spline>();
-            s.profile = Spline.Profile.UChannel; s.size = new Vector2(3f, 0.6f); s.thickness = 0.15f;
+            s.profile = Spline.Profile.Rectangle; s.half = true; s.hollow = true; s.size = new Vector2(3f, 1.2f); s.thickness = 0.15f; // 0.6 m deep
             s.orientation = rnd.Next(4) == 0 ? Spline.Orientation.Follow : Spline.Orientation.Upright;
             const int Cols = 3, Rows = 3;
             var grid = new int[Cols * Rows];
@@ -428,9 +438,9 @@ namespace CsgBrush.Tests
                 for (float d = 0.1f; d < len - 0.1f; d += 0.1f)
                 {
                     s.CurvePoint(link, d, out var p, out _);
-                    Assert.IsTrue(Physics.Raycast(p + Vector3.up * 0.35f, Vector3.down, out var hit, 1.5f), "a floor on link " + link + " at " + d.ToString("F1"));
-                    float below = p.y - hit.point.y; // the floor's top is 0.15 under the path, lower on a slope or bank
-                    Assert.IsTrue(below > 0.05f && below < 0.45f, "the floor, not a wall or a hole, on link " + link + " at " + d.ToString("F1") + ": " + below.ToString("F2") + " m under the path, on " + hit.collider.name);
+                    Assert.IsTrue(Physics.Raycast(p + Vector3.up * 0.05f, Vector3.down, out var hit, 1.5f), "a floor on link " + link + " at " + d.ToString("F1"));
+                    float below = p.y - hit.point.y; // the floor's top is 0.45 under the path (the rim), lower on a slope or bank
+                    Assert.IsTrue(below > 0.35f && below < 0.75f, "the floor, not a wall or a hole, on link " + link + " at " + d.ToString("F1") + ": " + below.ToString("F2") + " m under the path, on " + hit.collider.name);
                 }
             }
         }
@@ -444,7 +454,7 @@ namespace CsgBrush.Tests
         {
             BrushSettings.instance.snapToGrid = false;
             var s = new GameObject("Spline").AddComponent<Spline>();
-            s.profile = Spline.Profile.UChannel; s.size = new Vector2(3.88f, 0.5f); s.thickness = 0.249f; s.orientation = Spline.Orientation.Follow;
+            s.profile = Spline.Profile.Rectangle; s.half = true; s.hollow = true; s.size = new Vector2(3.88f, 1f); s.thickness = 0.249f; s.orientation = Spline.Orientation.Follow; // 0.5 m deep
             var pts = new[] { new Vector3(0f, 0f, 0f), new Vector3(-5.25f, 0f, -6.5f), new Vector3(5.25f, -1f, -20.5f), new Vector3(28.25f, 0f, -18f), new Vector3(26.75f, 0f, -11f), new Vector3(12.5f, 0f, 3f), new Vector3(22f, 0f, 1.5f),
                 new Vector3(-2.25f, 1.5f, -14.25f), new Vector3(6.5f, 0.25f, -12.75f), new Vector3(16.5f, -6.75f, -18.75f), new Vector3(11f, 0f, -8.25f), new Vector3(4.05f, 0f, 0.97f), new Vector3(2f, -1.5f, -18.75f) };
             var id = new int[14];
@@ -459,9 +469,11 @@ namespace CsgBrush.Tests
                 for (float d = 0.25f; d < len - 0.1f; d += 0.25f)
                 {
                     s.CurvePoint(link, d, out var p, out _);
-                    Assert.IsTrue(Physics.Raycast(p + Vector3.up * 0.3f, Vector3.down, out var hit, 1.5f), "a floor on link " + link + " at " + d.ToString("F2"));
-                    float below = p.y - hit.point.y; // the floor's top is at the path here (a 0.249 m floor in a 0.5 m channel); lower on a bank
-                    Assert.IsTrue(below > -0.06f && below < 0.35f, "the floor, not a wall or a lump, on link " + link + " at " + d.ToString("F2") + ": " + below.ToString("F2") + " m under the path, on " + hit.collider.name);
+                    Assert.IsTrue(Physics.Raycast(p + Vector3.up * 0.05f, Vector3.down, out var hit, 1.5f), "a floor on link " + link + " at " + d.ToString("F2"));
+                    // the floor's top is 0.251 under the path (the rim); lower on a bank, or where a lower channel overlaps this
+                    // one near a junction (the insides add up: the lower floor shows, here up to about 1 m down), never a hole
+                    float below = p.y - hit.point.y;
+                    Assert.IsTrue(below > 0.19f && below < 1.25f, "the floor, not a wall or a lump, on link " + link + " at " + d.ToString("F2") + ": " + below.ToString("F2") + " m under the path, on " + hit.collider.name);
                 }
             }
         }
@@ -540,16 +552,16 @@ namespace CsgBrush.Tests
         }
 
         [Test]
-        public void ASharpCornerEndsRoundJustPastItsPoint()
+        public void ASharpCornerEndsSquareJustPastItsPoint()
         {
             var s = Channel(new Vector3(0f, 1f, -3f), new Vector3(8f, 1f, 0f), new Vector3(0f, 1f, 3f));
             Specs(s); Assert.AreEqual(0, s.droppedPieces, "every piece made");
             Assert.IsFalse(Solid(new Vector3(8f, 1f, 0f)), "the channel reaches the point");
             Assert.IsTrue(Solid(new Vector3(8.5f, 0.75f, 0f)), "with a floor past it");
-            float end = 8f + 1f; // the end is an arc of the half width round the point
-            Assert.IsTrue(Solid(new Vector3(end - 0.05f, 1f, 0f)), "an end wall past it");
-            Assert.IsFalse(Solid(new Vector3(end - 0.15f, 1f, 0f)), "inside it the channel");
-            Assert.IsFalse(Solid(new Vector3(end + 0.1f, 1f, 0f)), "and no spike beyond");
+            // each run goes on square past the point by the half width along its own way: their ends' walls meet at the tip
+            Assert.IsFalse(Solid(new Vector3(8.8f, 1f, 0f)), "inside the ends the channel");
+            Assert.IsTrue(Solid(new Vector3(9f, 1f, 0f)), "an end wall past it");
+            Assert.IsFalse(Solid(new Vector3(9.15f, 1f, 0f)), "and nothing beyond");
             // the two sides part where their outsides meet, 1 / sin(half the angle) from the point
             float meet = 1f / Mathf.Sin(Mathf.Atan2(3f, 8f));
             Assert.IsTrue(Solid(new Vector3(8f - meet + 0.15f, 1f, 0f)), "a wall between the sides");

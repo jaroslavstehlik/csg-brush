@@ -39,7 +39,7 @@ namespace CsgBrush.Tests
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var made = new GameObject("Spline").AddComponent<Spline>();
-            made.profile = Spline.Profile.UChannel; made.size = new Vector2(1f, 0.5f); made.thickness = 0.1f;
+            made.profile = Spline.Profile.Rectangle; made.size = new Vector2(1f, 0.5f); made.thickness = 0.1f;
             int a = made.AddPoint(new Vector3(0f, 0f, 0f)), b = made.AddPoint(new Vector3(4f, 0f, 0f)), c = made.AddPoint(new Vector3(4f, 0f, 4f));
             made.AddLink(a, b); made.AddLink(b, c);
             BrushGenerators.Update(made, true);

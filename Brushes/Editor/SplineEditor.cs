@@ -17,23 +17,16 @@ namespace CsgBrush.Editor
             EditorGUILayout.PropertyField(profile);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("size"));
             var kind = (Spline.Profile)profile.enumValueIndex;
-            if (kind == Spline.Profile.Circle)
+            if (kind == Spline.Profile.Circle) EditorGUILayout.PropertyField(serializedObject.FindProperty("sides"));
+            EditorGUILayout.PropertyField(serializedObject.FindProperty("half"));
+            var hollow = serializedObject.FindProperty("hollow");
+            EditorGUILayout.PropertyField(hollow);
+            if (hollow.boolValue)
             {
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("sides"));
-                EditorGUILayout.PropertyField(serializedObject.FindProperty("half"));
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
+                EditorGUI.indentLevel--;
             }
-            if (kind != Spline.Profile.UChannel)
-            {
-                var hollow = serializedObject.FindProperty("hollow");
-                EditorGUILayout.PropertyField(hollow);
-                if (hollow.boolValue)
-                {
-                    EditorGUI.indentLevel++;
-                    EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
-                    EditorGUI.indentLevel--;
-                }
-            }
-            else EditorGUILayout.PropertyField(serializedObject.FindProperty("thickness"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("ends"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("orientation"));
             EditorGUILayout.PropertyField(serializedObject.FindProperty("material"));

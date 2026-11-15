@@ -29,7 +29,7 @@ To continue drawing a Spline, select it and click **Draw** in the Inspector. To 
 
 Click **Edit** in the Spline Inspector. Spline edit mode works like [floor plan edit mode](floor-plan-edit-mode.md): select points (**1**) or links (**2**), and use **Move**, **Rotate**, and **Scale** on the selection. **Move** also has an up arrow, because spline points can be at any height. Points snap to the grid.
 
-To turn the profile about the path, select points and use the **Rotate** tool: drag the ring around the path's direction. Rotation snaps to the rotation snap angle. You can also type the angle in **Roll** in the Inspector, under **Selected points**. Between two points, the roll changes evenly along the path. Use it to open a U Channel to one side, or to bank a road.
+To turn the profile about the path, select points and use the **Rotate** tool: drag the ring around the path's direction. Rotation snaps to the rotation snap angle. You can also type the angle in **Roll** in the Inspector, under **Selected points**. Between two points, the roll changes evenly along the path. Use it to open a channel to one side, or to bank a road.
 
 To curve the path, select points and press **S**, or click **Smooth**. Smooth points are round marks, corners are square. See [Curve walls](floor-plan-edit-mode.md#curve-walls) for how smooth points and the curve tolerance work.
 
@@ -38,23 +38,23 @@ To curve the path, select points and press **S**, or click **Smooth**. Smooth po
 | **Where** | **Result** |
 | :--- | :--- |
 | A Smooth point | The path curves through it, and the profile is swept along the curve in one piece. |
-| A Corner point | A joint: the profile turned about the point joins the two links. For a **Circle** each run ends in a dome made of its own end ring, so a run is a capsule; where two runs meet their domes overlap and add up to a round elbow. For a **U Channel** or **Rectangle** the outside of the corner is an arc of half the width round the point, so the road is as wide round the corner as along it; the inside of the corner is sharp. |
-| A point where three or more links meet | A junction. Between links that meet at less than 180 degrees the walls meet in a sharp corner; an open side (behind a T, the outside of a Y) is an arc of half the width round the point. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
-| A junction or corner of **U Channel** or **Rectangle** links | Built as its own floor, with walls along its outline between the links, and for a hollow **Rectangle** a roof. The floor follows the links' heights and slopes, and dips or rises with the point itself, so links at different heights meet without steps. |
-| A junction or corner of **Circle** links | Each run runs right to the point and ends in a dome there, so the runs are capsules that overlap at the point and add up to the joint, like a sweep of a ball. Where two domes cross there is a shallow faceted crease; more sides (a finer curve tolerance) make it shallower. The insides are the same capsules at the inner size, cut after all the solid pieces, so the branches open into each other. |
-| An end of the path | As set by **Ends**: open, capped by the wall thickness, or rounded (half a ball for a **Circle**, half a disc for a **U Channel** or **Rectangle**). |
+| A Corner point | A joint. For a **Circle** each run ends in a dome made of its own end ring, so a run is a capsule; where two runs meet their domes overlap and add up to a round elbow. For a **Rectangle** each run goes on past the point by half its width, the profile carried straight on, and the two square ends overlap in a square corner. |
+| A point where three or more links meet | A junction, joined the same way: the runs' domes or square ends overlap at the point. At a Smooth point, the two links that are most nearly opposite run through it in one piece. |
+| A junction or corner of **Rectangle** links | Each square end is cut where it would stand above another link's top or below its bottom, so a joint never rises over a road that meets it. The insides are the same square ends at the inner size, cut after all the solid pieces, so the corridors open into each other. Where links meet at very different slopes or rolls, their floors don't blend: there is a step where one link's floor takes over from another's, and where a lower channel overlaps a higher one near a junction, the higher one's floor gives way to the lower one. |
+| A junction or corner of **Circle** links | Each run runs right to the point and ends in a dome there, so the runs are capsules that overlap at the point and add up to the joint, like a sweep of a ball. Where two domes cross there is a shallow faceted crease; more sides (a finer curve tolerance) make it shallower. The insides are the same capsules at the inner size, cut after all the solid pieces, so the branches open into each other. For a **Half** circle the domes are cut where they would stand above another link's top. |
+| An end of the path | As set by **Ends**: open, capped by the wall thickness, or rounded (half a ball for a **Circle**, half a disc for a **Rectangle**). |
 
 ## Spline component reference
 
 | **Property** | **Description** |
 | :--- | :--- |
-| **Profile** | The shape swept along the path.<br/>&#8226; **Circle**: A round tube.<br/>&#8226; **Rectangle**: A box section.<br/>&#8226; **U Channel**: An open channel facing up. |
-| **Size** | The width and height of the profile, in metres. A circle's diameter is the width. |
+| **Profile** | The shape swept along the path.<br/>&#8226; **Circle**: A round tube.<br/>&#8226; **Rectangle**: A box section. With **Half** and **Hollow**, a channel open on top. |
+| **Size** | The width and height of the whole profile, in metres; a **Half** profile is half that height. A circle's diameter is the width. |
 | **Sides** | The number of sides of a circle. **0** works them out from the curve tolerance, with at least 6. Visible for **Circle**. |
-| **Half** | Only the lower half of the circle, its flat top level with the path: a half cylinder, or a half pipe open on top when **Hollow** is enabled. Visible for **Circle**. |
-| **Hollow** | Cuts out the inside, leaving a wall of the thickness below. Not available for **U Channel**, which always has its channel cut out. |
-| **Thickness** | The wall of a hollow profile or a channel, in metres. |
-| **Ends** | What the path's ends are.<br/>&#8226; **Open**: The inside of a hollow profile or a channel is open.<br/>&#8226; **Closed**: Capped by the wall thickness.<br/>&#8226; **Rounded**: Half a ball for a **Circle**, half a disc for a **U Channel** or **Rectangle**, closed. |
+| **Half** | Only the lower half of the profile, its flat top level with the path: a half cylinder or half a box, or, when **Hollow** is enabled, a half pipe or a channel open on top. |
+| **Hollow** | Cuts out the inside, leaving a wall of the thickness below. |
+| **Thickness** | The wall of a hollow profile, in metres. Visible when **Hollow** is enabled. |
+| **Ends** | What the path's ends are.<br/>&#8226; **Open**: The inside of a hollow profile is open.<br/>&#8226; **Closed**: Capped by the wall thickness.<br/>&#8226; **Rounded**: Half a ball for a **Circle**, half a disc for a **Rectangle**, closed. |
 | **Orientation** | How the profile turns along the path.<br/>&#8226; **Follow**: The profile turns with the path without twisting. This is the default.<br/>&#8226; **Upright**: The top of the profile stays up. |
 | **Material** | The material of every piece. When empty, pieces use the project's default material. |
 | **Override tolerance** | Uses its own curve tolerance instead of the project's **Curve tolerance** (**Project Settings** > **Brushes**). |
