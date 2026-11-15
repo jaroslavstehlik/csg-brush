@@ -22,6 +22,9 @@
   Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,
   windows and attached objects stay on a curved wall and face across it. A + on a curved wall adds a smooth point on
   the curve.
+- Faster edits of large pieces of level: a large island of touching brushes is built in cells of 8 m, and an edit
+  builds again only the cells it reaches; a brush's colliders are built again only where its convex parts, or the
+  cuts reaching them, changed. Dragging a point of a hollow spline network is 3 to 5 times faster.
 - Fixed: a spline or floor plan that is a prefab instance lost the pieces it rebuilt that came from the prefab when
   play mode ended (or the scene was opened again): they went back to the prefab's, and the mesh broke until the path
   was edited. A generator's changes to its pieces are now recorded as prefab overrides.

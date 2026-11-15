@@ -24,7 +24,7 @@ namespace CsgBrush.Editor
     /// </summary>
     public static class BrushCsg
     {
-        sealed class SolidEntry { public int key; public ManifoldSolid solid; public Bounds bounds; public BrushPolyhedron polyhedron; public List<ConvexPolytope> partsAdd, partsRemove; public string partsProblem; }
+        sealed class SolidEntry { public int key; public ManifoldSolid solid; public Bounds bounds; public Bounds[] blocks; public BrushPolyhedron polyhedron; public List<ConvexPolytope> partsAdd, partsRemove; public string partsProblem; }
         sealed class PieceEntry { public string key; public ManifoldSolid piece; public bool ownsPiece; }
 
         static readonly Dictionary<Brush, SolidEntry> s_Solids = new Dictionary<Brush, SolidEntry>();
@@ -285,6 +285,7 @@ namespace CsgBrush.Editor
             public bool needMesh;
             public int meshKey;
             public Bounds[] bounds;                                    // per record, in the group's space
+            public Bounds[][] blocks;                                  // per record: its convex blocks' boxes (a long sweep's bands), or null
             public Dictionary<string, Island> islandsBefore;           // this group's islands from the last build (read only)
             public Dictionary<string, Island> islandsAfter = new Dictionary<string, Island>();
             public List<(int layer, List<Island> islands)> layers = new List<(int, List<Island>)>();
@@ -294,7 +295,7 @@ namespace CsgBrush.Editor
             public System.Exception error;
         }
 
-        struct PolyData { public Vector3[] vertices; public List<int[]> faces; public Vector3[] innerVertices; public List<int[]> innerFaces; public Bounds bounds; public BrushPolyhedron polyhedron; }
+        struct PolyData { public Vector3[] vertices; public List<int[]> faces; public Vector3[] innerVertices; public List<int[]> innerFaces; public Bounds bounds; public Bounds[] blocks; public BrushPolyhedron polyhedron; }
 
         struct Record { public Brush brush; public SolidEntry solid; public Matrix4x4 toModel; public int key; public bool subtract; public int layer; }
 
@@ -395,7 +396,7 @@ namespace CsgBrush.Editor
                 if (r.solid == null)
                 {
                     var poly = BrushGeometry.Polyhedron(b).Transformed(toModel);
-                    var data = new PolyData { vertices = poly.vertices, faces = new List<int[]>(poly.faces.Length), bounds = poly.Bounds(), polyhedron = poly };
+                    var data = new PolyData { vertices = poly.vertices, faces = new List<int[]>(poly.faces.Length), bounds = poly.Bounds(), blocks = Blocks(poly), polyhedron = poly };
                     foreach (var f in poly.faces) data.faces.Add(f.indices);
                     var inner = BrushGeometry.HollowInner(b);
                     if (inner != null)
@@ -414,6 +415,9 @@ namespace CsgBrush.Editor
             for (int i = 0; i < job.records.Count; i++) bounds[i] = job.records[i].solid != null ? job.records[i].solid.bounds : default;
             for (int n = 0; n < job.newSolidIndices.Count; n++) bounds[job.newSolidIndices[n]] = job.newSolidData[n].bounds;
             job.bounds = bounds;
+            job.blocks = new Bounds[job.records.Count][];
+            for (int i = 0; i < job.records.Count; i++) job.blocks[i] = job.records[i].solid?.blocks;
+            for (int n = 0; n < job.newSolidIndices.Count; n++) job.blocks[job.newSolidIndices[n]] = job.newSolidData[n].blocks;
             s_Islands.TryGetValue(model, out job.islandsBefore);
             // pieces: which cutters apply, and which pieces are already cached
             var subtracts = new List<int>();
@@ -429,7 +433,7 @@ namespace CsgBrush.Editor
                 {
                     if (j <= i) continue; // a subtract cuts only the brushes above it
                     var c = job.records[j];
-                    if (c.layer != r.layer || !bounds[j].Intersects(bounds[i])) continue; // each layer is combined on its own
+                    if (c.layer != r.layer || !Overlap(job, i, j)) continue; // each layer is combined on its own
                     cutters.Add(j); keyBuilder.Append('-').Append(c.key);
                 }
                 string pieceKey = keyBuilder.ToString();
@@ -512,6 +516,7 @@ namespace CsgBrush.Editor
                     var islands = new List<Island>();
                     foreach (var members in Connected(piecesByLayer[layer], p => job.bounds[job.pieceRecord[p]]))
                     {
+                        if (members.Count >= CellMinPieces) { BuildCells(job, layer, members, solids, islands); continue; }
                         keyBuilder.Clear().Append(layer);
                         foreach (int p in members) keyBuilder.Append('/').Append(job.pieceKeys[p]);
                         string key = keyBuilder.ToString();
@@ -540,6 +545,142 @@ namespace CsgBrush.Editor
             job.unionMs = sw.Elapsed.TotalMilliseconds;
         }
 
+        /// <summary>Islands of at least this many pieces are built in cells (see <see cref="BuildCells"/>).</summary>
+        public static int CellMinPieces = 12;
+        /// <summary>Metres: the edge of a cell.</summary>
+        public static float CellSize = 8f;
+        /// <summary>Where the cell walls are: off any grid a face snaps to, so no face lies on a wall.</summary>
+        const float CellOffset = 0.0731f;
+
+        /// <summary>
+        /// A large island in cells of a fixed grid in the group's space: each cell is its pieces clipped to its box and united,
+        /// read back without the box's own faces. An edit builds again only the cells its changed pieces reach; the others keep
+        /// their meshes (keyed, like islands, by their pieces' keys), and no union ever spans the whole island. The cells'
+        /// surfaces meet along the walls, cut at the same places on both sides.
+        /// </summary>
+        static void BuildCells(Job job, int layer, List<int> members, ManifoldSolid[] solids, List<Island> islands)
+        {
+            var whole = job.bounds[job.pieceRecord[members[0]]];
+            foreach (int p in members) whole.Encapsulate(job.bounds[job.pieceRecord[p]]);
+            Vector3Int lo = CellOf(whole.min), hi = CellOf(whole.max);
+            var keyBuilder = new System.Text.StringBuilder();
+            var inCell = new List<int>();
+            for (int x = lo.x; x <= hi.x; x++)
+                for (int y = lo.y; y <= hi.y; y++)
+                    for (int z = lo.z; z <= hi.z; z++)
+                    {
+                        var min = new Vector3(x, y, z) * CellSize + Vector3.one * CellOffset;
+                        var box = new Bounds(min + Vector3.one * (CellSize * 0.5f), Vector3.one * CellSize);
+                        inCell.Clear();
+                        foreach (int p in members) if (Overlaps(job, job.pieceRecord[p], box)) inCell.Add(p);
+                        if (inCell.Count == 0) continue;
+                        keyBuilder.Clear().Append(layer).Append('#').Append(x).Append(',').Append(y).Append(',').Append(z);
+                        // what the cell holds depends only on its pieces and the cuts that reach into it: a cut elsewhere along
+                        // a long piece leaves this cell as it was
+                        foreach (int p in inCell)
+                        {
+                            keyBuilder.Append('/').Append(job.records[job.pieceRecord[p]].key);
+                            foreach (int c in job.pieceCutters[p]) if (Overlaps(job, c, box)) keyBuilder.Append('-').Append(job.records[c].key);
+                        }
+                        string key = keyBuilder.ToString();
+                        if (job.islandsBefore == null || !job.islandsBefore.TryGetValue(key, out var island))
+                        {
+                            island = new Island { key = key, sources = new Dictionary<int, Brush>() };
+                            using (var boxSolid = BoxSolid(box))
+                            {
+                                var clipped = new List<ManifoldSolid>(inCell.Count); var owned = new List<ManifoldSolid>();
+                                foreach (int p in inCell)
+                                {
+                                    var piece = job.pieceEntries[p].piece;
+                                    var pb = job.bounds[job.pieceRecord[p]];
+                                    if (box.Contains(pb.min) && box.Contains(pb.max)) clipped.Add(piece); // wholly inside: as it is
+                                    else { var c = ManifoldSolid.Boolean(piece, boxSolid, ManifoldNative.OpType.Intersect); clipped.Add(c); owned.Add(c); }
+                                    int r = job.pieceRecord[p];
+                                    if (solids[r] != null) island.sources[solids[r].OriginalId] = job.records[r].brush;
+                                    foreach (int c in job.pieceCutters[p]) if (solids[c] != null) island.sources[solids[c].OriginalId] = job.records[c].brush;
+                                }
+                                using (var union = clipped.Count == 1 ? null : ManifoldSolid.Batch(clipped, ManifoldNative.OpType.Add))
+                                    island.data = Without((union ?? clipped[0]).ToMesh(), boxSolid.OriginalId);
+                                foreach (var c in owned) c.Dispose();
+                            }
+                            job.builtIslands++;
+                        }
+                        else job.cachedIslands++;
+                        job.islandsAfter[key] = island;
+                        islands.Add(island);
+                    }
+        }
+
+        /// <summary>
+        /// The boxes of a polyhedron's convex blocks (its faces' groups, as a sweep makes one per band), when it has several:
+        /// far tighter than its own box for a long, bending sweep, so it is found to overlap only what it reaches.
+        /// </summary>
+        static Bounds[] Blocks(BrushPolyhedron poly)
+        {
+            var byGroup = new Dictionary<int, Bounds>();
+            foreach (var f in poly.faces)
+            {
+                if (f.group < 0) return null; // not made of blocks: its box is all there is
+                foreach (int v in f.indices)
+                {
+                    if (byGroup.TryGetValue(f.group, out var b)) { b.Encapsulate(poly.vertices[v]); byGroup[f.group] = b; }
+                    else byGroup[f.group] = new Bounds(poly.vertices[v], Vector3.zero);
+                }
+            }
+            if (byGroup.Count < 2) return null;
+            var blocks = new Bounds[byGroup.Count]; int k = 0;
+            foreach (var b in byGroup.Values) { var e = b; e.Expand(1e-3f); blocks[k++] = e; }
+            return blocks;
+        }
+
+        /// <summary>Does the record reach into the box: by its blocks when it has them, else by its own box.</summary>
+        static bool Overlaps(Job job, int record, Bounds box)
+        {
+            if (!job.bounds[record].Intersects(box)) return false;
+            var blocks = job.blocks[record];
+            if (blocks == null) return true;
+            foreach (var b in blocks) if (b.Intersects(box)) return true;
+            return false;
+        }
+
+        /// <summary>Do two records overlap, as far as their blocks tell.</summary>
+        static bool Overlap(Job job, int a, int b)
+        {
+            if (!job.bounds[a].Intersects(job.bounds[b])) return false;
+            var blocks = job.blocks[a];
+            if (blocks == null) return Overlaps(job, b, job.bounds[a]);
+            foreach (var x in blocks) if (Overlaps(job, b, x)) return true;
+            return false;
+        }
+
+        static Vector3Int CellOf(Vector3 p) => Vector3Int.FloorToInt((p - Vector3.one * CellOffset) / CellSize);
+
+        static ManifoldSolid BoxSolid(Bounds b)
+        {
+            Vector3 n = b.min, x = b.max;
+            var v = new[] { new Vector3(n.x, n.y, n.z), new Vector3(x.x, n.y, n.z), new Vector3(x.x, n.y, x.z), new Vector3(n.x, n.y, x.z),
+                            new Vector3(n.x, x.y, n.z), new Vector3(x.x, x.y, n.z), new Vector3(x.x, x.y, x.z), new Vector3(n.x, x.y, x.z) };
+            var f = new List<int[]> { new[] { 0, 1, 2, 3 }, new[] { 7, 6, 5, 4 }, new[] { 0, 4, 5, 1 }, new[] { 1, 5, 6, 2 }, new[] { 2, 6, 7, 3 }, new[] { 3, 7, 4, 0 } };
+            return ManifoldSolid.FromFaces(v, f, out _);
+        }
+
+        /// <summary>The mesh without the triangles of one solid (a cell's box: its faces are only where the cell was cut).</summary>
+        static ManifoldSolid.MeshData Without(ManifoldSolid.MeshData data, int source)
+        {
+            int n = data.triangleSource != null ? data.triangleSource.Length : 0, keep = 0;
+            for (int t = 0; t < n; t++) if (data.triangleSource[t] != source) keep++;
+            if (keep == n) return data;
+            var tris = new int[keep * 3]; var src = new int[keep]; var face = new int[keep];
+            for (int t = 0, k = 0; t < n; t++)
+            {
+                if (data.triangleSource[t] == source) continue;
+                tris[k * 3] = data.triangles[t * 3]; tris[k * 3 + 1] = data.triangles[t * 3 + 1]; tris[k * 3 + 2] = data.triangles[t * 3 + 2];
+                src[k] = data.triangleSource[t]; face[k] = data.triangleFace[t]; k++;
+            }
+            data.triangles = tris; data.triangleSource = src; data.triangleFace = face;
+            return data;
+        }
+
         // ---- step 3: main thread
         static void Apply(Job job)
         {
@@ -555,7 +696,7 @@ namespace CsgBrush.Editor
                 if (r.brush == null) { job.newSolids[n]?.Dispose(); continue; }
                 if (s_Solids.TryGetValue(r.brush, out var old)) old.solid?.Dispose();
                 var data = job.newSolidData[n];
-                var entry = new SolidEntry { key = r.key, solid = job.newSolids[n], bounds = data.bounds, polyhedron = data.polyhedron };
+                var entry = new SolidEntry { key = r.key, solid = job.newSolids[n], bounds = data.bounds, blocks = data.blocks, polyhedron = data.polyhedron };
                 if (entry.solid == null) r.brush.problem = "The shape could not be built.";
                 s_Solids[r.brush] = entry;
                 r.solid = entry; job.records[job.newSolidIndices[n]] = r;

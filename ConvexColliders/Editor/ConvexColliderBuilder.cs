@@ -71,7 +71,14 @@ namespace CsgBrush.Colliders.Editor
         public static int LastReusedPieces, LastCreatedPieces, LastDestroyedPieces;
 
         /// <summary>The pieces one input made last time, kept while its key holds.</summary>
-        sealed class Built { public long key; public readonly List<GameObject> pieces = new List<GameObject>(); public int boxes, meshes, solids, triggers; }
+        sealed class Built
+        {
+            public long key; public readonly List<GameObject> pieces = new List<GameObject>(); public int boxes, meshes, solids, triggers;
+            /// <summary>The pieces of each of the input's convex parts, by the part's key: its planes and the cutter parts that reach it.</summary>
+            public Dictionary<long, PartPieces> parts = new Dictionary<long, PartPieces>();
+        }
+
+        sealed class PartPieces { public readonly List<GameObject> pieces = new List<GameObject>(); public int boxes, meshes; }
 
         sealed class ByReference : IEqualityComparer<object>
         {
@@ -206,27 +213,58 @@ namespace CsgBrush.Colliders.Editor
                     LastReusedPieces += was.pieces.Count;
                     continue;
                 }
-                if (was != null) foreach (var go in was.pieces) if (go != null) { Object.DestroyImmediate(go); LastDestroyedPieces++; }
-
-                // this input's pieces: its own parts, carved by its cutters in order
-                var pieces = new List<ConvexPolytope>(Own(i));
-                if (!trigger)
-                    foreach (int j in mine)
-                        foreach (var cutter in Own(j))
-                        {
-                            var next = new List<ConvexPolytope>();
-                            foreach (var p in pieces) ConvexPolytope.Subtract(p, cutter, next);
-                            pieces = next;
-                        }
+                // this input's pieces, part by part: each of its own parts carved by the cutters' parts that reach it, in
+                // order. A part whose planes and reaching cutter parts are as they were keeps its pieces: a long brush
+                // changed at one end, or cut anew near one end, builds again only there
                 var entry = new Built { key = key };
-                foreach (var piece in pieces)
+                bool reusable = was != null && Alive(was);
+                long partKeyBase;
+                unchecked { partKeyBase = (((long)input.fingerprint * 31 + (int)input.kind) * 31 + input.layer) * 31 + (input.name != null ? input.name.GetHashCode() : 0); partKeyBase = partKeyBase * 31 + settings.minPieceVolume.GetHashCode(); }
+                foreach (var part in Own(i))
                 {
-                    if (piece.IsEmpty || (!trigger && piece.Volume() < settings.minPieceVolume)) continue;
-                    var tag = piece.tag as BrushTag;
-                    int boxes = 0, meshes = 0;
-                    var go = ClaimOrMake(pool, container, piece, input.layer, (trigger ? "trigger " : "solid ") + (tag != null ? tag.name : "?"), trigger, tag, ref boxes, ref meshes);
-                    entry.pieces.Add(go); entry.boxes += boxes; entry.meshes += meshes;
-                    if (trigger) entry.triggers++; else entry.solids++;
+                    var partBounds = PartBounds(part);
+                    var reaching = new List<ConvexPolytope>();
+                    long partKey = partKeyBase * 1000003 + PlanesHash(part);
+                    if (!trigger)
+                        foreach (int j in mine)
+                            foreach (var cutter in Own(j))
+                                if (PartBounds(cutter).Intersects(partBounds)) { reaching.Add(cutter); unchecked { partKey = partKey * 1000003 + PlanesHash(cutter); } }
+                    if (entry.parts.ContainsKey(partKey)) unchecked { partKey = partKey * 31 + entry.parts.Count; } // the same part twice: built on its own
+                    if (reusable && was.parts.TryGetValue(partKey, out var kept))
+                    {
+                        was.parts.Remove(partKey);
+                        entry.parts[partKey] = kept;
+                        foreach (var go in kept.pieces) { entry.pieces.Add(go); var tag = part.tag as BrushTag; tag?.onPiece?.Invoke(go, trigger); }
+                        entry.boxes += kept.boxes; entry.meshes += kept.meshes;
+                        if (trigger) entry.triggers += kept.pieces.Count; else entry.solids += kept.pieces.Count;
+                        LastReusedPieces += kept.pieces.Count;
+                        continue;
+                    }
+                    var pieces = new List<ConvexPolytope> { part };
+                    foreach (var cutter in reaching)
+                    {
+                        var next = new List<ConvexPolytope>();
+                        foreach (var p in pieces) ConvexPolytope.Subtract(p, cutter, next);
+                        pieces = next;
+                    }
+                    var made = new PartPieces();
+                    foreach (var piece in pieces)
+                    {
+                        if (piece.IsEmpty || (!trigger && piece.Volume() < settings.minPieceVolume)) continue;
+                        var tag = piece.tag as BrushTag;
+                        int boxes = 0, meshes = 0;
+                        var go = ClaimOrMake(pool, container, piece, input.layer, (trigger ? "trigger " : "solid ") + (tag != null ? tag.name : "?"), trigger, tag, ref boxes, ref meshes);
+                        made.pieces.Add(go); made.boxes += boxes; made.meshes += meshes;
+                    }
+                    entry.parts[partKey] = made;
+                    entry.pieces.AddRange(made.pieces); entry.boxes += made.boxes; entry.meshes += made.meshes;
+                    if (trigger) entry.triggers += made.pieces.Count; else entry.solids += made.pieces.Count;
+                }
+                // the parts that are no more: their pieces go (a dead input's all go)
+                if (was != null)
+                {
+                    var keptPieces = new HashSet<GameObject>(entry.pieces);
+                    foreach (var go in was.pieces) if (go != null && !keptPieces.Contains(go)) { Object.DestroyImmediate(go); LastDestroyedPieces++; }
                 }
                 built[owner] = entry;
             }
@@ -258,6 +296,28 @@ namespace CsgBrush.Colliders.Editor
             settings.triggerVolumes = triggerCount;
             settings.buildMilliseconds = (float)sw.Elapsed.TotalMilliseconds;
             if (changed) EditorUtility.SetDirty(settings);
+        }
+
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ConvexPolytope, object> s_PartBounds = new System.Runtime.CompilerServices.ConditionalWeakTable<ConvexPolytope, object>();
+
+        /// <summary>A part's box, measured once (parts are kept with their brush's solid between builds).</summary>
+        static Bounds PartBounds(ConvexPolytope part)
+        {
+            if (s_PartBounds.TryGetValue(part, out var b)) return (Bounds)b;
+            var bounds = part.GetBounds(); bounds.Expand(1e-3f);
+            s_PartBounds.Add(part, bounds);
+            return bounds;
+        }
+
+        /// <summary>A hash of a part's planes (to a tenth of a millimetre): equal parts, equal hashes.</summary>
+        static long PlanesHash(ConvexPolytope part)
+        {
+            unchecked
+            {
+                long h = 17;
+                foreach (var pl in part.planes) { h = h * 31 + Mathf.RoundToInt(pl.x * 1e4f); h = h * 31 + Mathf.RoundToInt(pl.y * 1e4f); h = h * 31 + Mathf.RoundToInt(pl.z * 1e4f); h = h * 31 + Mathf.RoundToInt(pl.w * 1e4f); }
+                return h;
+            }
         }
 
         static bool Alive(Built b)
