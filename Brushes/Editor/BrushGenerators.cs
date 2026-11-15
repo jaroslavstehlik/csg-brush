@@ -64,7 +64,7 @@ namespace CsgBrush.Editor
             int key = g.Key();
             if (!force && key == g.generatedKey && Intact(g))
             {
-                foreach (var b in g.generated) if (SyncObject(g, b)) BrushCsg.MarkDirty(b); // layer, tag or static flags of the generator changed
+                foreach (var b in g.generated) if (SyncObject(g, b)) { BrushCsg.MarkDirty(b); RecordOverrides(b.gameObject); } // layer, tag or static flags of the generator changed
                 ApplyVisibility(g);
                 Updated?.Invoke(g);
                 return;
@@ -83,7 +83,7 @@ namespace CsgBrush.Editor
                     go.transform.SetParent(container, false);
                     brush = go.AddComponent<Brush>();
                 }
-                Apply(g, brush, spec, i);
+                if (Apply(g, brush, spec, i)) RecordOverrides(brush, brush.transform, brush.gameObject);
                 made.Add(brush);
             }
             // brushes no longer described, and strays under the container
@@ -96,27 +96,40 @@ namespace CsgBrush.Editor
             g.generated = made;
             g.generatedKey = key;
             EditorUtility.SetDirty(g);
+            RecordOverrides(g);
             BrushCsg.InvalidateGrouping();
             ApplyVisibility(g);
             Updated?.Invoke(g);
         }
 
-        static void Apply(BrushGenerator g, Brush brush, BrushGenerator.BrushSpec spec, int index)
+        /// <summary>
+        /// Objects of a prefab instance changed by a script keep the change only as a recorded override: the copy of the
+        /// scene Unity takes on entering play mode (and restores on leaving it) has the prefab's values otherwise.
+        /// </summary>
+        static void RecordOverrides(params Object[] objects)
+        {
+            foreach (var o in objects) if (o != null && PrefabUtility.IsPartOfPrefabInstance(o)) PrefabUtility.RecordPrefabInstancePropertyModifications(o);
+        }
+
+        /// <summary>Make the brush what the spec describes. True when anything changed.</summary>
+        static bool Apply(BrushGenerator g, Brush brush, BrushGenerator.BrushSpec spec, int index)
         {
             var go = brush.gameObject;
-            if (go.name != spec.name) go.name = spec.name;
+            bool changed = false;
+            if (go.name != spec.name) { go.name = spec.name; changed = true; }
             if (brush.transform.GetSiblingIndex() != index) brush.transform.SetSiblingIndex(index); // CSG order
             var t = brush.transform;
-            if (t.localPosition != Vector3.zero) t.localPosition = Vector3.zero;
-            if (t.localRotation != Quaternion.identity) t.localRotation = Quaternion.identity;
-            if (t.localScale != Vector3.one) t.localScale = Vector3.one;
-            bool changed = SyncObject(g, brush);
-            if (brush.generatedBy != g) { brush.generatedBy = g; changed = true; }
-            if (brush.shape != BrushShape.Custom) { brush.shape = BrushShape.Custom; changed = true; }
-            if (brush.operation != spec.operation) { brush.operation = spec.operation; changed = true; }
-            if (brush.material != spec.material) { brush.material = spec.material; changed = true; }
-            if (brush.polyhedron == null || !brush.polyhedron.IsValid || brush.polyhedron.ContentHash() != spec.polyhedron.ContentHash()) { brush.polyhedron = spec.polyhedron; changed = true; }
-            if (changed) BrushSync.Ensure(brush);
+            if (t.localPosition != Vector3.zero) { t.localPosition = Vector3.zero; changed = true; }
+            if (t.localRotation != Quaternion.identity) { t.localRotation = Quaternion.identity; changed = true; }
+            if (t.localScale != Vector3.one) { t.localScale = Vector3.one; changed = true; }
+            bool shape = SyncObject(g, brush);
+            if (brush.generatedBy != g) { brush.generatedBy = g; shape = true; }
+            if (brush.shape != BrushShape.Custom) { brush.shape = BrushShape.Custom; shape = true; }
+            if (brush.operation != spec.operation) { brush.operation = spec.operation; shape = true; }
+            if (brush.material != spec.material) { brush.material = spec.material; shape = true; }
+            if (brush.polyhedron == null || !brush.polyhedron.IsValid || brush.polyhedron.ContentHash() != spec.polyhedron.ContentHash()) { brush.polyhedron = spec.polyhedron; shape = true; }
+            if (shape) BrushSync.Ensure(brush);
+            return changed || shape;
         }
 
         /// <summary>The generator object's layer, tag and static flags onto a brush (what its pieces and meshes take). True when any changed.</summary>
