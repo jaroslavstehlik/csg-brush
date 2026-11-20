@@ -63,6 +63,8 @@ namespace CsgBrush.Editor
         public bool extrudeIndividual = false;
         [Tooltip("The static flags new brushes and floor plans start with. A brush's own flags go to its meshes and colliders.")]
         public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.ReflectionProbeStatic;
+        [Tooltip("Make lightmap UVs for lit brush meshes when an edit is finished.")]
+        public bool autoLightmapUVs = true;
         [Tooltip("Material of every brush face without one of its own. Empty: a generated grid texture (a ruler in metres) is created under Assets/CSG Brush on first use.")]
         public Material defaultMaterial;
         [Header("Editor")]
@@ -210,6 +212,7 @@ namespace CsgBrush.Editor
                     EditorGUILayout.EndHorizontal();
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
                     s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("New brush static flags", "The static flags new brushes and floor plans start with"), s.defaultModelStaticFlags);
+                    s.autoLightmapUVs = EditorGUILayout.Toggle(new GUIContent("Auto lightmap UVs", "Make lightmap UVs for lit brush meshes when an edit is finished"), s.autoLightmapUVs);
                     EditorGUILayout.HelpBox("1 metre = " + s.unitsPerMeter + " " + s.unitLabel + ". Geometry is stored in metres; changing the preset only changes how sizes are shown and snapped.", MessageType.None);
                     if (EditorGUI.EndChangeCheck())
                         s.NotifyChanged();

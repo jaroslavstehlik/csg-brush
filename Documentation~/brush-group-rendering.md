@@ -35,14 +35,16 @@ The defaults match a new Mesh Renderer, so a group you don't change, and the sce
 
 ## Lightmap UVs
 
-Static brushes that contribute to global illumination need lightmap UVs. CSG Brush doesn't generate them while you build, because unwrapping large meshes is slow.
+Static brushes that contribute to global illumination need lightmap UVs. CSG Brush makes them the way ProBuilder does: not while you edit, because unwrapping large meshes is slow, but once an edit is finished.
 
-Lightmap UVs are generated in two ways:
+* With **Auto lightmap UVs** enabled in **Project Settings** > **Brushes** (the default), lightmap UVs are made shortly after you stop editing a group.
+* With it disabled, click **Generate Lightmap UVs** in the Brush Group's **Lightmapping** section, or choose **Tools** > **CSG Brush** > **Generate Lightmap UVs**, before you bake.
 
-* Choose **Tools** > **CSG Brush** > **Generate Lightmap UVs**.
-* Start a light bake. If a lit brush mesh doesn't have lightmap UVs, CSG Brush stops the bake, generates them, and starts the bake again.
+Any edit to a group's brushes builds its meshes again without lightmap UVs, and they're made again once the edit is finished. The baked lighting is then out of date until you bake again.
 
-Any change to a brush mesh removes its lightmap UVs, and the next bake generates them again.
+The meshes are saved in the scene with their lightmap UVs. When the scene opens again, a group whose brushes haven't changed keeps its meshes exactly as they were, so the baked lighting stays valid. **Rebuild** builds them again from the brushes.
+
+After a bake, the Console lists any lit brush mesh that had no lightmap UVs: Unity leaves such meshes out of the bake.
 
 To control lightmap texel density, set **Scale In Lightmap** in the group's **Rendering** section. Use separate Brush Groups for areas that need different densities.
 
@@ -73,6 +75,11 @@ To control lightmap texel density, set **Scale In Lightmap** in the group's **Re
 | **Scale In Lightmap** | The lightmap texel density relative to the rest of the scene. **2** is twice as sharp, **0.5** is half. |
 | **Stitch Seams** | Blends lightmap seams where faces meet. |
 | **Lightmap Parameters** | A Lightmap Parameters asset. When empty, the meshes use the scene's default. |
+| **Hard Angle** | Edges sharper than this angle, in degrees, split the lightmap UVs. |
+| **Angle Error** | How much the lightmap UVs may distort angles, in percent. |
+| **Area Error** | How much the lightmap UVs may distort areas, in percent. |
+| **Pack Margin** | Pixels between UV islands, for a mesh that fills a 1024-pixel lightmap. Increase it if lighting bleeds between faces. |
+| **Generate Lightmap UVs** | Makes the lightmap UVs of the group's lit meshes now. Visible when they're missing. |
 
 #### Probes
 

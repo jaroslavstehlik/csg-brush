@@ -37,7 +37,24 @@ namespace CsgBrush.Editor
         /// <summary>For every triangle of the model's mesh (in submesh order), the brush whose face it lies on.</summary>
         public static Brush[] TriangleBrushes(BrushGroup model) { var t = MeshObject(model, false); return t != null ? TriangleBrushes(t) : null; }
         /// <summary>Per triangle of one mesh child (in submesh order): the brush whose face it belongs to.</summary>
-        public static Brush[] TriangleBrushes(Transform meshObject) => s_TriangleBrush.TryGetValue(meshObject, out var a) ? a : null;
+        public static Brush[] TriangleBrushes(Transform meshObject)
+        {
+            if (meshObject == null) return null;
+            if (s_TriangleBrush.TryGetValue(meshObject, out var a)) return a;
+            // a mesh kept from the last session: its runs were saved with it
+            if (!meshObject.TryGetComponent<BrushMeshSources>(out var saved) || saved.runStarts == null || saved.runBrushes == null) return null;
+            a = new Brush[saved.triangles];
+            for (int r = 0; r < saved.runStarts.Length && r < saved.runBrushes.Length; r++)
+            {
+                int end = r + 1 < saved.runStarts.Length ? saved.runStarts[r + 1] : saved.triangles;
+                for (int t = Mathf.Max(0, saved.runStarts[r]); t < end && t < a.Length; t++) a[t] = saved.runBrushes[r];
+            }
+            s_TriangleBrush[meshObject] = a;
+            return a;
+        }
+
+        /// <summary>A group's render meshes were written (built again): lightmap UVs and anything else derived from them go stale.</summary>
+        public static event System.Action<BrushGroup> MeshesWritten;
 
         /// <summary>Counters and timings of the last model build, for tests and the performance probe.</summary>
         public static int LastCachedSolids, LastBuiltSolids, LastCachedPieces, LastBuiltPieces, LastBrushes, LastTriangles, LastCachedIslands, LastBuiltIslands;
@@ -58,6 +75,7 @@ namespace CsgBrush.Editor
             foreach (var e in s_Solids.Values) e.solid?.Dispose();
             s_Solids.Clear();
             s_LastMeshKey.Clear();
+            s_KeepSaved = false; s_Rebuilt.Clear();
             s_Islands.Clear();
         }
 
@@ -163,6 +181,7 @@ namespace CsgBrush.Editor
                 if (s_Pieces.TryGetValue(b, out var piece)) { if (piece.ownsPiece) piece.piece?.Dispose(); s_Pieces.Remove(b); }
             }
             s_LastMeshKey.Remove(model);
+            s_Rebuilt.Add(model); // asked for: never kept as saved
             s_Islands.Remove(model);
             if (model.TryGetComponent<ConvexColliderSettings>(out var settings)) settings.lastGeometryHash = 0;
             ConvexColliderBuilder.Forget(model.transform);
@@ -450,8 +469,38 @@ namespace CsgBrush.Editor
                 job.meshKey = meshKey;
             }
             bool anyMesh = false; foreach (var t in MeshObjects(model)) if (t.TryGetComponent<MeshFilter>(out var mf) && mf.sharedMesh != null) { anyMesh = true; break; }
-            job.needMesh = !(anyMesh && s_LastMeshKey.TryGetValue(model, out var last) && last == job.meshKey);
+            if (s_LastMeshKey.TryGetValue(model, out var last)) job.needMesh = !(anyMesh && last == job.meshKey);
+            else if (s_KeepSaved && !s_Rebuilt.Contains(model)) job.needMesh = !(anyMesh && model.builtKey == job.meshKey && SavedMeshesComplete(model)); // the first build since the scene was loaded: its saved meshes are kept when the brushes still make them (their lightmap UVs with them)
+            else job.needMesh = true;
             return job;
+        }
+
+        static bool s_KeepSaved; static readonly HashSet<BrushGroup> s_Rebuilt = new HashSet<BrushGroup>();
+
+        /// <summary>
+        /// Forget the caches after a scene was loaded (opened, a domain reload, play mode ended): a group whose saved meshes its
+        /// brushes still make keeps them, untouched, until it is edited. Lightmap UVs and baked lighting stay valid.
+        /// </summary>
+        public static void ClearCachesKeepingSavedMeshes() { ClearCaches(); s_KeepSaved = true; }
+
+        /// <summary>Every render mesh child of the group has its mesh and its triangles' brushes saved: it can be kept as it is.</summary>
+        static bool SavedMeshesComplete(BrushGroup model)
+        {
+            bool any = false;
+            foreach (var t in MeshObjects(model))
+            {
+                if (!t.TryGetComponent<MeshFilter>(out var mf) || mf.sharedMesh == null) return false;
+                if (!t.TryGetComponent<BrushMeshSources>(out var saved) || saved.triangles != TriangleCount(mf.sharedMesh)) return false;
+                any = true;
+            }
+            return any;
+        }
+
+        static int TriangleCount(Mesh mesh)
+        {
+            int n = 0;
+            for (int s = 0; s < mesh.subMeshCount; s++) n += (int)mesh.GetIndexCount(s) / 3;
+            return n;
         }
 
         // ---- step 2: any thread (Manifold and arrays only)
@@ -726,7 +775,9 @@ namespace CsgBrush.Editor
                 foreach (var t in MeshObjects(model)) if (!kept.Contains(t)) { s_TriangleBrush.Remove(t); Object.DestroyImmediate(t.gameObject); } // a layer nothing is on any more
                 s_LastMeshKey[model] = job.meshKey;
                 if (model.builtKey != job.meshKey) model.builtKey = job.meshKey;
+                MeshesWritten?.Invoke(model);
             }
+            else s_LastMeshKey[model] = job.meshKey; // kept as saved
             LastMeshMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
 
             // colliders from the convex parts (deferred by the builder during drags)
@@ -1092,6 +1143,16 @@ namespace CsgBrush.Editor
             return written;
         }
 
+        /// <summary>The triangles' brushes, as runs, onto the mesh object: saved with the scene for a mesh kept next session.</summary>
+        static void SaveSources(Transform t, Brush[] triangleBrush)
+        {
+            if (!t.TryGetComponent<BrushMeshSources>(out var saved)) saved = t.gameObject.AddComponent<BrushMeshSources>();
+            var starts = new List<int>(); var brushes = new List<Brush>();
+            for (int i = 0; i < triangleBrush.Length; i++)
+                if (i == 0 || !ReferenceEquals(triangleBrush[i], triangleBrush[i - 1])) { starts.Add(i); brushes.Add(triangleBrush[i]); }
+            saved.runStarts = starts.ToArray(); saved.runBrushes = brushes.ToArray(); saved.triangles = triangleBrush.Length; saved.lightmapUVSettings = 0; // written anew: no lightmap UVs
+        }
+
         static Transform WriteMesh(BrushGroup model, int layer, int flags, List<Part> parts)
         {
             var t = MeshObject(model, layer, (StaticEditorFlags)flags, true);
@@ -1100,7 +1161,7 @@ namespace CsgBrush.Editor
             var mesh = mf.sharedMesh;
             // a mesh saved in an asset (a built prefab's) is never rewritten from here: the scene gets its own
             if (mesh == null || EditorUtility.IsPersistent(mesh)) { mesh = new Mesh { name = "brush mesh" }; mf.sharedMesh = mesh; }
-            mesh.Clear();
+            mesh.Clear(false); // the vertex layout too: lightmap UVs made for the old mesh must not stay behind as zeros
             s_Vertices.Clear(); s_Normals.Clear(); s_Uvs.Clear();
             var materials = new List<Material>(); var materialIndex = new Dictionary<Material, int>();
             var submeshTris = new List<List<int>>(); var submeshBrush = new List<List<Brush>>();
@@ -1117,7 +1178,7 @@ namespace CsgBrush.Editor
                     submeshBrush[mi].AddRange(part.triangleBrush[m]);
                 }
             }
-            if (s_Vertices.Count == 0) { mr.sharedMaterials = new Material[0]; s_TriangleBrush[t] = new Brush[0]; return t; }
+            if (s_Vertices.Count == 0) { mr.sharedMaterials = new Material[0]; s_TriangleBrush[t] = new Brush[0]; SaveSources(t, s_TriangleBrush[t]); return t; }
             mesh.indexFormat = s_Vertices.Count > 65000 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             mesh.SetVertices(s_Vertices); mesh.SetNormals(s_Normals); mesh.SetUVs(0, s_Uvs);
             mesh.subMeshCount = submeshTris.Count;
@@ -1126,6 +1187,7 @@ namespace CsgBrush.Editor
             mr.sharedMaterials = materials.ToArray();
             var triangleBrush = new List<Brush>(); foreach (var list in submeshBrush) triangleBrush.AddRange(list);
             s_TriangleBrush[t] = triangleBrush.ToArray();
+            SaveSources(t, s_TriangleBrush[t]);
             return t;
         }
     }

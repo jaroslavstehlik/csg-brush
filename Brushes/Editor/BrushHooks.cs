@@ -75,7 +75,7 @@ namespace CsgBrush.Editor
         {
             if (Application.isPlaying) return;
             BrushSync.RemoveLegacySceneObjects();
-            BrushCsg.ClearCaches();
+            BrushCsg.ClearCachesKeepingSavedMeshes();
             var active = Brush.Active;
             for (int i = 0; i < active.Count; i++) if (active[i] != null) BrushSync.Ensure(active[i]);
             BrushCsg.MarkAllDirty();

@@ -22,6 +22,15 @@
   Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,
   windows and attached objects stay on a curved wall and face across it. A + on a curved wall adds a smooth point on
   the curve.
+- Lightmapping that lasts: a group's meshes are saved in the scene with their lightmap UVs and kept as they are when
+  the scene opens again (or after a domain reload or play mode) while its brushes still make them, so a bake stays valid
+  until the brushes are edited; Rebuild builds them again. Lightmap UVs are made as ProBuilder makes them: **Auto
+  lightmap UVs** (Project Settings > Brushes, on by default) makes them once an edit is finished; the Brush Group has
+  the unwrap settings (Hard Angle, Angle Error, Area Error, Pack Margin) and a Generate Lightmap UVs button when they
+  are missing. After a bake, lit brush meshes without lightmap UVs are listed in the Console. A bake no longer stops
+  and starts again to make them.
+- Fixed: an edited brush mesh kept an empty lightmap UV channel (all zeros) from its last unwrap, so it was taken to
+  have lightmap UVs and baked wrongly.
 - Faster edits of large pieces of level: a large island of touching brushes is built in cells of 8 m, and an edit
   builds again only the cells it reaches; a brush's colliders are built again only where its convex parts, or the
   cuts reaching them, changed. Dragging a point of a hollow spline network is 3 to 5 times faster.

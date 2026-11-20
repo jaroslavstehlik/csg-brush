@@ -48,6 +48,10 @@ namespace CsgBrush
         [Tooltip("Lightmap texel density relative to the rest: 2 is twice as sharp, 0.5 half.")] [Min(0f)] public float scaleInLightmap = 1f;
         [Tooltip("Blend lightmap seams where faces meet.")] public bool stitchLightmapSeams = true;
         [Tooltip("Lightmap Parameters asset; empty uses the scene's default.")] public Object lightmapParameters;
+        [Tooltip("Degrees: edges sharper than this split the lightmap UVs.")] [Range(1f, 180f)] public float lightmapHardAngle = 88f;
+        [Tooltip("Percent: how much the lightmap UVs may distort angles.")] [Range(1f, 75f)] public float lightmapAngleError = 8f;
+        [Tooltip("Percent: how much the lightmap UVs may distort areas.")] [Range(1f, 75f)] public float lightmapAreaError = 15f;
+        [Tooltip("Pixels between UV islands, for a mesh filling a 1024 pixel lightmap.")] [Range(1f, 64f)] public float lightmapPackMargin = 4f;
         [Tooltip("How the meshes use light probes when they are not lightmapped.")] public UnityEngine.Rendering.LightProbeUsage lightProbes = UnityEngine.Rendering.LightProbeUsage.BlendProbes;
         [Tooltip("How the meshes use reflection probes.")] public UnityEngine.Rendering.ReflectionProbeUsage reflectionProbes = UnityEngine.Rendering.ReflectionProbeUsage.BlendProbes;
         [Tooltip("The point probes are sampled at; empty uses each mesh's bounds.")] public Transform anchorOverride;

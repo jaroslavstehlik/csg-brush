@@ -44,6 +44,12 @@ namespace CsgBrush.Editor
                 var chosen = EditorGUILayout.ObjectField(new GUIContent("Lightmap Parameters", "Empty uses the scene's default"), lp.objectReferenceValue, typeof(LightmapParameters), false);
                 EditorGUI.showMixedValue = false;
                 if (chosen != lp.objectReferenceValue) lp.objectReferenceValue = chosen;
+                EditorGUILayout.LabelField("Lightmap UVs", EditorStyles.miniBoldLabel);
+                EditorGUILayout.PropertyField(P(nameof(RenderingSettings.lightmapHardAngle)), new GUIContent("Hard Angle", "Degrees: edges sharper than this split the lightmap UVs"));
+                EditorGUILayout.PropertyField(P(nameof(RenderingSettings.lightmapAngleError)), new GUIContent("Angle Error", "Percent: how much the lightmap UVs may distort angles"));
+                EditorGUILayout.PropertyField(P(nameof(RenderingSettings.lightmapAreaError)), new GUIContent("Area Error", "Percent: how much the lightmap UVs may distort areas"));
+                EditorGUILayout.PropertyField(P(nameof(RenderingSettings.lightmapPackMargin)), new GUIContent("Pack Margin", "Pixels between UV islands, for a mesh filling a 1024 pixel lightmap"));
+                LightmapUVStatus();
                 EditorGUI.indentLevel--;
                 }
                 s_ProbesOpen = Section(s_ProbesOpen, "Probes");
@@ -79,6 +85,17 @@ namespace CsgBrush.Editor
         }
 
         /// <summary>A moving group's brushes are not static (static meshes cannot move); a still one's get the default flags back.</summary>
+        /// <summary>Whether the selected groups' lit meshes have lightmap UVs, and a button to make them.</summary>
+        void LightmapUVStatus()
+        {
+            int missing = 0;
+            foreach (var t in targets) if (t is BrushGroup g) missing += BrushLightmapUVs.Missing(g).Count;
+            if (missing == 0) return;
+            EditorGUILayout.HelpBox(BrushSettings.instance.autoLightmapUVs ? "Lightmap UVs are made when the edit is finished." : "Lightmap UVs are missing. Generate them before baking.", MessageType.Info);
+            if (GUILayout.Button("Generate Lightmap UVs"))
+                foreach (var t in targets) if (t is BrushGroup g) BrushLightmapUVs.Generate(g);
+        }
+
         static void SetMoving(BrushGroup group, bool moving)
         {
             var flags = moving ? 0 : BrushSettings.instance.defaultModelStaticFlags;
