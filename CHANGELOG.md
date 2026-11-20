@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-20)
 
 - Splines: **GameObject** > **Brush** > **Spline** sweeps a Circle or Rectangle profile along a branching 3D path,
   solid or hollow, whole or halved (**Half**: a half cylinder or half a box, open on top when hollow: a half pipe or a
