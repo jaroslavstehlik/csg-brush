@@ -379,7 +379,6 @@ namespace CsgBrush.Editor
                 var brush = WallAnchors.Create(Shape, m_Opening);
                 BrushApi.ForceUpdate();
                 Selection.activeGameObject = brush.gameObject;
-                BrushHooks.TakeClick();
                 e.Use();
             }
             var q = m_Opening.rotation;

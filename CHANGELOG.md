@@ -22,6 +22,11 @@
   Brushes, 0.1 m by default; a Floor Plan can override it). Rooms, floors and ceilings follow the curves; doors,
   windows and attached objects stay on a curved wall and face across it. A + on a curved wall adds a smooth point on
   the curve.
+- Fixed: the last click of a box (or any shape) drawn with its end over another brush selected that brush instead of
+  finishing the shape. Clicking the level now selects a brush only where Unity's own selection would take the click:
+  nothing holds the mouse and no tool, gizmo, handle or edit mode under the pointer claims it. Every tool keeps its
+  clicks over brushes as it does elsewhere. A tool's hold on the mouse is let go only once every tool has had the
+  release, not before.
 - Lightmapping that lasts: a group's meshes are saved in the scene with their lightmap UVs and kept as they are when
   the scene opens again (or after a domain reload or play mode) while its brushes still make them, so a bake stays valid
   until the brushes are edited; Rebuild builds them again. Lightmap UVs are made as ProBuilder makes them: **Auto

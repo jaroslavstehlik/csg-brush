@@ -19,12 +19,24 @@ namespace CsgBrush.Editor
     /// </summary>
     public static class EditModeMouse
     {
-        static int s_Held;
+        static int s_Held, s_Takes;
 
         /// <summary>Take the mouse for a control of this package.</summary>
-        public static void Take(int controlId) { GUIUtility.hotControl = controlId; s_Held = controlId; }
+        public static void Take(int controlId) { GUIUtility.hotControl = controlId; s_Held = controlId; s_Takes++; }
 
-        /// <summary>At the end of every Scene view event: let go of a hold no handler ended. True when it did.</summary>
+        /// <summary>
+        /// For a Scene view event: once every handler has had it, tools included (they run after the Scene view's
+        /// callbacks), let go of a hold none of them ended. Done on the next editor update, unless the mouse was taken again.
+        /// </summary>
+        public static void ReleaseStaleAfter(Event e)
+        {
+            var type = e.rawType;
+            if (s_Held == 0 || (type != EventType.MouseUp && type != EventType.MouseMove)) return;
+            int takes = s_Takes;
+            EditorApplication.delayCall += () => { if (s_Takes == takes) ReleaseStale(new Event { type = type }); };
+        }
+
+        /// <summary>Let go of a hold no handler ended, given an event every handler has had. True when it did.</summary>
         public static bool ReleaseStale(Event e)
         {
             if (s_Held == 0) return false;
@@ -187,11 +199,29 @@ namespace CsgBrush.Editor
 
         static Vector2 s_MouseDown; static bool s_MouseDownValid;
 
+        static System.Reflection.FieldInfo s_RectSelectionField, s_RectSelectionId;
+        static bool s_RectSelectionLooked;
+
         /// <summary>
-        /// A tool that acts on a mouse press without holding the mouse (a floor plan's points, a door or window) calls this,
-        /// so the release isn't taken as a click that selects the brush under the pointer.
+        /// Would Unity's own selection take this press? It does when nothing holds the mouse and its control is the nearest:
+        /// a tool, gizmo, handle or edit mode under the pointer registers a nearer one and keeps the press. Clicking the level
+        /// selects a brush only then, so every tool keeps its clicks, as with Unity's selection. Unity's control is read from
+        /// the Scene view; if a future Unity hides it, only whether something holds the mouse is checked.
         /// </summary>
-        public static void TakeClick() => s_MouseDownValid = false;
+        static bool UnitySelectionTakes(SceneView view)
+        {
+            if (GUIUtility.hotControl != 0) return false;
+            if (!s_RectSelectionLooked)
+            {
+                s_RectSelectionLooked = true;
+                const System.Reflection.BindingFlags Any = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public;
+                s_RectSelectionField = typeof(SceneView).GetField("m_RectSelection", Any);
+                s_RectSelectionId = s_RectSelectionField?.FieldType.GetField("k_RectSelectionID", Any);
+            }
+            var rect = s_RectSelectionField?.GetValue(view);
+            if (rect == null || s_RectSelectionId == null) return true;
+            return HandleUtility.nearestControl == (int)s_RectSelectionId.GetValue(rect);
+        }
 
         /// <summary>
         /// Outside edit mode: clicking the level selects the brush seen there. Unity's own picking finds what is under the
@@ -202,7 +232,7 @@ namespace CsgBrush.Editor
         static void OnSceneGUI(SceneView view)
         {
             var e = Event.current;
-            EditModeMouse.ReleaseStale(e); // after every edit mode and tool had the event
+            EditModeMouse.ReleaseStaleAfter(e); // once every edit mode and tool has had the event
             if (BrushEditContext.IsActive || Application.isPlaying) return;
             if (e.type == EventType.Repaint)
             {
@@ -213,7 +243,7 @@ namespace CsgBrush.Editor
                 return;
             }
             if (e.alt || Tools.current == Tool.View || Tools.viewToolActive || FloorPlanEditContext.IsActive || WallAnchorEditor.Picking) return; // plan edit mode and wall picking pick their own
-            if (e.type == EventType.MouseDown && e.button == 0) { s_MouseDown = e.mousePosition; s_MouseDownValid = GUIUtility.hotControl == 0; return; }
+            if (e.type == EventType.MouseDown && e.button == 0) { s_MouseDown = e.mousePosition; s_MouseDownValid = UnitySelectionTakes(view); return; }
             if (e.type != EventType.MouseUp || e.button != 0 || !s_MouseDownValid) return;
             s_MouseDownValid = false;
             if (GUIUtility.hotControl != 0 || (e.mousePosition - s_MouseDown).sqrMagnitude > 16f) return; // a drag or a gizmo
