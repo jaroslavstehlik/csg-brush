@@ -55,7 +55,7 @@ To edit or render a Brush Group's geometry in Blender, click **Save to Blender�
 1. Select the GameObject with the **Brush Group** component.
 2. Click **Save to Blender…**, choose where to save the file, and click **Save**.
 
-The group remembers the file. The next time you click **Save to Blender…**, you can overwrite it or save as a new file.
+The group remembers the file. The next time you click **Save to Blender…**, you can overwrite it or save as a new file. A file saved inside the project's **Assets** folder is imported right away, and again each time you overwrite it.
 
 The file holds the group's meshes as they render in Unity:
 

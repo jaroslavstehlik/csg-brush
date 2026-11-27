@@ -179,6 +179,8 @@ namespace CsgBrush.Editor
             Undo.RecordObject(group, "Save to Blender");
             group.blenderFile = ProjectRelative(path);
             EditorUtility.SetDirty(group);
+            // saved into the project: Unity imports it now (it reads .blend files through Blender too), and again when overwritten
+            if (group.blenderFile.StartsWith("Assets/")) AssetDatabase.ImportAsset(group.blenderFile, ImportAssetOptions.ForceUpdate);
             Debug.Log("CSG Brush: saved " + group.name + " to " + path + ".");
         }
 
