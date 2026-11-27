@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-11-27)
 
 - Floor Plan and Spline Inspector: Edit and Draw are one control, only one on at a time. The Brushes overlay's Edit
   plan button is gone (the Inspector has it).
