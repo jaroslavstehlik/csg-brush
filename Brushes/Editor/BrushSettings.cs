@@ -65,6 +65,8 @@ namespace CsgBrush.Editor
         public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.ReflectionProbeStatic;
         [Tooltip("Make lightmap UVs for lit brush meshes when an edit is finished.")]
         public bool autoLightmapUVs = true;
+        [Tooltip("The Blender program Save to Blender uses. Empty: found where Blender is usually installed.")]
+        public string blenderPath = "";
         [Tooltip("Material of every brush face without one of its own. Empty: a generated grid texture (a ruler in metres) is created under Assets/CSG Brush on first use.")]
         public Material defaultMaterial;
         [Header("Editor")]
@@ -213,9 +215,17 @@ namespace CsgBrush.Editor
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
                     s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("New brush static flags", "The static flags new brushes and floor plans start with"), s.defaultModelStaticFlags);
                     s.autoLightmapUVs = EditorGUILayout.Toggle(new GUIContent("Auto lightmap UVs", "Make lightmap UVs for lit brush meshes when an edit is finished"), s.autoLightmapUVs);
+                    EditorGUILayout.BeginHorizontal();
+                    s.blenderPath = EditorGUILayout.TextField(new GUIContent("Blender", "The Blender program Save to Blender uses. Empty: found where Blender is usually installed"), s.blenderPath);
+                    if (GUILayout.Button(new GUIContent("Browse", "Choose the Blender program"), GUILayout.Width(60)))
+                    {
+                        var picked = EditorUtility.OpenFilePanel("Choose Blender", "", Application.platform == RuntimePlatform.WindowsEditor ? "exe" : "");
+                        if (!string.IsNullOrEmpty(picked)) { s.blenderPath = picked; GUI.changed = true; }
+                    }
+                    EditorGUILayout.EndHorizontal();
                     EditorGUILayout.HelpBox("1 metre = " + s.unitsPerMeter + " " + s.unitLabel + ". Geometry is stored in metres; changing the preset only changes how sizes are shown and snapped.", MessageType.None);
                     if (EditorGUI.EndChangeCheck())
-                        s.NotifyChanged();
+                    { BlenderExport.Forget(); s.NotifyChanged(); }
                 }
             };
             return provider;

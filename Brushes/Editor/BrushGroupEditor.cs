@@ -136,7 +136,58 @@ namespace CsgBrush.Editor
             using (new EditorGUI.DisabledScope(unsaved))
                 if (GUILayout.Button(new GUIContent("Rebuild", unsaved ? "Save the prefab first: a prefab is rebuilt from its saved file" : "Build the mesh and colliders again from scratch (into the prefab, for a group in a prefab)")))
                     foreach (var t in targets) BrushCsg.Rebuild((BrushGroup)t);
+            if (targets.Length == 1 && GUILayout.Button(new GUIContent("Save to Blender…", "Save the group's meshes as a Blender file, using the Blender installed on this computer")))
+                SaveToBlender((BrushGroup)target);
             DrawRendering();
+        }
+
+        /// <summary>
+        /// Check that Blender runs, then save: to the file the group was saved to before (asking first: overwrite it, or
+        /// save as a new file), or to a file chosen in a Save dialog. The group remembers the file.
+        /// </summary>
+        static void SaveToBlender(BrushGroup group)
+        {
+            if (BlenderExport.FindBlender(out _, out var missing) == null)
+            {
+                int choice = EditorUtility.DisplayDialogComplex("Blender not found", missing, "Download Blender", "Cancel", "Locate Blender…");
+                if (choice == 0) Application.OpenURL("https://www.blender.org/download/");
+                else if (choice == 2)
+                {
+                    var picked = EditorUtility.OpenFilePanel("Choose Blender", "", Application.platform == RuntimePlatform.WindowsEditor ? "exe" : "");
+                    if (!string.IsNullOrEmpty(picked)) { BrushSettings.instance.blenderPath = picked; BrushSettings.instance.NotifyChanged(); BlenderExport.Forget(); SaveToBlender(group); }
+                }
+                return;
+            }
+            string path = null;
+            string remembered = string.IsNullOrEmpty(group.blenderFile) ? null : System.IO.Path.GetFullPath(group.blenderFile);
+            if (remembered != null && System.IO.File.Exists(remembered))
+            {
+                int choice = EditorUtility.DisplayDialogComplex("Save to Blender", "Overwrite " + remembered + "?", "Overwrite", "Cancel", "Save As…");
+                if (choice == 1) return;
+                if (choice == 0) path = remembered;
+            }
+            if (path == null)
+            {
+                string folder = remembered != null ? System.IO.Path.GetDirectoryName(remembered) : "";
+                path = EditorUtility.SaveFilePanel("Save Brush Group to Blender", folder, group.name, "blend");
+                if (string.IsNullOrEmpty(path)) return;
+            }
+            string error;
+            try { EditorUtility.DisplayProgressBar("Save to Blender", "Blender is building the file…", 0.5f); error = BlenderExport.Save(group, path); }
+            finally { EditorUtility.ClearProgressBar(); }
+            if (error != null) { EditorUtility.DisplayDialog("Save to Blender", error, "OK"); return; }
+            Undo.RecordObject(group, "Save to Blender");
+            group.blenderFile = ProjectRelative(path);
+            EditorUtility.SetDirty(group);
+            Debug.Log("CSG Brush: saved " + group.name + " to " + path + ".");
+        }
+
+        /// <summary>A path relative to the project folder when inside it (so the project can move), else as it is.</summary>
+        static string ProjectRelative(string path)
+        {
+            var full = System.IO.Path.GetFullPath(path).Replace('\\', '/');
+            var project = System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..")).Replace('\\', '/').TrimEnd('/') + "/";
+            return full.StartsWith(project) ? full.Substring(project.Length) : full;
         }
     }
 }

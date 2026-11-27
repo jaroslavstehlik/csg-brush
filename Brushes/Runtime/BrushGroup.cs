@@ -33,6 +33,9 @@ namespace CsgBrush
         [Tooltip("Built once and moved as a whole at runtime (a lift, a drawbridge): its brushes are not static.")]
         public bool moving;
 
+        /// <summary>The Blender file the group was last saved to (Save to Blender), relative to the project when inside it.</summary>
+        [HideInInspector] public string blenderFile = "";
+
         /// <summary>What every render mesh of the group gets on its renderer (the materials come from the brushes).</summary>
         public RenderingSettings rendering = new RenderingSettings();
     }

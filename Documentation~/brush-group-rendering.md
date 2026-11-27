@@ -48,6 +48,24 @@ After a bake, the Console lists any lit brush mesh that had no lightmap UVs: Uni
 
 To control lightmap texel density, set **Scale In Lightmap** in the group's **Rendering** section. Use separate Brush Groups for areas that need different densities.
 
+## Save to Blender
+
+To edit or render a Brush Group's geometry in Blender, click **Save to Blender…** in the group's Inspector. CSG Brush uses the Blender installed on your computer to write a `.blend` file, so you need Blender 3.6 or newer, free from [blender.org](https://www.blender.org/download/).
+
+1. Select the GameObject with the **Brush Group** component.
+2. Click **Save to Blender…**, choose where to save the file, and click **Save**.
+
+The group remembers the file. The next time you click **Save to Blender…**, you can overwrite it or save as a new file.
+
+The file holds the group's meshes as they render in Unity:
+
+* **Place and size:** in metres, with the group's position as the origin. Blender's Z axis is Unity's Y axis, so the level stands upright.
+* **Surfaces:** the same faces and normals.
+* **UVs:** a `UVMap` UV map for textures, and a `Lightmap` UV map when the meshes have lightmap UVs.
+* **Materials:** one per Unity material, with its name, color, and main texture.
+
+If CSG Brush can't find Blender, it offers to download it or to locate it. To use a particular Blender, set **Blender** in **Project Settings** > **Brushes**. When it's empty, CSG Brush looks where Blender is usually installed.
+
 ## Brush Group component reference
 
 ![The Brush Group component in the Inspector, with the Rendering section expanded.](images/brush-group-inspector.png)
@@ -56,6 +74,7 @@ To control lightmap texel density, set **Scale In Lightmap** in the group's **Re
 | :--- | :--- |
 | **Brushes** | The number of brushes the group builds. |
 | **Rebuild** | Builds the group's meshes and colliders again from scratch. For a group in a prefab, this rebuilds the prefab. |
+| **Save to Blender…** | Saves the group's meshes as a Blender file. See [Save to Blender](#save-to-blender). |
 
 ### Rendering
 

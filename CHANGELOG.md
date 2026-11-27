@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Save to Blender**: the Brush Group Inspector saves the group's meshes as a `.blend` file, using the Blender
+  installed on the computer (3.6 or newer; found where it is usually installed, or set in Project Settings > Brushes).
+  In metres with the group's position as the origin, Unity's Y up as Blender's Z up, the same faces and normals, both
+  UV sets (`UVMap`, `Lightmap`) and the materials (name, color, main texture). The group remembers the file and asks
+  whether to overwrite it or save a new one. Without Blender it offers to download or locate it. No package needed.
+
 ## 0.6.0 (2026-11-20)
 
 - Splines: **GameObject** > **Brush** > **Spline** sweeps a Circle or Rectangle profile along a branching 3D path,
