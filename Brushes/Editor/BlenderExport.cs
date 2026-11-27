@@ -163,9 +163,23 @@ namespace CsgBrush.Editor
 
         // ------------------------------------------------------------------ saving
 
-        [Serializable] class Data { public List<Obj> objects = new List<Obj>(); public List<Mat> materials = new List<Mat>(); }
+        [Serializable] class Data { public List<Obj> objects = new List<Obj>(); public List<Mat> materials = new List<Mat>(); public bool pack; }
         [Serializable] class Obj { public string name; public float[] vertices, normals, uv0, uv1; public int[] triangles, faceMaterial, materials; }
-        [Serializable] class Mat { public string name, texture; public float[] color; }
+        /// <summary>
+        /// A material as Blender's Principled BSDF takes it: colours linear (Unity stores them as sRGB), textures as files,
+        /// the base map's tiling and offset, smoothness as Unity has it (Blender's roughness is one minus it).
+        /// </summary>
+        [Serializable]
+        class Mat
+        {
+            public string name, baseMap = "", metallicMap = "", normalMap = "", emissionMap = "";
+            public float[] color, emission, tiling = { 1f, 1f }, offset = { 0f, 0f };
+            public float metallic, smoothness = 0.5f, normalScale = 1f, cutoff = 0.5f;
+            /// <summary>Where smoothness is read in a texture: "metallic" (the metallic map's alpha), "albedo" (the base map's alpha), or "" (the value).</summary>
+            public string smoothnessFrom = "";
+            /// <summary>"opaque", "clip" or "blend".</summary>
+            public string alpha = "opaque";
+        }
 
         /// <summary>
         /// Save the group's meshes (built first if they are out of date) to a Blender file at <paramref name="path"/>,
@@ -177,6 +191,7 @@ namespace CsgBrush.Editor
             if (blender == null) return error;
             BrushApi.ForceUpdate();
             var data = Collect(group);
+            data.pack = BrushSettings.instance.blenderPackTextures;
             if (data.objects.Count == 0) return "The Brush Group has no mesh to save: it builds no brushes.";
             string folder = Path.GetDirectoryName(Path.GetFullPath(path));
             if (!Directory.Exists(folder)) return "The folder " + folder + " does not exist.";
@@ -244,13 +259,61 @@ namespace CsgBrush.Editor
             return f;
         }
 
+        /// <summary>
+        /// The material's surface, read by the property names of Unity's standard shaders (URP Lit and the built-in Standard;
+        /// other shaders that use the same names too): base colour and map with its tiling, metallic and smoothness, normal
+        /// map, emission, and how it uses alpha. A shader without them gives its name and main texture only.
+        /// </summary>
         static Mat Describe(Material material)
         {
-            var c = material.HasProperty("_BaseColor") ? material.GetColor("_BaseColor") : material.HasProperty("_Color") ? material.color : Color.white;
-            string texture = "";
-            var tex = material.mainTexture;
-            if (tex != null) { var asset = AssetDatabase.GetAssetPath(tex); if (!string.IsNullOrEmpty(asset)) texture = Path.GetFullPath(asset); }
-            return new Mat { name = material.name, texture = texture, color = new[] { c.r, c.g, c.b, c.a } };
+            bool urp = material.HasProperty("_BaseColor");
+            var c = (urp ? material.GetColor("_BaseColor") : material.HasProperty("_Color") ? material.color : Color.white);
+            var m = new Mat { name = material.name };
+            var linear = c.linear;
+            m.color = new[] { linear.r, linear.g, linear.b, c.a };
+            string mapName = urp && material.HasProperty("_BaseMap") ? "_BaseMap" : material.HasProperty("_MainTex") ? "_MainTex" : null;
+            var baseTex = mapName != null ? material.GetTexture(mapName) : material.mainTexture;
+            m.baseMap = FileOf(baseTex);
+            if (mapName != null) { var st = material.GetTextureScale(mapName); var of = material.GetTextureOffset(mapName); m.tiling = new[] { st.x, st.y }; m.offset = new[] { of.x, of.y }; }
+            if (material.HasProperty("_Metallic")) m.metallic = material.GetFloat("_Metallic");
+            string smooth = urp ? "_Smoothness" : "_Glossiness";
+            if (material.HasProperty(smooth)) m.smoothness = material.GetFloat(smooth);
+            if (material.HasProperty("_MetallicGlossMap")) m.metallicMap = FileOf(material.GetTexture("_MetallicGlossMap"));
+            bool fromAlbedo = material.HasProperty("_SmoothnessTextureChannel") && material.GetFloat("_SmoothnessTextureChannel") > 0.5f;
+            if (fromAlbedo && m.baseMap.Length > 0) m.smoothnessFrom = "albedo";
+            else if (m.metallicMap.Length > 0)
+            {
+                m.smoothnessFrom = "metallic";
+                if (!urp && material.HasProperty("_GlossMapScale")) m.smoothness = material.GetFloat("_GlossMapScale"); // Standard scales the map's alpha by it
+            }
+            if (material.HasProperty("_BumpMap")) m.normalMap = FileOf(material.GetTexture("_BumpMap"));
+            if (material.HasProperty("_BumpScale")) m.normalScale = material.GetFloat("_BumpScale");
+            if (material.HasProperty("_EmissionColor") && (material.IsKeywordEnabled("_EMISSION") || !material.HasProperty("_EmissionMap")))
+            {
+                var e = material.GetColor("_EmissionColor");
+                if (e.maxColorComponent > 0f) { var el = e.linear; m.emission = new[] { el.r, el.g, el.b }; }
+                if (material.HasProperty("_EmissionMap")) m.emissionMap = FileOf(material.GetTexture("_EmissionMap"));
+            }
+            if (material.HasProperty("_Cutoff")) m.cutoff = material.GetFloat("_Cutoff");
+            if (urp)
+            {
+                if (material.HasProperty("_Surface") && material.GetFloat("_Surface") > 0.5f) m.alpha = "blend";
+                else if (material.HasProperty("_AlphaClip") && material.GetFloat("_AlphaClip") > 0.5f) m.alpha = "clip";
+            }
+            else if (material.HasProperty("_Mode"))
+            {
+                float mode = material.GetFloat("_Mode"); // Standard: opaque, cutout, fade, transparent
+                m.alpha = mode > 1.5f ? "blend" : mode > 0.5f ? "clip" : "opaque";
+            }
+            return m;
+        }
+
+        /// <summary>The texture's file on disk, or "" when it has none (a texture made in code).</summary>
+        static string FileOf(Texture texture)
+        {
+            if (texture == null) return "";
+            var asset = AssetDatabase.GetAssetPath(texture);
+            return string.IsNullOrEmpty(asset) || !File.Exists(asset) ? "" : Path.GetFullPath(asset);
         }
 
         /// <summary>Run by Blender: builds the meshes from the data file and saves the .blend. Works on Blender 3.6 to 4.x.</summary>
@@ -263,22 +326,100 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
 scene.unit_settings.system = 'METRIC'
 scene.unit_settings.scale_length = 1.0
+def inp(node, *names):
+    for n in names:
+        if n in node.inputs:
+            return node.inputs[n]
+    return None
 mats = []
 for m in d['materials']:
     mat = bpy.data.materials.new(m['name'])
     c = m['color']
     mat.diffuse_color = (c[0], c[1], c[2], c[3])
     mat.use_nodes = True
-    bsdf = mat.node_tree.nodes.get('Principled BSDF')
-    if bsdf:
-        bsdf.inputs['Base Color'].default_value = (c[0], c[1], c[2], c[3])
-        if m['texture']:
-            try:
-                tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
-                tex.image = bpy.data.images.load(m['texture'], check_existing=True)
-                mat.node_tree.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
-            except Exception as e:
-                print('texture not loaded:', m['texture'], e)
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    bsdf = nodes.get('Principled BSDF')
+    if bsdf is None:
+        mats.append(mat)
+        continue
+    uv = nodes.new('ShaderNodeUVMap')
+    uv.uv_map = 'UVMap'
+    mapping = nodes.new('ShaderNodeMapping')
+    mapping.inputs['Scale'].default_value = (m['tiling'][0], m['tiling'][1], 1.0)  # Unity: uv * tiling + offset
+    mapping.inputs['Location'].default_value = (m['offset'][0], m['offset'][1], 0.0)
+    links.new(uv.outputs['UV'], mapping.inputs['Vector'])
+    def image(path, color=True):
+        try:
+            node = nodes.new('ShaderNodeTexImage')
+            node.image = bpy.data.images.load(path, check_existing=True)
+            if not color:
+                node.image.colorspace_settings.name = 'Non-Color'
+            links.new(mapping.outputs['Vector'], node.inputs['Vector'])
+            return node
+        except Exception as e:
+            print('texture not loaded:', path, e)
+            return None
+    def math(op, a, b):
+        node = nodes.new('ShaderNodeMath')
+        node.operation = op
+        for i, v in enumerate((a, b)):
+            if isinstance(v, float):
+                node.inputs[i].default_value = v
+            else:
+                links.new(v, node.inputs[i])
+        return node.outputs[0]
+    base_color = inp(bsdf, 'Base Color')
+    base_color.default_value = (c[0], c[1], c[2], 1.0)
+    base = image(m['baseMap']) if m['baseMap'] else None
+    if base:
+        tint = nodes.new('ShaderNodeVectorMath')  # the map times the colour, as in Unity
+        tint.operation = 'MULTIPLY'
+        links.new(base.outputs['Color'], tint.inputs[0])
+        tint.inputs[1].default_value = (c[0], c[1], c[2])
+        links.new(tint.outputs['Vector'], base_color)
+    metallic, roughness = inp(bsdf, 'Metallic'), inp(bsdf, 'Roughness')
+    metallic.default_value = m['metallic']
+    roughness.default_value = 1.0 - m['smoothness']
+    mmap = image(m['metallicMap'], color=False) if m['metallicMap'] else None
+    if mmap:
+        split = nodes.new('ShaderNodeSeparateColor')
+        links.new(mmap.outputs['Color'], split.inputs[0])
+        links.new(split.outputs[0], metallic)  # Unity: metallic in red, smoothness in alpha
+    smooth_alpha = mmap.outputs['Alpha'] if mmap and m['smoothnessFrom'] == 'metallic' else base.outputs['Alpha'] if base and m['smoothnessFrom'] == 'albedo' else None
+    if smooth_alpha:
+        links.new(math('SUBTRACT', 1.0, math('MULTIPLY', smooth_alpha, m['smoothness'])), roughness)
+    nmap = image(m['normalMap'], color=False) if m['normalMap'] else None
+    if nmap:
+        normal = nodes.new('ShaderNodeNormalMap')
+        normal.uv_map = 'UVMap'
+        normal.inputs['Strength'].default_value = m['normalScale']
+        links.new(nmap.outputs['Color'], normal.inputs['Color'])
+        links.new(normal.outputs['Normal'], inp(bsdf, 'Normal'))
+    e = m['emission'] if m['emission'] else [0.0, 0.0, 0.0]  # none: black, whatever this Blender's default is
+    emission = inp(bsdf, 'Emission Color', 'Emission')
+    emission.default_value = (e[0], e[1], e[2], 1.0)
+    if m['emission']:
+        strength = inp(bsdf, 'Emission Strength')
+        if strength:
+            strength.default_value = 1.0
+        emap = image(m['emissionMap']) if m['emissionMap'] else None
+        if emap:
+            glow = nodes.new('ShaderNodeVectorMath')
+            glow.operation = 'MULTIPLY'
+            links.new(emap.outputs['Color'], glow.inputs[0])
+            glow.inputs[1].default_value = (e[0], e[1], e[2])
+            links.new(glow.outputs['Vector'], emission)
+    if m['alpha'] != 'opaque':
+        alpha = inp(bsdf, 'Alpha')
+        alpha.default_value = c[3]
+        if base:
+            links.new(math('MULTIPLY', base.outputs['Alpha'], c[3]), alpha)
+        try:
+            mat.blend_method = 'BLEND' if m['alpha'] == 'blend' else 'CLIP'
+            if m['alpha'] == 'clip':
+                mat.alpha_threshold = m['cutoff']
+        except Exception:
+            pass
     mats.append(mat)
 for o in d['objects']:
     v, t = o['vertices'], o['triangles']
@@ -301,6 +442,8 @@ for o in d['objects']:
     me.update()
     ob = bpy.data.objects.new(o['name'], me)
     scene.collection.objects.link(ob)
+if d['pack']:
+    bpy.ops.file.pack_all()
 bpy.context.preferences.filepaths.save_version = 0
 bpy.ops.wm.save_as_mainfile(filepath=out_path)
 print('" + OkMarker + @"')

@@ -67,6 +67,8 @@ namespace CsgBrush.Editor
         public bool autoLightmapUVs = true;
         [Tooltip("The Blender program Save to Blender uses. Empty: found where Blender is usually installed.")]
         public string blenderPath = "";
+        [Tooltip("Put the textures inside the Blender file, so it shows them on any computer. The file gets larger.")]
+        public bool blenderPackTextures = false;
         [Tooltip("Material of every brush face without one of its own. Empty: a generated grid texture (a ruler in metres) is created under Assets/CSG Brush on first use.")]
         public Material defaultMaterial;
         [Header("Editor")]
@@ -212,6 +214,7 @@ namespace CsgBrush.Editor
                     s.defaultMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Default material", "Every brush face without a material of its own. Empty: the generated grid texture, a ruler in metres, created under Assets/CSG Brush on first use."), s.defaultMaterial, typeof(Material), false);
                     if (GUILayout.Button(new GUIContent("Grid", "Use the generated grid material (drawn again from the grid sizes)"), GUILayout.Width(44))) { s.defaultMaterial = null; BrushGridMaterial.Regenerate(); BrushGridMaterial.GetOrCreate(); BrushApi.ForceUpdate(); }
                     EditorGUILayout.EndHorizontal();
+                    s.blenderPackTextures = EditorGUILayout.Toggle(new GUIContent("Pack textures in Blender files", "Put the textures inside the Blender file, so it shows them on any computer. The file gets larger"), s.blenderPackTextures);
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
                     s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("New brush static flags", "The static flags new brushes and floor plans start with"), s.defaultModelStaticFlags);
                     s.autoLightmapUVs = EditorGUILayout.Toggle(new GUIContent("Auto lightmap UVs", "Make lightmap UVs for lit brush meshes when an edit is finished"), s.autoLightmapUVs);

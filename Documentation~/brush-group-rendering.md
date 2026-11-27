@@ -62,7 +62,16 @@ The file holds the group's meshes as they render in Unity:
 * **Place and size:** in metres, with the group's position as the origin. Blender's Z axis is Unity's Y axis, so the level stands upright.
 * **Surfaces:** the same faces and normals.
 * **UVs:** a `UVMap` UV map for textures, and a `Lightmap` UV map when the meshes have lightmap UVs.
-* **Materials:** one per Unity material, with its name, color, and main texture.
+* **Materials:** one per Unity material, as a Principled BSDF material with the same name. For materials that use Unity's standard shaders (URP **Lit**, or **Standard** in the Built-in Render Pipeline), it has:
+    * The base color and base map, with the base map's tiling and offset.
+    * Metallic and smoothness, from their values or the metallic map. Blender's roughness is one minus Unity's smoothness.
+    * The normal map and its strength.
+    * The emission color and emission map.
+    * Transparency or alpha clipping.
+
+  Other shaders give the material's name, and its color and main texture where they use the standard names. Detail maps and occlusion maps aren't saved.
+
+Textures stay in your project, and the Blender file refers to them, so the file shows them on any computer that has the project. To put the textures inside the Blender file instead, for example to send it to someone, enable **Pack textures in Blender files** in **Project Settings** > **Brushes**. The file gets larger.
 
 If CSG Brush can't find Blender, it offers to download it or to locate it. To use a particular Blender, set **Blender** in **Project Settings** > **Brushes**. When it's empty, CSG Brush looks where Blender is usually installed.
 
