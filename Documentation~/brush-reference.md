@@ -95,7 +95,7 @@ With **Shape** or **Pivot**, rotating a brush never moves it: it turns about its
 
 Set **Grid snap** in the Brush Inspector. New brushes get the setting in the **Brushes** overlay while a Create tool is active.
 
-Press **[** and **]** to change the grid step. Doors, windows, and brushes on a [wall anchor](wall-anchor.md) don't snap, because their wall places them.
+Press **[** and **]** to change the grid step. The grid step and **Snap to grid** you set in the **Brushes** overlay last until you close Unity, and aren't saved in the project, so changing them doesn't affect anyone else. The project opens with **Default grid** and **Snap brushes to grid** from **Project Settings** > **Brushes**. Doors, windows, and brushes on a [wall anchor](wall-anchor.md) don't snap, because their wall places them.
 
 Parent GameObjects may only organise brushes. If a brush's parent is rotated or scaled, the **Brushes** overlay lists it with a **Reset** button.
 

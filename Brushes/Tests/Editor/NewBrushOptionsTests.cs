@@ -38,5 +38,27 @@ namespace CsgBrush.Tests
             Tools.current = Tool.Move;
             Assert.AreEqual(defaultHollow, s.Working.newHollow, "the Create tools left: back to the defaults");
         }
+
+        [Test]
+        public void GridChangesInTheOverlayLastTheSessionAndLeaveTheProjectDefaults()
+        {
+            var s = BrushSettings.instance;
+            int grid = s.gridIndex; bool snap = s.snapToGrid;
+            int defaultGrid = s.defaultGridIndex; bool defaultSnap = s.defaultSnapToGrid;
+            try
+            {
+                int other = grid > 0 ? grid - 1 : grid + 1;
+                s.SetGridIndex(other); // the overlay's grid size, saved as the overlay does
+                s.snapToGrid = !snap; s.NotifyChanged();
+                Assert.AreEqual(other, s.gridIndex, "in use now");
+                Assert.AreEqual(!snap, s.snapToGrid);
+                Assert.AreEqual(defaultGrid, s.defaultGridIndex, "the project's default grid is left as it is");
+                Assert.AreEqual(defaultSnap, s.defaultSnapToGrid);
+                var saved = System.IO.File.ReadAllText("ProjectSettings/BrushSettings.asset");
+                StringAssert.Contains("defaultGridIndex: " + defaultGrid, saved, "and so is the settings file");
+                StringAssert.Contains("defaultSnapToGrid: " + (defaultSnap ? 1 : 0), saved);
+            }
+            finally { s.SetGridIndex(grid); s.snapToGrid = snap; }
+        }
     }
 }

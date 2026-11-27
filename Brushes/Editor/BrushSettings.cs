@@ -32,7 +32,8 @@ namespace CsgBrush.Editor
         public float unitsPerMeter = 1f;
         public string unitLabel = "m";
         public float[] gridSizes = { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f };
-        public int gridIndex = 2;
+        /// <summary>The grid size a project opens with (an index into <see cref="gridSizes"/>); the overlay changes <see cref="gridIndex"/> for the session.</summary>
+        [UnityEngine.Serialization.FormerlySerializedAs("gridIndex")] public int defaultGridIndex = 2;
         public Vector3 defaultBoxSize = new Vector3(2f, 2f, 2f);
         public float rotationSnapDegrees = 15f;
         [Header("New brushes (the Create tools)")]
@@ -73,8 +74,8 @@ namespace CsgBrush.Editor
         public bool shapeHandles = true;
         [Tooltip("What a shape edit does to the other selected brushes.")]
         public ShapeEditSelection shapeEditSelection = ShapeEditSelection.Single;
-        [Tooltip("Keep every brush on the grid: position, size and rotation are snapped in world space after each edit, whatever the parent does.")]
-        public bool snapToGrid = true;
+        [Tooltip("Whether the project opens with grid snapping on: position, size and rotation are snapped in world space after each edit. The Brushes overlay changes it for the session only.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("snapToGrid")] public bool defaultSnapToGrid = true;
         [Tooltip("Metres: how far the straight pieces of a curved wall or spline may stray from the true curve. Larger is rougher and lighter.")]
         public float curveTolerance = 0.1f;
 
@@ -107,6 +108,25 @@ namespace CsgBrush.Editor
         /// <summary>The step height of the next stairs, in metres.</summary>
         public float NewStepHeightMeters => Mathf.Max(BrushPolyhedron.MinStepHeight, Working.newStepHeight > 0f ? ToMeters(Working.newStepHeight) : DefaultStepHeightMeters);
 
+        // what the tools use now: the project's defaults until changed in the overlay, kept for the editor session (script
+        // reloads and play mode included, not a restart); never written into the project settings
+        const string GridKey = "CsgBrush.gridIndex", SnapKey = "CsgBrush.snapToGrid";
+        [NonSerialized] int m_GridIndex = -1; [NonSerialized] int m_Snap = -1;
+
+        /// <summary>The grid size in use (an index into <see cref="gridSizes"/>): the project's default, or what the overlay set this session.</summary>
+        public int gridIndex
+        {
+            get { if (m_GridIndex < 0) m_GridIndex = SessionState.GetInt(GridKey, defaultGridIndex); return m_GridIndex; }
+            set { m_GridIndex = value; SessionState.SetInt(GridKey, value); }
+        }
+
+        /// <summary>Whether brushes snap to the grid now: the project's default, or what the overlay set this session.</summary>
+        public bool snapToGrid
+        {
+            get { if (m_Snap < 0) m_Snap = SessionState.GetBool(SnapKey, defaultSnapToGrid) ? 1 : 0; return m_Snap == 1; }
+            set { m_Snap = value ? 1 : 0; SessionState.SetBool(SnapKey, value); }
+        }
+
         public float GridUnits => gridSizes != null && gridSizes.Length > 0 ? gridSizes[Mathf.Clamp(gridIndex, 0, gridSizes.Length - 1)] : 1f;
         public float GridMeters => ToMeters(GridUnits);
 
@@ -124,22 +144,22 @@ namespace CsgBrush.Editor
             {
                 case Preset.Quake:
                     unitsPerMeter = 32f; unitLabel = "u";
-                    gridSizes = new float[] { 1, 2, 4, 8, 16, 32, 64, 128, 256 }; gridIndex = 4;
+                    gridSizes = new float[] { 1, 2, 4, 8, 16, 32, 64, 128, 256 }; defaultGridIndex = gridIndex = 4;
                     defaultBoxSize = new Vector3(64f, 64f, 64f); rotationSnapDegrees = 15f;
                     break;
                 case Preset.Source:
                     unitsPerMeter = 39.37f; unitLabel = "u";
-                    gridSizes = new float[] { 1, 2, 4, 8, 16, 32, 64, 128, 256 }; gridIndex = 4;
+                    gridSizes = new float[] { 1, 2, 4, 8, 16, 32, 64, 128, 256 }; defaultGridIndex = gridIndex = 4;
                     defaultBoxSize = new Vector3(64f, 64f, 64f); rotationSnapDegrees = 15f;
                     break;
                 case Preset.Unreal:
                     unitsPerMeter = 100f; unitLabel = "cm";
-                    gridSizes = new float[] { 1, 5, 10, 25, 50, 100, 200, 500 }; gridIndex = 3;
+                    gridSizes = new float[] { 1, 5, 10, 25, 50, 100, 200, 500 }; defaultGridIndex = gridIndex = 3;
                     defaultBoxSize = new Vector3(200f, 200f, 200f); rotationSnapDegrees = 15f;
                     break;
                 case Preset.Unity:
                     unitsPerMeter = 1f; unitLabel = "m";
-                    gridSizes = new float[] { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f }; gridIndex = 2;
+                    gridSizes = new float[] { 0.125f, 0.25f, 0.5f, 1f, 2f, 4f }; defaultGridIndex = gridIndex = 2;
                     defaultBoxSize = new Vector3(2f, 2f, 2f); rotationSnapDegrees = 15f;
                     break;
                 case Preset.Custom:
@@ -200,8 +220,10 @@ namespace CsgBrush.Editor
                         s.rotationSnapDegrees = EditorGUILayout.FloatField("Rotation snap (degrees)", s.rotationSnapDegrees);
                     }
                     var names = Array.ConvertAll(s.gridSizes, g => g.ToString("0.###") + " " + s.unitLabel);
-                    s.gridIndex = EditorGUILayout.Popup("Default grid", Mathf.Clamp(s.gridIndex, 0, names.Length - 1), names);
-                    s.snapToGrid = EditorGUILayout.Toggle(new GUIContent("Snap brushes to grid", "Positions, sizes and rotations are kept on the world grid after every edit, whatever the parent does."), s.snapToGrid);
+                    int defaultGrid = EditorGUILayout.Popup(new GUIContent("Default grid", "The grid size the project opens with. The Brushes overlay changes it for the session only."), Mathf.Clamp(s.defaultGridIndex, 0, names.Length - 1), names);
+                    if (defaultGrid != s.defaultGridIndex) s.defaultGridIndex = s.gridIndex = defaultGrid; // in use now too
+                    bool defaultSnap = EditorGUILayout.Toggle(new GUIContent("Snap brushes to grid", "Whether the project opens with grid snapping on. Positions, sizes and rotations are kept on the world grid after every edit. The Brushes overlay changes it for the session only."), s.defaultSnapToGrid);
+                    if (defaultSnap != s.defaultSnapToGrid) s.defaultSnapToGrid = s.snapToGrid = defaultSnap;
                     s.curveTolerance = Mathf.Max(PointGraph.MinTolerance, EditorGUILayout.FloatField(new GUIContent("Curve tolerance (m)", "How far the straight pieces of curved walls may stray from the true curve. Larger is rougher and lighter."), s.curveTolerance));
                     EditorGUILayout.BeginHorizontal();
                     s.defaultMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Default material", "Every brush face without a material of its own. Empty: the generated grid texture, a ruler in metres, created under Assets/CSG Brush on first use."), s.defaultMaterial, typeof(Material), false);
