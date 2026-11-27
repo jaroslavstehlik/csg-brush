@@ -226,7 +226,7 @@ To give every new brush a module, choose it from the **Modules** dropdown in the
 
 ### Hollow
 
-**Hollow** turns a box or cylinder into a room: only walls of **Wall thickness** remain. It's right under **Shape** in the Brush Inspector.
+**Hollow** turns a box or cylinder into a room: only walls of **Wall thickness** remain. It's right under **Operation** in the Brush Inspector.
 
 ### Stairs
 

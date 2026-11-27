@@ -137,6 +137,7 @@ namespace CsgBrush.Editor
             if (inGroup) BuiltByField((Brush)target);
             EditorGUI.BeginChangeCheck();
             ShapeField();
+            EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
             var shapeNow = (BrushShape)shapeProp.enumValueIndex;
             if (!shapeProp.hasMultipleDifferentValues && (shapeNow == BrushShape.Box || shapeNow == BrushShape.Cylinder))
             {
@@ -146,7 +147,6 @@ namespace CsgBrush.Editor
                     DrawUnitsField(settings, wallProp, "Wall thickness");
                 EditorGUILayout.EndHorizontal();
             }
-            EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
             if (targets.Length == 1 && !inGroup) BuiltByField((Brush)target);
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
