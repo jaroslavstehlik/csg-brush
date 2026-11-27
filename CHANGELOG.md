@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Fixed: a hollow brush rendered with the default material whatever material it had, its faces did not take its
+  static flags, and clicking it in the Scene view fell back to a guess from the brush shapes. The faces of a hollow
+  brush, outside and in, now belong to the brush.
 - **Save to Blender**: the Brush Group Inspector saves the group's meshes as a `.blend` file, using the Blender
   installed on the computer (3.6 or newer; found where it is usually installed, or set in Project Settings > Brushes).
   In metres with the group's position as the origin, Unity's Y up as Blender's Z up, the same faces and normals, both

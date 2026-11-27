@@ -24,7 +24,7 @@ namespace CsgBrush.Editor
     /// </summary>
     public static class BrushCsg
     {
-        sealed class SolidEntry { public int key; public ManifoldSolid solid; public Bounds bounds; public Bounds[] blocks; public BrushPolyhedron polyhedron; public List<ConvexPolytope> partsAdd, partsRemove; public string partsProblem; }
+        sealed class SolidEntry { public int key; public ManifoldSolid solid; public int[] ids; public Bounds bounds; public Bounds[] blocks; public BrushPolyhedron polyhedron; public List<ConvexPolytope> partsAdd, partsRemove; public string partsProblem; }
         sealed class PieceEntry { public string key; public ManifoldSolid piece; public bool ownsPiece; }
 
         static readonly Dictionary<Brush, SolidEntry> s_Solids = new Dictionary<Brush, SolidEntry>();
@@ -296,6 +296,8 @@ namespace CsgBrush.Editor
             public List<int> newSolidIndices = new List<int>();     // records whose solid must be built
             public List<PolyData> newSolidData = new List<PolyData>();
             public List<ManifoldSolid> newSolids = new List<ManifoldSolid>();
+            public List<int[]> newSolidIds = new List<int[]>();     // per new solid: the ids its faces carry (see SolidIds)
+            public int[][] solidIds;                                 // per record: the ids its faces carry
             public List<int> pieceRecord = new List<int>();          // per additive piece: record index
             public List<string> pieceKeys = new List<string>();
             public List<List<int>> pieceCutters = new List<List<int>>(); // record indices of the cutters
@@ -426,7 +428,7 @@ namespace CsgBrush.Editor
                     }
                     job.newSolidIndices.Add(job.records.Count - 1);
                     job.newSolidData.Add(data);
-                    job.newSolids.Add(null);
+                    job.newSolids.Add(null); job.newSolidIds.Add(null);
                 }
             }
             // bounds of every record (cached or to be built) for the overlap test
@@ -508,18 +510,26 @@ namespace CsgBrush.Editor
         {
             var sw = Stopwatch.StartNew();
             var solids = new ManifoldSolid[job.records.Count];
-            for (int i = 0; i < job.records.Count; i++) solids[i] = job.records[i].solid?.solid;
+            job.solidIds = new int[job.records.Count][];
+            for (int i = 0; i < job.records.Count; i++) { solids[i] = job.records[i].solid?.solid; job.solidIds[i] = job.records[i].solid?.ids; }
             for (int n = 0; n < job.newSolidIndices.Count; n++)
             {
                 var data = job.newSolidData[n];
                 var solid = ManifoldSolid.FromFaces(data.vertices, data.faces, out _);
+                int[] ids = solid != null ? new[] { solid.OriginalId } : null;
                 if (solid != null && data.innerVertices != null)
                 {
                     using var inner = ManifoldSolid.FromFaces(data.innerVertices, data.innerFaces, out _);
-                    if (inner != null) { var hollow = ManifoldSolid.Boolean(solid, inner, ManifoldNative.OpType.Subtract); solid.Dispose(); solid = hollow; }
+                    if (inner != null)
+                    {
+                        // the walls of a hollow brush: its outside keeps the outer solid's id, its inside the inner one's; the
+                        // result of the cut has none of its own, so both are the brush's
+                        ids = new[] { solid.OriginalId, inner.OriginalId };
+                        var hollow = ManifoldSolid.Boolean(solid, inner, ManifoldNative.OpType.Subtract); solid.Dispose(); solid = hollow;
+                    }
                 }
-                job.newSolids[n] = solid;
-                solids[job.newSolidIndices[n]] = solid;
+                job.newSolids[n] = solid; job.newSolidIds[n] = ids;
+                solids[job.newSolidIndices[n]] = solid; job.solidIds[job.newSolidIndices[n]] = ids;
             }
             job.builtSolids = job.newSolidIndices.Count; job.cachedSolids = job.records.Count - job.builtSolids;
             job.solidsMs = sw.Elapsed.TotalMilliseconds; sw.Restart();
@@ -577,8 +587,8 @@ namespace CsgBrush.Editor
                             {
                                 pieces.Add(job.pieceEntries[p].piece);
                                 int r = job.pieceRecord[p];
-                                if (solids[r] != null) sources[solids[r].OriginalId] = job.records[r].brush;
-                                foreach (int c in job.pieceCutters[p]) if (solids[c] != null) sources[solids[c].OriginalId] = job.records[c].brush; // carved faces take the cutter's material
+                                AddSources(sources, job, solids, r);
+                                foreach (int c in job.pieceCutters[p]) AddSources(sources, job, solids, c); // carved faces take the cutter's material
                             }
                             using var union = pieces.Count == 1 ? null : ManifoldSolid.Batch(pieces, ManifoldNative.OpType.Add);
                             island = new Island { key = key, data = (union ?? pieces[0]).ToMesh(), sources = sources };
@@ -645,8 +655,8 @@ namespace CsgBrush.Editor
                                     if (box.Contains(pb.min) && box.Contains(pb.max)) clipped.Add(piece); // wholly inside: as it is
                                     else { var c = ManifoldSolid.Boolean(piece, boxSolid, ManifoldNative.OpType.Intersect); clipped.Add(c); owned.Add(c); }
                                     int r = job.pieceRecord[p];
-                                    if (solids[r] != null) island.sources[solids[r].OriginalId] = job.records[r].brush;
-                                    foreach (int c in job.pieceCutters[p]) if (solids[c] != null) island.sources[solids[c].OriginalId] = job.records[c].brush;
+                                    AddSources(island.sources, job, solids, r);
+                                    foreach (int c in job.pieceCutters[p]) AddSources(island.sources, job, solids, c);
                                 }
                                 using (var union = clipped.Count == 1 ? null : ManifoldSolid.Batch(clipped, ManifoldNative.OpType.Add))
                                     island.data = Without((union ?? clipped[0]).ToMesh(), boxSolid.OriginalId);
@@ -702,6 +712,16 @@ namespace CsgBrush.Editor
             return false;
         }
 
+        /// <summary>The ids a record's faces carry in the mesh, each mapped to its brush: whose material and flags a face takes.</summary>
+        static void AddSources(Dictionary<int, Brush> sources, Job job, ManifoldSolid[] solids, int record)
+        {
+            if (solids[record] == null) return;
+            var brush = job.records[record].brush;
+            var ids = job.solidIds[record];
+            if (ids == null) { sources[solids[record].OriginalId] = brush; return; }
+            foreach (int id in ids) sources[id] = brush;
+        }
+
         static Vector3Int CellOf(Vector3 p) => Vector3Int.FloorToInt((p - Vector3.one * CellOffset) / CellSize);
 
         static ManifoldSolid BoxSolid(Bounds b)
@@ -745,7 +765,7 @@ namespace CsgBrush.Editor
                 if (r.brush == null) { job.newSolids[n]?.Dispose(); continue; }
                 if (s_Solids.TryGetValue(r.brush, out var old)) old.solid?.Dispose();
                 var data = job.newSolidData[n];
-                var entry = new SolidEntry { key = r.key, solid = job.newSolids[n], bounds = data.bounds, blocks = data.blocks, polyhedron = data.polyhedron };
+                var entry = new SolidEntry { key = r.key, solid = job.newSolids[n], ids = job.newSolidIds[n], bounds = data.bounds, blocks = data.blocks, polyhedron = data.polyhedron };
                 if (entry.solid == null) r.brush.problem = "The shape could not be built.";
                 s_Solids[r.brush] = entry;
                 r.solid = entry; job.records[job.newSolidIndices[n]] = r;
