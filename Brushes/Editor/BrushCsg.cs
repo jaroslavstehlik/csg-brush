@@ -575,7 +575,7 @@ namespace CsgBrush.Editor
                     var islands = new List<Island>();
                     foreach (var members in Connected(piecesByLayer[layer], p => job.bounds[job.pieceRecord[p]]))
                     {
-                        if (members.Count >= CellMinPieces) { BuildCells(job, layer, members, solids, islands); continue; }
+                        if (members.Count >= CellMinPieces && BuildCells(job, layer, members, solids, islands)) continue;
                         keyBuilder.Clear().Append(layer);
                         foreach (int p in members) keyBuilder.Append('/').Append(job.pieceKeys[p]);
                         string key = keyBuilder.ToString();
@@ -608,6 +608,11 @@ namespace CsgBrush.Editor
         public static int CellMinPieces = 12;
         /// <summary>Metres: the edge of a cell.</summary>
         public static float CellSize = 8f;
+        /// <summary>
+        /// The most cells an island is built in. A level's island reaches a few hundred; one past this (a point dragged to the
+        /// horizon stretching a piece kilometres) is built whole, which stays as quick as any other build.
+        /// </summary>
+        public static int MaxCells = 4096;
         /// <summary>Where the cell walls are: off any grid a face snaps to, so no face lies on a wall.</summary>
         const float CellOffset = 0.0731f;
 
@@ -615,19 +620,42 @@ namespace CsgBrush.Editor
         /// A large island in cells of a fixed grid in the group's space: each cell is its pieces clipped to its box and united,
         /// read back without the box's own faces. An edit builds again only the cells its changed pieces reach; the others keep
         /// their meshes (keyed, like islands, by their pieces' keys), and no union ever spans the whole island. The cells'
-        /// surfaces meet along the walls, cut at the same places on both sides.
+        /// surfaces meet along the walls, cut at the same places on both sides. Only the cells the pieces' blocks reach are
+        /// visited. False, with nothing built, when they would reach more than <see cref="MaxCells"/>: the caller builds the
+        /// island whole.
         /// </summary>
-        static void BuildCells(Job job, int layer, List<int> members, ManifoldSolid[] solids, List<Island> islands)
+        static bool BuildCells(Job job, int layer, List<int> members, ManifoldSolid[] solids, List<Island> islands)
         {
-            var whole = job.bounds[job.pieceRecord[members[0]]];
-            foreach (int p in members) whole.Encapsulate(job.bounds[job.pieceRecord[p]]);
-            Vector3Int lo = CellOf(whole.min), hi = CellOf(whole.max);
+            // the cells the pieces reach, by their blocks; counted first, so a piece stretched kilometres (a point dragged to the
+            // horizon) can't make millions of them: such an island is built whole
+            long reach = 0;
+            foreach (int p in members)
+            {
+                int r = job.pieceRecord[p];
+                foreach (var box in job.blocks[r] ?? new[] { job.bounds[r] })
+                {
+                    Vector3Int lo = CellOf(box.min), hi = CellOf(box.max);
+                    reach += (long)(hi.x - lo.x + 1) * (hi.y - lo.y + 1) * (hi.z - lo.z + 1);
+                    if (reach > MaxCells) return false;
+                }
+            }
+            var reached = new HashSet<Vector3Int>();
+            foreach (int p in members)
+            {
+                int r = job.pieceRecord[p];
+                foreach (var box in job.blocks[r] ?? new[] { job.bounds[r] })
+                {
+                    Vector3Int lo = CellOf(box.min), hi = CellOf(box.max);
+                    for (int x = lo.x; x <= hi.x; x++) for (int y = lo.y; y <= hi.y; y++) for (int z = lo.z; z <= hi.z; z++) reached.Add(new Vector3Int(x, y, z));
+                }
+            }
+            var cells = new List<Vector3Int>(reached);
+            cells.Sort((a, b) => a.x != b.x ? a.x.CompareTo(b.x) : a.y != b.y ? a.y.CompareTo(b.y) : a.z.CompareTo(b.z)); // a fixed order: the same mesh every time
             var keyBuilder = new System.Text.StringBuilder();
             var inCell = new List<int>();
-            for (int x = lo.x; x <= hi.x; x++)
-                for (int y = lo.y; y <= hi.y; y++)
-                    for (int z = lo.z; z <= hi.z; z++)
+            foreach (var cell in cells)
                     {
+                        int x = cell.x, y = cell.y, z = cell.z;
                         var min = new Vector3(x, y, z) * CellSize + Vector3.one * CellOffset;
                         var box = new Bounds(min + Vector3.one * (CellSize * 0.5f), Vector3.one * CellSize);
                         inCell.Clear();
@@ -668,6 +696,7 @@ namespace CsgBrush.Editor
                         job.islandsAfter[key] = island;
                         islands.Add(island);
                     }
+            return true;
         }
 
         /// <summary>

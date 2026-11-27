@@ -27,6 +27,9 @@ namespace CsgBrush.Editor
         public static void Exit() { if (IsActive) ToolManager.SetActiveContext<GameObjectToolContext>(); }
         public static void Toggle() { if (IsActive) Exit(); else Enter(); }
 
+        /// <summary>A right click in the Scene view: Unity's context menu, with the edit mode's items.</summary>
+        public override void PopulateMenu(UnityEngine.UIElements.DropdownMenu menu) => BrushEditState.FillMenu(menu);
+
         protected override Type GetEditorToolType(Tool tool)
         {
             switch (tool)
@@ -210,6 +213,20 @@ namespace CsgBrush.Editor
 
         // ------------------------------------------------------------------ picking
 
+        /// <summary>The edit mode's items in the Scene view's context menu (a right click), on every platform.</summary>
+        public static void FillMenu(UnityEngine.UIElements.DropdownMenu menu)
+        {
+            menu.AppendAction("Select All", _ => SelectAll());
+            menu.AppendAction("Invert Selection", _ => Invert());
+            menu.AppendAction("Clear Selection", _ => ClearSelection());
+            menu.AppendSeparator();
+            menu.AppendAction("Vertex mode  1", _ => { Mode = BrushEditMode.Vertex; SceneView.RepaintAll(); }, Mode == BrushEditMode.Vertex ? UnityEngine.UIElements.DropdownMenuAction.Status.Checked : UnityEngine.UIElements.DropdownMenuAction.Status.Normal);
+            menu.AppendAction("Edge mode  2", _ => { Mode = BrushEditMode.Edge; SceneView.RepaintAll(); }, Mode == BrushEditMode.Edge ? UnityEngine.UIElements.DropdownMenuAction.Status.Checked : UnityEngine.UIElements.DropdownMenuAction.Status.Normal);
+            menu.AppendAction("Face mode  3", _ => { Mode = BrushEditMode.Face; SceneView.RepaintAll(); }, Mode == BrushEditMode.Face ? UnityEngine.UIElements.DropdownMenuAction.Status.Checked : UnityEngine.UIElements.DropdownMenuAction.Status.Normal);
+            menu.AppendSeparator();
+            menu.AppendAction("Stop Editing", _ => BrushEditContext.Exit());
+        }
+
         static void HandlePicking(Brush brush, BrushPolyhedron poly, Selection sel, Event e, int passive)
         {
             if (dragging || e.alt) return;
@@ -218,21 +235,6 @@ namespace CsgBrush.Editor
             {
                 marquee = true; marqueeStart = e.mousePosition;
                 EditModeMouse.Take(passive); e.Use();
-            }
-            else if (e.type == EventType.ContextClick && GUIUtility.hotControl == 0) // a right click, not the end of a fly-through (right drag)
-            {
-                var menu = new GenericMenu();
-                menu.AddItem(new GUIContent("Select All"), false, SelectAll);
-                menu.AddItem(new GUIContent("Invert Selection"), false, Invert);
-                menu.AddItem(new GUIContent("Clear Selection"), false, ClearSelection);
-                menu.AddSeparator("");
-                menu.AddItem(new GUIContent("Vertex mode  1"), Mode == BrushEditMode.Vertex, () => { Mode = BrushEditMode.Vertex; SceneView.RepaintAll(); });
-                menu.AddItem(new GUIContent("Edge mode  2"), Mode == BrushEditMode.Edge, () => { Mode = BrushEditMode.Edge; SceneView.RepaintAll(); });
-                menu.AddItem(new GUIContent("Face mode  3"), Mode == BrushEditMode.Face, () => { Mode = BrushEditMode.Face; SceneView.RepaintAll(); });
-                menu.AddSeparator("");
-                menu.AddItem(new GUIContent("Stop Editing"), false, BrushEditContext.Exit);
-                menu.ShowAsContext();
-                e.Use();
             }
             else if (e.type == EventType.MouseDrag && marquee && GUIUtility.hotControl == passive) { e.Use(); SceneView.RepaintAll(); }
             else if (e.type == EventType.MouseUp && marquee && GUIUtility.hotControl == passive)

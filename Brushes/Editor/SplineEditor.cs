@@ -36,19 +36,10 @@ namespace CsgBrush.Editor
             spline.EnsureGraph();
             EditorGUILayout.LabelField("Path", spline.points.Count + " points, " + spline.links.Count + " links");
             if (TighterThanProfile(spline)) EditorGUILayout.HelpBox("Curve is tighter than the profile: its inside folds over.", MessageType.Warning);
-            EditorGUILayout.BeginHorizontal();
             bool editing = PointGraphEditContext.IsActive;
-            if (GUILayout.Toggle(editing, new GUIContent("Edit", "Move, Rotate and Scale act on the selected points or links (1, 2)"), EditorStyles.miniButton) != editing)
-            {
-                if (editing) PointGraphEditContext.Exit(); else PointGraphEditContext.Enter();
-            }
-            bool drawing = ToolManager.activeToolType == typeof(SplineDrawTool);
-            if (GUILayout.Toggle(drawing, new GUIContent("Draw", "Click to add points; Enter or Escape finishes"), EditorStyles.miniButton) != drawing)
-            {
-                if (drawing) ToolManager.RestorePreviousPersistentTool();
-                else { PointGraphEditContext.Exit(); ToolManager.SetActiveTool<SplineDrawTool>(); }
-            }
-            EditorGUILayout.EndHorizontal();
+            PointGraphGUI.EditOrDraw(editing, ToolManager.activeToolType == typeof(SplineDrawTool),
+                "Move, Rotate and Scale act on the selected points or links (1, 2)", "Click to add points; Enter or Escape finishes",
+                PointGraphEditContext.Enter, ToolManager.SetActiveTool<SplineDrawTool>);
             if (editing && targets.Length == 1 && FloorPlanEditState.Mode == BrushEditMode.Vertex) DrawRoll(spline);
             if (spline.droppedPieces > 0) EditorGUILayout.HelpBox(spline.droppedPieces + " pieces could not be made here: the path folds too sharply for the profile.", MessageType.Warning);
         }
@@ -223,7 +214,7 @@ namespace CsgBrush.Editor
             }
             float height = last.HasValue ? last.Value.y : spline.transform.position.y;
             var level = new Plane(Vector3.up, new Vector3(0f, height, 0f));
-            if (!level.Raycast(ray, out float t) || t <= 0f) { world = default; return false; }
+            if (!level.Raycast(ray, out float t) || t <= 0f || !BrushDraw.InView(t)) { world = default; return false; }
             world = SnapAcross(ray.GetPoint(t), Vector3.up, g);
             return true;
         }
@@ -375,7 +366,7 @@ namespace CsgBrush.Editor
                 return true;
             }
             var ground = new Plane(Vector3.up, Vector3.zero);
-            if (!ground.Raycast(ray, out float t) || t <= 0f) { world = default; return false; }
+            if (!ground.Raycast(ray, out float t) || t <= 0f || !BrushDraw.InView(t)) { world = default; return false; }
             world = SplineDrawTool.SnapAcross(ray.GetPoint(t), Vector3.up, g) + Vector3.up * rest;
             return true;
         }

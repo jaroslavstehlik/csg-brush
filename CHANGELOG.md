@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Floor Plan and Spline Inspector: Edit and Draw are one control, only one on at a time. The Brushes overlay's Edit
+  plan button is gone (the Inspector has it).
+- Fixed: right-clicking in brush, floor plan or spline edit mode showed Unity's context menu with "No options
+  available" on some platforms (a Windows right click opens the menu on release, before the edit mode saw it). The edit
+  modes now put their commands into Unity's Scene view context menu (EditorToolContext.PopulateMenu), the same on every
+  platform.
+- Fixed: a floor plan or spline point dragged towards the horizon landed kilometres away, and a large island then
+  visited millions of 8 m cells: the build never finished and nothing rebuilt until Unity restarted. Cells are counted
+  from what the pieces reach, and an island that would need more than 4096 is built whole; and a point is no longer
+  placed or dragged beyond what the Scene view draws (its far clip).
 - The Brushes overlay's working choices (grid step and Snap to grid, also with [ and ]; Cuts; Sizes; Shape handles,
   also with B; the shape edit selection) and the Extrude panel's distance and Individual last for the editor session
   and are no longer written into the project settings, which teammates share. The project opens with their defaults

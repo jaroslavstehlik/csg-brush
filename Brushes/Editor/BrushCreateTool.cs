@@ -11,6 +11,17 @@ namespace CsgBrush.Editor
     /// <summary>Pure geometry of drawing a brush: a base rectangle on a plane, then a height. Testable without a Scene view.</summary>
     public static class BrushDraw
     {
+        /// <summary>
+        /// Is a hit this far along the mouse ray (t) within what the Scene view draws (its far clip)? A ray just above the
+        /// horizon meets the floor kilometres away; points placed or dragged there are ignored, so a slip of the mouse can't
+        /// throw a point out of the level.
+        /// </summary>
+        public static bool InView(float t)
+        {
+            var cam = Camera.current != null ? Camera.current : SceneView.lastActiveSceneView != null ? SceneView.lastActiveSceneView.camera : null;
+            return cam == null || t <= cam.farClipPlane;
+        }
+
         /// <summary>Frame of a drawing plane from its (cardinal) normal: local Y is the normal, X and Z lie in the plane.</summary>
         public static Quaternion PlaneRotation(Vector3 normal)
         {
@@ -407,7 +418,7 @@ namespace CsgBrush.Editor
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
             var plane = GridPlane(view);
             normal = plane.normal;
-            if (plane.Raycast(ray, out float t) && t > 0f) { point = ray.GetPoint(t); return true; }
+            if (plane.Raycast(ray, out float t) && t > 0f && BrushDraw.InView(t)) { point = ray.GetPoint(t); return true; }
             point = Vector3.zero; return false;
         }
 

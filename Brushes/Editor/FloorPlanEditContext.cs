@@ -31,6 +31,9 @@ namespace CsgBrush.Editor
         }
         public static void Exit() { if (IsActive) ToolManager.SetActiveContext<GameObjectToolContext>(); }
 
+        /// <summary>A right click in the Scene view: Unity's context menu, with the edit mode's items.</summary>
+        public override void PopulateMenu(UnityEngine.UIElements.DropdownMenu menu) => FloorPlanEditState.FillMenu(menu);
+
         protected abstract Type MoveTool { get; }
         protected abstract Type RotateTool { get; }
         protected abstract Type ScaleTool { get; }
@@ -558,7 +561,7 @@ namespace CsgBrush.Editor
         static bool MouseOnDragPlane(Vector2 mouse, out Vector3 world)
         {
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
-            if (s_DragPlane.Raycast(ray, out float t) && t > 0f) { world = ray.GetPoint(t); return true; }
+            if (s_DragPlane.Raycast(ray, out float t) && t > 0f && BrushDraw.InView(t)) { world = ray.GetPoint(t); return true; }
             world = default; return false;
         }
         static readonly int s_DragHash = "FloorPlanPointDrag".GetHashCode();
@@ -665,6 +668,24 @@ namespace CsgBrush.Editor
             }
         }
 
+        /// <summary>The edit mode's items in the Scene view's context menu (a right click), on every platform.</summary>
+        public static void FillMenu(UnityEngine.UIElements.DropdownMenu menu)
+        {
+            UnityEngine.UIElements.DropdownMenuAction.Status On(bool on) => on ? UnityEngine.UIElements.DropdownMenuAction.Status.Normal : UnityEngine.UIElements.DropdownMenuAction.Status.Disabled;
+            UnityEngine.UIElements.DropdownMenuAction.Status Checked(bool on) => on ? UnityEngine.UIElements.DropdownMenuAction.Status.Checked : UnityEngine.UIElements.DropdownMenuAction.Status.Normal;
+            menu.AppendAction("Select All", _ => { foreach (var p in SelectedPlans()) SelectAll(p); SceneView.RepaintAll(); });
+            menu.AppendAction("Invert Selection", _ => { foreach (var p in SelectedPlans()) Invert(p); SceneView.RepaintAll(); });
+            menu.AppendAction("Clear Selection", _ => ClearSelection());
+            menu.AppendAction("Delete  ⌫", _ => DeleteSelection(), On(CanDelete()));
+            menu.AppendAction("Smooth / Corner  S", _ => ToggleSmoothSelection(), On(CanToggleSmooth()));
+            menu.AppendSeparator();
+            menu.AppendAction("Vertex mode  1", _ => Mode = BrushEditMode.Vertex, Checked(Mode == BrushEditMode.Vertex));
+            menu.AppendAction("Wall mode  2", _ => Mode = BrushEditMode.Edge, Checked(Mode == BrushEditMode.Edge));
+            menu.AppendAction("Room mode  3", _ => Mode = BrushEditMode.Face, Checked(Mode == BrushEditMode.Face));
+            menu.AppendSeparator();
+            menu.AppendAction("Stop Editing", _ => PointGraphEditContext.Exit());
+        }
+
         static void HandlePicking(PointGraph plan, Event e, int passive)
         {
             if (dragStart != null || e.alt) return;
@@ -673,23 +694,6 @@ namespace CsgBrush.Editor
             {
                 marquee = true; marqueeStart = e.mousePosition;
                 EditModeMouse.Take(passive); e.Use();
-            }
-            else if (e.type == EventType.ContextClick && GUIUtility.hotControl == 0) // a right click, not the end of a fly-through (right drag)
-            {
-                var menu = new GenericMenu();
-                menu.AddItem(new GUIContent("Select All"), false, () => { foreach (var p in SelectedPlans()) SelectAll(p); SceneView.RepaintAll(); });
-                menu.AddItem(new GUIContent("Invert Selection"), false, () => { foreach (var p in SelectedPlans()) Invert(p); SceneView.RepaintAll(); });
-                menu.AddItem(new GUIContent("Clear Selection"), false, ClearSelection);
-                if (CanDelete()) menu.AddItem(new GUIContent("Delete  ⌫"), false, DeleteSelection); else menu.AddDisabledItem(new GUIContent("Delete  ⌫"));
-                if (CanToggleSmooth()) menu.AddItem(new GUIContent("Smooth / Corner  S"), false, ToggleSmoothSelection); else menu.AddDisabledItem(new GUIContent("Smooth / Corner  S"));
-                menu.AddSeparator("");
-                menu.AddItem(new GUIContent("Vertex mode  1"), Mode == BrushEditMode.Vertex, () => Mode = BrushEditMode.Vertex);
-                menu.AddItem(new GUIContent("Wall mode  2"), Mode == BrushEditMode.Edge, () => Mode = BrushEditMode.Edge);
-                menu.AddItem(new GUIContent("Room mode  3"), Mode == BrushEditMode.Face, () => Mode = BrushEditMode.Face);
-                menu.AddSeparator("");
-                menu.AddItem(new GUIContent("Stop Editing"), false, FloorPlanEditContext.Exit);
-                menu.ShowAsContext();
-                e.Use();
             }
             else if (e.type == EventType.MouseDrag && marquee && GUIUtility.hotControl == passive) { e.Use(); SceneView.RepaintAll(); }
             else if (e.type == EventType.MouseUp && marquee && GUIUtility.hotControl == passive)
@@ -884,7 +888,7 @@ namespace CsgBrush.Editor
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
             var floor = new Plane(plan.transform.up, centre);
             fromCentre = default;
-            if (!floor.Raycast(ray, out float t)) return false;
+            if (!floor.Raycast(ray, out float t) || !BrushDraw.InView(t)) return false;
             fromCentre = ray.GetPoint(t) - centre;
             return fromCentre.sqrMagnitude > 1e-8f;
         }

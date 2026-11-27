@@ -72,6 +72,26 @@ namespace CsgBrush.Tests
         }
 
         [Test]
+        public void APointDraggedToTheHorizonDoesNotStallTheBuild()
+        {
+            Chain(); // an island built in cells
+            var s = new GameObject("Spline").AddComponent<Spline>();
+            UnityEditor.GameObjectUtility.SetStaticEditorFlags(s.gameObject, BrushSettings.instance.defaultModelStaticFlags); // in the level's mesh
+            s.profile = Spline.Profile.Rectangle; s.size = new Vector2(1f, 0.5f);
+            int a = s.AddPoint(new Vector3(0f, 0f, 0f)), b = s.AddPoint(new Vector3(10f, 0f, 0f));
+            s.AddLink(a, b);
+            BrushGenerators.Update(s, true); BrushApi.ForceUpdate();
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            s.points[1] = new Vector3(100000f, 0f, 30000f); // 100 km off: millions of cells, were they all visited
+            BrushGenerators.Update(s, false); BrushApi.ForceUpdate();
+            Assert.Less(watch.ElapsedMilliseconds, 10000, "built in seconds");
+            Assert.IsFalse(BrushCsg.Busy || BrushCsg.HasDirty, "and done");
+            s.points[1] = new Vector3(10f, 0f, 0f);
+            BrushGenerators.Update(s, false); BrushApi.ForceUpdate();
+            Assert.Greater(BrushCsg.LastBuiltIslands + BrushCsg.LastCachedIslands, 1, "back: built in cells again");
+        }
+
+        [Test]
         public void ACutNearOneEndOfALongBrushBuildsAgainOnlyTheCollidersThere()
         {
             // a long Rectangle run through Smooth points: one brush of many convex parts, upright so its parts stay put

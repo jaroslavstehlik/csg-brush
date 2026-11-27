@@ -47,7 +47,7 @@ namespace CsgBrush.Editor
         public static bool MouseOnFloor(PointGraph plan, Vector2 mouse, out Vector3 world)
         {
             var ray = HandleUtility.GUIPointToWorldRay(mouse);
-            if (Floor(plan).Raycast(ray, out float t) && t > 0f) { world = ray.GetPoint(t); return true; }
+            if (Floor(plan).Raycast(ray, out float t) && t > 0f && BrushDraw.InView(t)) { world = ray.GetPoint(t); return true; }
             world = default; return false;
         }
 
@@ -147,6 +147,29 @@ namespace CsgBrush.Editor
     /// <summary>Inspector parts every point graph (floor plan, spline) shows.</summary>
     public static class PointGraphGUI
     {
+        /// <summary>
+        /// Edit and Draw as one control: at most one of them is on. Pressing one turns the other off; pressing the one that is
+        /// on turns it off (back to the previous tool).
+        /// </summary>
+        public static void EditOrDraw(bool editing, bool drawing, string editTip, string drawTip, System.Action enterEdit, System.Action startDraw)
+        {
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(EditorGUIUtility.labelWidth);
+            bool edit = GUILayout.Toggle(editing, new GUIContent("Edit", editTip), EditorStyles.miniButtonLeft);
+            bool draw = GUILayout.Toggle(drawing, new GUIContent("Draw", drawTip), EditorStyles.miniButtonRight);
+            EditorGUILayout.EndHorizontal();
+            if (edit != editing)
+            {
+                if (editing) PointGraphEditContext.Exit();
+                else { if (drawing) ToolManager.RestorePreviousPersistentTool(); enterEdit(); }
+            }
+            else if (draw != drawing)
+            {
+                if (drawing) ToolManager.RestorePreviousPersistentTool();
+                else { PointGraphEditContext.Exit(); startDraw(); }
+            }
+        }
+
         /// <summary>The curve tolerance override: off uses the project's (Project Settings > Brushes).</summary>
         public static void Tolerance(SerializedObject so)
         {
@@ -180,19 +203,10 @@ namespace CsgBrush.Editor
             PointGraphGUI.Tolerance(serializedObject);
             plan.EnsureGraph();
             EditorGUILayout.LabelField("Plan", plan.points.Count + " points, " + plan.links.Count + " walls, " + FloorPlanEditState.RoomsOf(plan).Count + " rooms");
-            EditorGUILayout.BeginHorizontal();
             bool editing = FloorPlanEditContext.IsActive;
-            if (GUILayout.Toggle(editing, new GUIContent("Edit", "Move, Rotate and Scale act on the selected points or walls (1, 2)"), EditorStyles.miniButton) != editing)
-            {
-                if (editing) FloorPlanEditContext.Exit(); else FloorPlanEditContext.Enter();
-            }
-            bool drawing = ToolManager.activeToolType == typeof(FloorPlanDrawTool);
-            if (GUILayout.Toggle(drawing, new GUIContent("Draw", "Click on the floor to add walls; Enter or Escape finishes"), EditorStyles.miniButton) != drawing)
-            {
-                if (drawing) ToolManager.RestorePreviousPersistentTool();
-                else { FloorPlanEditContext.Exit(); ToolManager.SetActiveTool<FloorPlanDrawTool>(); }
-            }
-            EditorGUILayout.EndHorizontal();
+            PointGraphGUI.EditOrDraw(editing, ToolManager.activeToolType == typeof(FloorPlanDrawTool),
+                "Move, Rotate and Scale act on the selected points or walls (1, 2)", "Click on the floor to add walls; Enter or Escape finishes",
+                FloorPlanEditContext.Enter, ToolManager.SetActiveTool<FloorPlanDrawTool>);
             if (editing && targets.Length == 1) DrawSelection(plan);
         }
 

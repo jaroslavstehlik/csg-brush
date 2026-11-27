@@ -5,10 +5,11 @@ Floor plan edit mode lets you select and transform the points and walls of a Flo
 To enter edit mode, select a Floor Plan and do one of the following:
 
 * Click **Edit** in the Floor Plan Inspector.
-* Click **Edit plan** in the **Brushes** overlay.
 * Select **Edit Floor Plan** in the tool context dropdown of the **Tools** overlay.
 
-To leave edit mode, click **Edit** again, or right-click in the Scene view and select **Stop Editing**.
+**Edit** and **Draw** in the Inspector are one control: only one of them is on at a time. Clicking **Draw** while editing leaves edit mode and starts drawing, and the other way round.
+
+To leave edit mode, click **Edit** again, or right-click in the Scene view and select **Stop Editing**. The edit mode's commands are in the Scene view's context menu on every platform.
 
 ## Select points and walls
 

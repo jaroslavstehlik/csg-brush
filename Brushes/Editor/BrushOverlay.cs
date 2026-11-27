@@ -121,16 +121,7 @@ namespace CsgBrush.Editor
             foreach (var go in Selection.gameObjects)
                 if (go.TryGetComponent<Brush>(out var b) && (b.shape == BrushShape.Custom || BrushApi.CanConvertToCustom(b.shape))) { editable = true; break; }
             if (editing && !editable) BrushEditContext.Exit();
-            bool plan = !editable && Selection.activeGameObject != null && Selection.activeGameObject.GetComponent<FloorPlan>() != null;
-            if (plan)
-            {
-                bool planEditing = FloorPlanEditContext.IsActive;
-                if (GUILayout.Toggle(planEditing, new GUIContent("Edit plan", "Move, Rotate and Scale act on the selected points or walls (1, 2)"), EditorStyles.miniButton) != planEditing)
-                {
-                    if (planEditing) FloorPlanEditContext.Exit(); else FloorPlanEditContext.Enter();
-                }
-            }
-            else using (new EditorGUI.DisabledScope(!editable))
+            using (new EditorGUI.DisabledScope(!editable)) // a floor plan or spline is edited from its Inspector
             {
                 bool wantEditing = GUILayout.Toggle(editing, new GUIContent("Edit brush", editable ? "Move, Rotate and Scale then act on the selected vertices, edges or faces; the selection mode is in the Tool Settings toolbar (1, 2, 3)" : "Select a brush"), EditorStyles.miniButton);
                 if (wantEditing != editing) { if (wantEditing) BrushEditContext.Enter(); else BrushEditContext.Exit(); }
