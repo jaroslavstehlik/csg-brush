@@ -52,8 +52,8 @@ namespace CsgBrush.Editor
         public void ResetWorking() => m_Working = null;
 
         [Header("Extrude (edit mode)")]
-        [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
-        public bool extrudeIndividual = false;
+        [Tooltip("Units; 0 uses one grid step. The project's default; the Extrude panel changes it for the session.")] [UnityEngine.Serialization.FormerlySerializedAs("extrudeDistance")] public float defaultExtrudeDistance = 0f;
+        [Tooltip("The project's default; the Extrude panel changes it for the session.")] [UnityEngine.Serialization.FormerlySerializedAs("extrudeIndividual")] public bool defaultExtrudeIndividual = false;
         [Tooltip("The static flags new brushes and floor plans start with. A brush's own flags go to its meshes and colliders.")]
         public StaticEditorFlags defaultModelStaticFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic | StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic | StaticEditorFlags.ReflectionProbeStatic;
         [Tooltip("Make lightmap UVs for lit brush meshes when an edit is finished.")]
@@ -67,13 +67,13 @@ namespace CsgBrush.Editor
         [Header("Editor")]
         public bool showGenerated = false;
         [Tooltip("Draw subtract brushes as translucent red volumes in the Scene view, so they can be seen and selected where they have carved everything away.")]
-        public bool showCuts = false;
+        [UnityEngine.Serialization.FormerlySerializedAs("showCuts")] public bool defaultShowCuts = false;
         [Tooltip("Show the width, depth and height of a brush or wall while it is drawn.")]
-        public bool showDimensions = true;
+        [UnityEngine.Serialization.FormerlySerializedAs("showDimensions")] public bool defaultShowDimensions = true;
         [Tooltip("Drag a selected brush's sides to change its shape.")]
-        public bool shapeHandles = true;
+        [UnityEngine.Serialization.FormerlySerializedAs("shapeHandles")] public bool defaultShapeHandles = true;
         [Tooltip("What a shape edit does to the other selected brushes.")]
-        public ShapeEditSelection shapeEditSelection = ShapeEditSelection.Single;
+        [UnityEngine.Serialization.FormerlySerializedAs("shapeEditSelection")] public ShapeEditSelection defaultShapeEditSelection = ShapeEditSelection.Single;
         [Tooltip("Whether the project opens with grid snapping on: position, size and rotation are snapped in world space after each edit. The Brushes overlay changes it for the session only.")]
         [UnityEngine.Serialization.FormerlySerializedAs("snapToGrid")] public bool defaultSnapToGrid = true;
         [Tooltip("Metres: how far the straight pieces of a curved wall or spline may stray from the true curve. Larger is rougher and lighter.")]
@@ -125,6 +125,35 @@ namespace CsgBrush.Editor
         {
             get { if (m_Snap < 0) m_Snap = SessionState.GetBool(SnapKey, defaultSnapToGrid) ? 1 : 0; return m_Snap == 1; }
             set { m_Snap = value ? 1 : 0; SessionState.SetBool(SnapKey, value); }
+        }
+
+        /// <summary>Shown cuts: the project's default, or what the overlay set this session.</summary>
+        public bool showCuts { get => m_ShowCuts.Get(defaultShowCuts); set => m_ShowCuts.Set(value); }
+        /// <summary>Sizes shown while drawing: the project's default, or what the overlay set this session.</summary>
+        public bool showDimensions { get => m_ShowDimensions.Get(defaultShowDimensions); set => m_ShowDimensions.Set(value); }
+        /// <summary>The shape handles: the project's default, or what the overlay (or B) set this session.</summary>
+        public bool shapeHandles { get => m_ShapeHandles.Get(defaultShapeHandles); set => m_ShapeHandles.Set(value); }
+        /// <summary>What a shape edit does to the other selected brushes: the project's default, or the overlay's this session.</summary>
+        public ShapeEditSelection shapeEditSelection { get => (ShapeEditSelection)m_ShapeEditSelection.Get((int)defaultShapeEditSelection); set => m_ShapeEditSelection.Set((int)value); }
+        /// <summary>Extrude distance (units): the project's default, or the Extrude panel's this session.</summary>
+        public float extrudeDistance { get => m_ExtrudeDistance.Get(defaultExtrudeDistance); set => m_ExtrudeDistance.Set(value); }
+        /// <summary>Extrude each face on its own: the project's default, or the Extrude panel's this session.</summary>
+        public bool extrudeIndividual { get => m_ExtrudeIndividual.Get(defaultExtrudeIndividual); set => m_ExtrudeIndividual.Set(value); }
+
+        [NonSerialized] readonly SessionValue m_ShowCuts = new SessionValue("showCuts"), m_ShowDimensions = new SessionValue("showDimensions"), m_ShapeHandles = new SessionValue("shapeHandles"),
+            m_ShapeEditSelection = new SessionValue("shapeEditSelection"), m_ExtrudeDistance = new SessionValue("extrudeDistance"), m_ExtrudeIndividual = new SessionValue("extrudeIndividual");
+
+        /// <summary>A value kept for the editor session (SessionState), read once and then from memory: the tools read some every frame.</summary>
+        sealed class SessionValue
+        {
+            readonly string m_Key; bool m_Read; float m_Value;
+            public SessionValue(string name) { m_Key = "CsgBrush." + name; }
+            public bool Get(bool fallback) { if (!m_Read) { m_Value = SessionState.GetBool(m_Key, fallback) ? 1f : 0f; m_Read = true; } return m_Value != 0f; }
+            public int Get(int fallback) { if (!m_Read) { m_Value = SessionState.GetInt(m_Key, fallback); m_Read = true; } return (int)m_Value; }
+            public float Get(float fallback) { if (!m_Read) { m_Value = SessionState.GetFloat(m_Key, fallback); m_Read = true; } return m_Value; }
+            public void Set(bool value) { m_Value = value ? 1f : 0f; m_Read = true; SessionState.SetBool(m_Key, value); }
+            public void Set(int value) { m_Value = value; m_Read = true; SessionState.SetInt(m_Key, value); }
+            public void Set(float value) { m_Value = value; m_Read = true; SessionState.SetFloat(m_Key, value); }
         }
 
         public float GridUnits => gridSizes != null && gridSizes.Length > 0 ? gridSizes[Mathf.Clamp(gridIndex, 0, gridSizes.Length - 1)] : 1f;
@@ -183,7 +212,7 @@ namespace CsgBrush.Editor
 
     static class BrushSettingsProvider
     {
-        static bool s_DefaultsOpen;
+        static bool s_DefaultsOpen; static bool s_ToolDefaultsOpen;
         [SettingsProvider]
         public static SettingsProvider Create()
         {
@@ -231,6 +260,25 @@ namespace CsgBrush.Editor
                     EditorGUILayout.EndHorizontal();
                     s.blenderPackTextures = EditorGUILayout.Toggle(new GUIContent("Pack textures in Blender files", "Put the textures inside the Blender file, so it shows them on any computer. The file gets larger"), s.blenderPackTextures);
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
+                    s_ToolDefaultsOpen = EditorGUILayout.Foldout(s_ToolDefaultsOpen, new GUIContent("Tool defaults", "What the Brushes overlay and the Extrude panel start with when the project opens. Changing them there lasts for the session only."), true);
+                    if (s_ToolDefaultsOpen)
+                    {
+                        EditorGUI.indentLevel++;
+                        // a default changed here is also what is used now
+                        bool cuts = EditorGUILayout.Toggle(new GUIContent("Show cuts", "Draw subtract brushes as translucent red volumes"), s.defaultShowCuts);
+                        if (cuts != s.defaultShowCuts) s.defaultShowCuts = s.showCuts = cuts;
+                        bool sizes = EditorGUILayout.Toggle(new GUIContent("Show sizes", "Show a brush's width, depth and height while it is drawn"), s.defaultShowDimensions);
+                        if (sizes != s.defaultShowDimensions) s.defaultShowDimensions = s.showDimensions = sizes;
+                        bool handles = EditorGUILayout.Toggle(new GUIContent("Shape handles", "Drag a selected brush's sides to change its shape"), s.defaultShapeHandles);
+                        if (handles != s.defaultShapeHandles) s.defaultShapeHandles = s.shapeHandles = handles;
+                        var selection = (ShapeEditSelection)EditorGUILayout.EnumPopup(new GUIContent("Shape edit selection", "What a shape edit does to the other selected brushes"), s.defaultShapeEditSelection);
+                        if (selection != s.defaultShapeEditSelection) s.defaultShapeEditSelection = s.shapeEditSelection = selection;
+                        float distance = Mathf.Max(0f, EditorGUILayout.FloatField(new GUIContent("Extrude distance (" + s.unitLabel + ")", "0 uses one grid step"), s.defaultExtrudeDistance));
+                        if (distance != s.defaultExtrudeDistance) s.defaultExtrudeDistance = s.extrudeDistance = distance;
+                        bool individual = EditorGUILayout.Toggle(new GUIContent("Extrude individually", "Extrude each selected face on its own"), s.defaultExtrudeIndividual);
+                        if (individual != s.defaultExtrudeIndividual) s.defaultExtrudeIndividual = s.extrudeIndividual = individual;
+                        EditorGUI.indentLevel--;
+                    }
                     s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("New brush static flags", "The static flags new brushes and floor plans start with"), s.defaultModelStaticFlags);
                     s_DefaultsOpen = EditorGUILayout.Foldout(s_DefaultsOpen, new GUIContent("New brush defaults", "What a new brush starts with. The Brushes overlay changes them for the shape you are drawing; they come back here when you pick another shape or leave the Create tools."), true);
                     if (s_DefaultsOpen)

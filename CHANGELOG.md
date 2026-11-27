@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- The grid step and Snap to grid set in the Brushes overlay (or with [ and ]) last for the editor session and are no
-  longer written into the project settings, which teammates share; the project opens with Default grid and Snap
-  brushes to grid from Project Settings > Brushes, as before.
+- The Brushes overlay's working choices (grid step and Snap to grid, also with [ and ]; Cuts; Sizes; Shape handles,
+  also with B; the shape edit selection) and the Extrude panel's distance and Individual last for the editor session
+  and are no longer written into the project settings, which teammates share. The project opens with their defaults
+  from Project Settings > Brushes (Default grid, Snap brushes to grid, Tool defaults).
 - New brush options: the Brushes overlay's choices (operation, Hollow, sides, stairs, opening sizes and the rest) hold
   while one shape is drawn and go back to the project's defaults when another shape is picked or the Create tools are
   left, so a Hollow or Subtract picked once no longer makes every later brush hollow or a cut. The defaults are set in
