@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- New brush options: the Brushes overlay's choices (operation, Hollow, sides, stairs, opening sizes and the rest) hold
+  while one shape is drawn and go back to the project's defaults when another shape is picked or the Create tools are
+  left, so a Hollow or Subtract picked once no longer makes every later brush hollow or a cut. The defaults are set in
+  Project Settings > Brushes > New brush defaults. Options the overlay changed in earlier versions were saved as the
+  project's defaults; they start again from the package's defaults (operation Add, not hollow).
 - Brush Inspector: a brush under a Brush Group shows its group first; Hollow and Wall thickness are right under Operation.
 - Fixed: a hollow brush rendered with the default material whatever material it had, its faces did not take its
   static flags, and clicking it in the Scene view fell back to a guess from the brush shapes. The faces of a hollow

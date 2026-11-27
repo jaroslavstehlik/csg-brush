@@ -154,8 +154,8 @@ namespace CsgBrush.Editor
         /// <summary>Linear and curved stairs: solid under the steps, or slabs of a thickness.</summary>
         static void SupportUnderSteps(BrushSettings s)
         {
-            s.newSupportUnderSteps = EditorGUILayout.Toggle(new GUIContent("Support under steps", "The steps stand on solid support down to the floor"), s.newSupportUnderSteps);
-            if (!s.newSupportUnderSteps) s.newStepThickness = UnitsField(s, "Step thickness", "0 uses 0.1 m", s.newStepThickness, BrushSettings.DefaultStepThicknessMeters);
+            s.Working.newSupportUnderSteps = EditorGUILayout.Toggle(new GUIContent("Support under steps", "The steps stand on solid support down to the floor"), s.Working.newSupportUnderSteps);
+            if (!s.Working.newSupportUnderSteps) s.Working.newStepThickness = UnitsField(s, "Step thickness", "0 uses 0.1 m", s.Working.newStepThickness, BrushSettings.DefaultStepThicknessMeters);
         }
 
         static float UnitsField(BrushSettings s, string label, string tooltip, float units, float placeholderMeters)
@@ -172,21 +172,21 @@ namespace CsgBrush.Editor
         /// </summary>
         static void ModulesDropdown(BrushSettings s, System.Collections.Generic.List<System.Type> moduleTypes)
         {
-            var chosen = moduleTypes.FindAll(t => s.newModules.Contains(t.FullName));
+            var chosen = moduleTypes.FindAll(t => s.Working.newModules.Contains(t.FullName));
             string summary = chosen.Count == 0 ? "Nothing" : chosen.Count == 1 ? ObjectNames.NicifyVariableName(chosen[0].Name) : chosen.Count + " modules";
             var rect = EditorGUILayout.GetControlRect();
             rect = EditorGUI.PrefixLabel(rect, new GUIContent("Modules", "The game's data every new brush gets, as components on it"));
             if (!EditorGUI.DropdownButton(rect, new GUIContent(summary, string.Join(", ", chosen.ConvertAll(t => ObjectNames.NicifyVariableName(t.Name)))), FocusType.Keyboard)) return;
             var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Nothing"), chosen.Count == 0, () => { s.newModules.Clear(); s.NotifyChanged(); });
+            menu.AddItem(new GUIContent("Nothing"), chosen.Count == 0, () => { s.Working.newModules.Clear(); s.NotifyChanged(); });
             menu.AddSeparator("");
             foreach (var t in moduleTypes)
             {
                 string name = t.FullName;
-                bool on = s.newModules.Contains(name);
+                bool on = s.Working.newModules.Contains(name);
                 menu.AddItem(new GUIContent(ObjectNames.NicifyVariableName(t.Name)), on, () =>
                 {
-                    if (on) s.newModules.Remove(name); else s.newModules.Add(name);
+                    if (on) s.Working.newModules.Remove(name); else s.Working.newModules.Add(name);
                     s.NotifyChanged();
                 });
             }
@@ -202,8 +202,8 @@ namespace CsgBrush.Editor
             EditorGUI.BeginChangeCheck();
             if (!BrushCreateTool.IsOpening(shape)) // a door or window is always a cut
             {
-                s.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.newOperation);
-                s.newGridSnap = (GridSnap)EditorGUILayout.EnumPopup(new GUIContent("Grid snap", "What goes onto the grid: the outermost vertices, or the pivot"), s.newGridSnap);
+                s.Working.newOperation = (BrushOperation)EditorGUILayout.EnumPopup(new GUIContent("Operation", "Add fills space, Subtract carves the brushes above it"), s.Working.newOperation);
+                s.Working.newGridSnap = (GridSnap)EditorGUILayout.EnumPopup(new GUIContent("Grid snap", "What goes onto the grid: the outermost vertices, or the pivot"), s.Working.newGridSnap);
             }
             var moduleTypes = BrushApi.ModuleTypes();
             if (moduleTypes.Count > 0) ModulesDropdown(s, moduleTypes);
@@ -212,51 +212,51 @@ namespace CsgBrush.Editor
             {
                 case BrushShape.Cylinder:
                 case BrushShape.Cone:
-                    s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Sides"), s.newSides));
+                    s.Working.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Sides"), s.Working.newSides));
                     break;
                 case BrushShape.Sphere:
-                    s.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.newTessellation, 1, 5);
+                    s.Working.newTessellation = EditorGUILayout.IntSlider(new GUIContent("Tessellation"), s.Working.newTessellation, 1, 5);
                     break;
                 case BrushShape.Stairs:
-                    s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
+                    s.Working.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.Working.newStepHeight, stepHeight);
                     SupportUnderSteps(s);
                     break;
                 case BrushShape.CurvedStairs:
-                    s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
-                    s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
-                    s.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.newCurveAngle);
-                    s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
+                    s.Working.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.Working.newInnerRadius, s.GridMeters);
+                    s.Working.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.Working.newStepHeight, stepHeight);
+                    s.Working.newCurveAngle = EditorGUILayout.FloatField(new GUIContent("Angle of curve", "Degrees the steps cover"), s.Working.newCurveAngle);
+                    s.Working.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.Working.newCounterClockwise);
                     SupportUnderSteps(s);
                     break;
                 case BrushShape.SpiralStairs:
-                    s.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.newInnerRadius, s.GridMeters);
-                    s.newStepThickness = UnitsField(s, "Step thickness", "0 uses 0.1 m", s.newStepThickness, BrushSettings.DefaultStepThicknessMeters);
-                    s.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.newStepHeight, stepHeight);
-                    s.newStepsPer360 = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Steps per 360"), s.newStepsPer360));
-                    s.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.newSlopedCeiling);
-                    s.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.newSlopedFloor);
-                    s.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.newCounterClockwise);
+                    s.Working.newInnerRadius = UnitsField(s, "Inner radius", "0 uses one grid step", s.Working.newInnerRadius, s.GridMeters);
+                    s.Working.newStepThickness = UnitsField(s, "Step thickness", "0 uses 0.1 m", s.Working.newStepThickness, BrushSettings.DefaultStepThicknessMeters);
+                    s.Working.newStepHeight = UnitsField(s, "Step height", "0 uses 0.25 m; the steps fill the drawn height", s.Working.newStepHeight, stepHeight);
+                    s.Working.newStepsPer360 = Mathf.Max(1, EditorGUILayout.IntField(new GUIContent("Steps per 360"), s.Working.newStepsPer360));
+                    s.Working.newSlopedCeiling = EditorGUILayout.Toggle(new GUIContent("Sloped ceiling"), s.Working.newSlopedCeiling);
+                    s.Working.newSlopedFloor = EditorGUILayout.Toggle(new GUIContent("Sloped floor"), s.Working.newSlopedFloor);
+                    s.Working.newCounterClockwise = EditorGUILayout.Toggle(new GUIContent("Counter clockwise"), s.Working.newCounterClockwise);
                     break;
                 case BrushShape.Arch:
-                    s.newWallThickness = UnitsField(s, "Thickness", "0 uses one grid step", s.newWallThickness, wall);
-                    s.newArchAngle = EditorGUILayout.Slider(new GUIContent("Angle", "180 is a full arch; less keeps the top part of it"), s.newArchAngle, 1f, 180f);
-                    s.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Segments"), s.newSides));
+                    s.Working.newWallThickness = UnitsField(s, "Thickness", "0 uses one grid step", s.Working.newWallThickness, wall);
+                    s.Working.newArchAngle = EditorGUILayout.Slider(new GUIContent("Angle", "180 is a full arch; less keeps the top part of it"), s.Working.newArchAngle, 1f, 180f);
+                    s.Working.newSides = Mathf.Max(3, EditorGUILayout.IntField(new GUIContent("Segments"), s.Working.newSides));
                     break;
                 case BrushShape.Door:
-                    s.newDoorWidth = UnitsField(s, "Width", "Width of the doorway; 0 uses 1 m", s.newDoorWidth, BrushSettings.DefaultDoorWidthMeters);
-                    s.newDoorHeight = UnitsField(s, "Height", "Height of the doorway; 0 uses 2.2 m", s.newDoorHeight, BrushSettings.DefaultDoorHeightMeters);
+                    s.Working.newDoorWidth = UnitsField(s, "Width", "Width of the doorway; 0 uses 1 m", s.Working.newDoorWidth, BrushSettings.DefaultDoorWidthMeters);
+                    s.Working.newDoorHeight = UnitsField(s, "Height", "Height of the doorway; 0 uses 2.2 m", s.Working.newDoorHeight, BrushSettings.DefaultDoorHeightMeters);
                     break;
                 case BrushShape.Window:
-                    s.newWindowWidth = UnitsField(s, "Width", "Width of the window; 0 uses 1.2 m", s.newWindowWidth, BrushSettings.DefaultWindowWidthMeters);
-                    s.newWindowHeight = UnitsField(s, "Height", "Height of the window; 0 uses 1.2 m", s.newWindowHeight, BrushSettings.DefaultWindowHeightMeters);
-                    s.newWindowSill = UnitsField(s, "Sill", "Height of its bottom above the floor; 0 uses 0.9 m", s.newWindowSill, BrushSettings.DefaultWindowSillMeters);
+                    s.Working.newWindowWidth = UnitsField(s, "Width", "Width of the window; 0 uses 1.2 m", s.Working.newWindowWidth, BrushSettings.DefaultWindowWidthMeters);
+                    s.Working.newWindowHeight = UnitsField(s, "Height", "Height of the window; 0 uses 1.2 m", s.Working.newWindowHeight, BrushSettings.DefaultWindowHeightMeters);
+                    s.Working.newWindowSill = UnitsField(s, "Sill", "Height of its bottom above the floor; 0 uses 0.9 m", s.Working.newWindowSill, BrushSettings.DefaultWindowSillMeters);
                     break;
             }
             if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
             {
-                s.newHollow = EditorGUILayout.Toggle(new GUIContent("Hollow", "Keep only the walls"), s.newHollow);
-                using (new EditorGUI.DisabledScope(!s.newHollow))
-                    s.newWallThickness = UnitsField(s, "Wall thickness", "0 uses one grid step", s.newWallThickness, wall);
+                s.Working.newHollow = EditorGUILayout.Toggle(new GUIContent("Hollow", "Keep only the walls"), s.Working.newHollow);
+                using (new EditorGUI.DisabledScope(!s.Working.newHollow))
+                    s.Working.newWallThickness = UnitsField(s, "Wall thickness", "0 uses one grid step", s.Working.newWallThickness, wall);
             }
             if (EditorGUI.EndChangeCheck()) { s.NotifyChanged(); SceneView.RepaintAll(); }
             EditorGUIUtility.labelWidth = labelWidth;

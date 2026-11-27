@@ -30,7 +30,7 @@ Some shapes are drawn differently:
 | **Door**, **Window** | Click once. See [Doors and windows](doors-and-windows.md). |
 | **Floor Plan** | Click the corners of the walls. See [Floor plans](floor-plans.md). |
 
-A new brush starts with the settings shown in the **Brushes** overlay while the Create tool is active; the project keeps them between sessions. After you create a brush, change them on the brush itself. Its static flags come from **Project Settings** > **Brushes** > **New brush static flags**.
+A new brush starts with the settings shown in the **Brushes** overlay while the Create tool is active. They start from the project's defaults in **Project Settings** > **Brushes** > **New brush defaults**. What you change in the overlay holds while you draw that shape; when you pick another shape or leave the Create tool, the overlay goes back to the defaults, so a **Hollow** or **Subtract** you picked once doesn't follow every later brush. To change what every new brush starts with, change the defaults. After you create a brush, change its settings on the brush itself. Its static flags come from **Project Settings** > **Brushes** > **New brush static flags**.
 
 You can also create a brush in these ways:
 

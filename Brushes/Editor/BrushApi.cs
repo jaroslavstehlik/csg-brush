@@ -27,7 +27,7 @@ namespace CsgBrush.Editor
             var brush = Undo.AddComponent<Brush>(go);
             brush.shape = shape;
             brush.size = sizeMeters;
-            brush.gridSnap = snap ? BrushSettings.instance.newGridSnap : GridSnap.Off;
+            brush.gridSnap = snap ? BrushSettings.instance.Working.newGridSnap : GridSnap.Off;
             if (snap) BrushSnap.SnapOnce(brush); // a new brush lands on the grid; a loaded one is accepted where it is
             if (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
@@ -38,7 +38,7 @@ namespace CsgBrush.Editor
             }
             if (brush.IsOpening) brush.operation = BrushOperation.Subtract; // a door or window is a cut
             if (shape == BrushShape.Arch) { var p = BrushCreateTool.ParametersFor(shape, sizeMeters); brush.curveAngle = p.stairs.curveAngle; brush.wallThickness = p.wallThickness; brush.sides = p.sides; }
-            foreach (var t in ModuleTypes()) if (BrushSettings.instance.newModules.Contains(t.FullName)) Undo.AddComponent(go, t); // the project's modules for new brushes
+            foreach (var t in ModuleTypes()) if (BrushSettings.instance.Working.newModules.Contains(t.FullName)) Undo.AddComponent(go, t); // the project's modules for new brushes
             BrushSync.Ensure(brush);
             BrushSync.RequestFullUpdate(brush);
             return brush;

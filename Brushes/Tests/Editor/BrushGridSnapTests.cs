@@ -44,14 +44,14 @@ namespace CsgBrush.Tests
 
         Brush OneCellBox(GridSnap mode)
         {
-            BrushSettings.instance.newGridSnap = mode;
+            BrushSettings.instance.Working.newGridSnap = mode;
             try
             {
                 var box = BrushApi.Create(BrushShape.Box, new Vector3(0.3f * g, 0.2f * g, 0.1f * g), Vector3.one * g, Quaternion.identity); // a cell's size, its pivot in the middle
                 BrushApi.ForceUpdate();
                 return box;
             }
-            finally { BrushSettings.instance.newGridSnap = GridSnap.Shape; }
+            finally { BrushSettings.instance.Working.newGridSnap = GridSnap.Shape; }
         }
 
         [Test]

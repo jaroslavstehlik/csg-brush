@@ -161,7 +161,7 @@ namespace CsgBrush.Editor
     public abstract class BrushCreateTool : EditorTool
     {
         /// <summary>Operation of the brushes drawn next (Project Settings > Brushes).</summary>
-        public static BrushOperation Operation { get => BrushSettings.instance.newOperation; set => BrushSettings.instance.newOperation = value; }
+        public static BrushOperation Operation { get => BrushSettings.instance.Working.newOperation; set => BrushSettings.instance.Working.newOperation = value; }
 
         /// <summary>The Create tool that is active, if any.</summary>
         public static BrushCreateTool Active { get; private set; }
@@ -181,14 +181,18 @@ namespace CsgBrush.Editor
         public override GUIContent toolbarIcon => new GUIContent(BrushIcons.Get(Shape.ToString()), Title);
 
         public override void OnActivated() { state = State.Idle; Active = this; m_OpeningValid = false; }
-        public override void OnWillBeDeactivated() { state = State.Idle; if (Active == this) Active = null; }
+        public override void OnWillBeDeactivated()
+        {
+            state = State.Idle; if (Active == this) Active = null;
+            BrushSettings.instance.ResetWorking(); // another shape, or done drawing: the next brush starts from the project's defaults
+        }
 
         /// <summary>Step sizes and wall thickness for new brushes: the settings, or grid-derived defaults when left at 0.</summary>
         public static void NewBrushParameters(out float stepHeight, out float wallThickness)
         {
             var s = BrushSettings.instance;
             stepHeight = s.NewStepHeightMeters;
-            wallThickness = s.newWallThickness > 0f ? s.ToMeters(s.newWallThickness) : s.GridMeters;
+            wallThickness = s.Working.newWallThickness > 0f ? s.ToMeters(s.Working.newWallThickness) : s.GridMeters;
         }
 
         /// <summary>Curved and spiral stairs are placed by their axis: press on the axis, drag the outer radius, then the height.</summary>
@@ -226,14 +230,14 @@ namespace CsgBrush.Editor
             var s = BrushSettings.instance;
             NewBrushParameters(out float stepHeight, out _);
             float grid = s.GridMeters;
-            var p = BrushGeometry.ShapeParams.Default(size, s.newSides);
-            p.tessellation = s.newTessellation; p.stepHeight = stepHeight;
+            var p = BrushGeometry.ShapeParams.Default(size, s.Working.newSides);
+            p.tessellation = s.Working.newTessellation; p.stepHeight = stepHeight;
             var st = p.stairs;
-            st.innerRadius = s.newInnerRadius > 0f ? s.ToMeters(s.newInnerRadius) : grid;
-            st.stepThickness = s.newStepThickness > 0f ? s.ToMeters(s.newStepThickness) : BrushSettings.DefaultStepThicknessMeters;
-            st.curveAngle = Mathf.Max(1f, s.newCurveAngle); st.stepsPer360 = Mathf.Max(1, s.newStepsPer360);
-            st.counterClockwise = s.newCounterClockwise; st.slopedFloor = s.newSlopedFloor; st.slopedCeiling = s.newSlopedCeiling;
-            st.open = (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs) && !s.newSupportUnderSteps;
+            st.innerRadius = s.Working.newInnerRadius > 0f ? s.ToMeters(s.Working.newInnerRadius) : grid;
+            st.stepThickness = s.Working.newStepThickness > 0f ? s.ToMeters(s.Working.newStepThickness) : BrushSettings.DefaultStepThicknessMeters;
+            st.curveAngle = Mathf.Max(1f, s.Working.newCurveAngle); st.stepsPer360 = Mathf.Max(1, s.Working.newStepsPer360);
+            st.counterClockwise = s.Working.newCounterClockwise; st.slopedFloor = s.Working.newSlopedFloor; st.slopedCeiling = s.Working.newSlopedCeiling;
+            st.open = (shape == BrushShape.Stairs || shape == BrushShape.CurvedStairs) && !s.Working.newSupportUnderSteps;
             if (shape == BrushShape.CurvedStairs || shape == BrushShape.SpiralStairs)
             {
                 // steps from the drawn height; step width so the footprint's x extent matches the drawn one
@@ -245,7 +249,7 @@ namespace CsgBrush.Editor
                 float targetRo = trialX > 1e-4f ? ro * size.x / trialX : ro;
                 st.stepWidth = Mathf.Max(grid > 0f ? grid : 0.01f, BrushSnap.Round(targetRo - st.innerRadius, grid));
             }
-            if (shape == BrushShape.Arch) { st.curveAngle = Mathf.Clamp(s.newArchAngle, 1f, 180f); NewBrushParameters(out _, out p.wallThickness); }
+            if (shape == BrushShape.Arch) { st.curveAngle = Mathf.Clamp(s.Working.newArchAngle, 1f, 180f); NewBrushParameters(out _, out p.wallThickness); }
             p.stairs = st;
             return p;
         }
@@ -256,7 +260,7 @@ namespace CsgBrush.Editor
         /// A new brush is drawn square to the surface it starts on, slopes included, unless it goes onto the grid: with
         /// snapping on, it stays square to the world, as the grid would turn it back anyway.
         /// </summary>
-        static bool AlignsToSurface => !BrushSettings.instance.snapToGrid || BrushSettings.instance.newGridSnap == GridSnap.Off;
+        static bool AlignsToSurface => !BrushSettings.instance.snapToGrid || BrushSettings.instance.Working.newGridSnap == GridSnap.Off;
 
         public override void OnToolGUI(EditorWindow window)
         {
@@ -513,7 +517,7 @@ namespace CsgBrush.Editor
             brush.curveAngle = p.stairs.curveAngle; brush.numSteps = p.stairs.numSteps; brush.stepsPer360 = p.stairs.stepsPer360;
             brush.counterClockwise = p.stairs.counterClockwise; brush.slopedFloor = p.stairs.slopedFloor; brush.slopedCeiling = p.stairs.slopedCeiling;
             brush.supportUnderSteps = !p.stairs.open;
-            if (brush.SupportsHollow && s.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
+            if (brush.SupportsHollow && s.Working.newHollow) { brush.hollow = true; brush.wallThickness = wall; }
             if (Operation != BrushOperation.Add) BrushApi.SetOperation(brush, Operation);
             BrushSync.Ensure(brush);
             if (wallPlan != null) WallAnchors.Attach(brush.gameObject, wallPlan, true); // as drawn: its height out of the wall

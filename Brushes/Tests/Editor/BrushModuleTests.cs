@@ -125,14 +125,14 @@ namespace CsgBrush.Tests
         [Test]
         public void NewBrushesGetTheProjectsModules()
         {
-            var s = BrushSettings.instance; var saved = new List<string>(s.newModules);
+            var s = BrushSettings.instance; var saved = new List<string>(s.Working.newModules);
             try
             {
-                s.newModules.Clear(); s.newModules.Add(typeof(TestSurfaceModule).FullName);
+                s.Working.newModules.Clear(); s.Working.newModules.Add(typeof(TestSurfaceModule).FullName);
                 var brush = BrushApi.Create(BrushShape.Box, Vector3.zero, new Vector3(2f, 2f, 2f), Quaternion.identity);
                 Assert.IsNotNull(brush.GetComponent<TestSurfaceModule>());
             }
-            finally { s.newModules.Clear(); s.newModules.AddRange(saved); }
+            finally { s.Working.newModules.Clear(); s.Working.newModules.AddRange(saved); }
         }
 
         [Test]

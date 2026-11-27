@@ -36,28 +36,20 @@ namespace CsgBrush.Editor
         public Vector3 defaultBoxSize = new Vector3(2f, 2f, 2f);
         public float rotationSnapDegrees = 15f;
         [Header("New brushes (the Create tools)")]
-        public BrushOperation newOperation = BrushOperation.Add;
-        [Tooltip("Full type names of the modules (a game's data) every new brush gets.")] public List<string> newModules = new List<string>();
-        [Min(3)] public int newSides = 16;
-        [Range(1, 5)] public int newTessellation = 2;
-        [Tooltip("Units; 0 uses 0.25 m, a comfortable step for a 1.5 to 2 m character.")] public float newStepHeight = 0f;
-        public bool newHollow = false;
-        [Tooltip("Units; 0 uses one grid step.")] public float newInnerRadius = 0f;
-        [Tooltip("Units; 0 uses 0.1 m, a thin tread.")] public float newStepThickness = 0f;
-        public float newCurveAngle = 90f;
-        [Min(1)] public int newStepsPer360 = 16;
-        public bool newCounterClockwise = false;
-        public bool newSlopedFloor = false;
-        public bool newSlopedCeiling = false;
-        [Tooltip("Linear and curved stairs: the steps stand on solid support down to the floor.")] public bool newSupportUnderSteps = true;
-        [Tooltip("What of a new brush goes onto the grid: its outermost vertices (Shape), or its pivot.")] public GridSnap newGridSnap = GridSnap.Shape;
-        [Tooltip("Units; 0 uses one grid step.")] public float newWallThickness = 0f;
-        [Range(1f, 180f)] public float newArchAngle = 180f;
-        [Tooltip("Units; 0 uses 1 m.")] public float newDoorWidth = 0f;
-        [Tooltip("Units; 0 uses 2.2 m.")] public float newDoorHeight = 0f;
-        [Tooltip("Units; 0 uses 1.2 m.")] public float newWindowWidth = 0f;
-        [Tooltip("Units; 0 uses 1.2 m.")] public float newWindowHeight = 0f;
-        [Tooltip("Units above the floor; 0 uses 0.9 m.")] public float newWindowSill = 0f;
+        [Tooltip("What a new brush starts with: the project's defaults. The Brushes overlay changes them for the shape you are drawing, until you pick another shape or leave the Create tools.")]
+        public NewBrushOptions newBrush = new NewBrushOptions();
+        [NonSerialized] NewBrushOptions m_Working;
+
+        /// <summary>
+        /// The options the Create tools use now: the project's defaults (<see cref="newBrush"/>) as changed in the Brushes overlay
+        /// for the shape being drawn. They go back to the defaults when the shape changes or the Create tools are left (see
+        /// <see cref="ResetWorking"/>), so a Hollow or Subtract picked once does not follow every later brush.
+        /// </summary>
+        public NewBrushOptions Working => m_Working ??= newBrush.Clone();
+
+        /// <summary>Back to the project's defaults for the next brush.</summary>
+        public void ResetWorking() => m_Working = null;
+
         [Header("Extrude (edit mode)")]
         [Tooltip("Units; 0 uses one grid step.")] public float extrudeDistance = 0f;
         public bool extrudeIndividual = false;
@@ -105,15 +97,15 @@ namespace CsgBrush.Editor
 
         /// <summary>Width and height of the next door or window, in metres.</summary>
         public Vector2 NewOpeningSize(BrushShape shape) => shape == BrushShape.Window
-            ? new Vector2(newWindowWidth > 0f ? ToMeters(newWindowWidth) : DefaultWindowWidthMeters, newWindowHeight > 0f ? ToMeters(newWindowHeight) : DefaultWindowHeightMeters)
-            : new Vector2(newDoorWidth > 0f ? ToMeters(newDoorWidth) : DefaultDoorWidthMeters, newDoorHeight > 0f ? ToMeters(newDoorHeight) : DefaultDoorHeightMeters);
+            ? new Vector2(Working.newWindowWidth > 0f ? ToMeters(Working.newWindowWidth) : DefaultWindowWidthMeters, Working.newWindowHeight > 0f ? ToMeters(Working.newWindowHeight) : DefaultWindowHeightMeters)
+            : new Vector2(Working.newDoorWidth > 0f ? ToMeters(Working.newDoorWidth) : DefaultDoorWidthMeters, Working.newDoorHeight > 0f ? ToMeters(Working.newDoorHeight) : DefaultDoorHeightMeters);
 
         /// <summary>Height of the next door's or window's bottom above the floor, in metres.</summary>
-        public float NewOpeningSill(BrushShape shape) => shape == BrushShape.Window ? (newWindowSill > 0f ? ToMeters(newWindowSill) : DefaultWindowSillMeters) : 0f;
+        public float NewOpeningSill(BrushShape shape) => shape == BrushShape.Window ? (Working.newWindowSill > 0f ? ToMeters(Working.newWindowSill) : DefaultWindowSillMeters) : 0f;
 
 
         /// <summary>The step height of the next stairs, in metres.</summary>
-        public float NewStepHeightMeters => Mathf.Max(BrushPolyhedron.MinStepHeight, newStepHeight > 0f ? ToMeters(newStepHeight) : DefaultStepHeightMeters);
+        public float NewStepHeightMeters => Mathf.Max(BrushPolyhedron.MinStepHeight, Working.newStepHeight > 0f ? ToMeters(Working.newStepHeight) : DefaultStepHeightMeters);
 
         public float GridUnits => gridSizes != null && gridSizes.Length > 0 ? gridSizes[Mathf.Clamp(gridIndex, 0, gridSizes.Length - 1)] : 1f;
         public float GridMeters => ToMeters(GridUnits);
@@ -171,6 +163,7 @@ namespace CsgBrush.Editor
 
     static class BrushSettingsProvider
     {
+        static bool s_DefaultsOpen;
         [SettingsProvider]
         public static SettingsProvider Create()
         {
@@ -217,6 +210,18 @@ namespace CsgBrush.Editor
                     s.blenderPackTextures = EditorGUILayout.Toggle(new GUIContent("Pack textures in Blender files", "Put the textures inside the Blender file, so it shows them on any computer. The file gets larger"), s.blenderPackTextures);
                     s.showGenerated = EditorGUILayout.Toggle("Show generated objects", s.showGenerated);
                     s.defaultModelStaticFlags = (StaticEditorFlags)EditorGUILayout.EnumFlagsField(new GUIContent("New brush static flags", "The static flags new brushes and floor plans start with"), s.defaultModelStaticFlags);
+                    s_DefaultsOpen = EditorGUILayout.Foldout(s_DefaultsOpen, new GUIContent("New brush defaults", "What a new brush starts with. The Brushes overlay changes them for the shape you are drawing; they come back here when you pick another shape or leave the Create tools."), true);
+                    if (s_DefaultsOpen)
+                    {
+                        var so = new SerializedObject(s);
+                        var defaults = so.FindProperty(nameof(BrushSettings.newBrush));
+                        EditorGUI.indentLevel++;
+                        var it = defaults.Copy(); var end = defaults.GetEndProperty();
+                        if (it.NextVisible(true))
+                            do { if (SerializedProperty.EqualContents(it, end)) break; EditorGUILayout.PropertyField(it, new GUIContent(ObjectNames.NicifyVariableName(it.name.Substring(3)), it.tooltip), true); } while (it.NextVisible(false));
+                        EditorGUI.indentLevel--;
+                        if (so.ApplyModifiedPropertiesWithoutUndo()) s.ResetWorking();
+                    }
                     s.autoLightmapUVs = EditorGUILayout.Toggle(new GUIContent("Auto lightmap UVs", "Make lightmap UVs for lit brush meshes when an edit is finished"), s.autoLightmapUVs);
                     EditorGUILayout.BeginHorizontal();
                     s.blenderPath = EditorGUILayout.TextField(new GUIContent("Blender", "The Blender program Save to Blender uses. Empty: found where Blender is usually installed"), s.blenderPath);
