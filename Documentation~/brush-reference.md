@@ -226,7 +226,7 @@ To give every new brush a module, choose it from the **Modules** dropdown in the
 
 ### Hollow
 
-**Hollow** turns a box or cylinder into a room: only walls of **Wall thickness** remain.
+**Hollow** turns a box or cylinder into a room: only walls of **Wall thickness** remain. It's right under **Shape** in the Brush Inspector.
 
 ### Stairs
 
@@ -243,7 +243,7 @@ Each step is a closed block with its own convex collider. A sloped spiral's coll
 
 A **Brush Group** component builds the brushes below it in the Hierarchy, down to the next group, into one mesh per layer and one set of colliders. These are generated as the group's children. To add one, choose **Add Component** > **CSG Brush** > **Brush Group**. A group has an amber block icon in the Hierarchy and the Scene view.
 
-A brush is built by the nearest group above it. Brushes without one are built by their scene's automatic group, which is hidden. Every scene has its own, so every scene holds its own geometry and scenes can be loaded together at runtime. The **Brush group** field in the Brush Inspector shows what builds the brush; click it to find the group.
+A brush is built by the nearest group above it. Brushes without one are built by their scene's automatic group, which is hidden. Every scene has its own, so every scene holds its own geometry and scenes can be loaded together at runtime. The **Brush group** field in the Brush Inspector shows what builds the brush; click it to find the group. For a brush under a Brush Group, it's the first field.
 
 A Brush Group inside a prefab builds into the prefab: its meshes are saved as sub-assets whenever you save the prefab. You can instantiate such a prefab at runtime, and it never carves anything outside itself. Instances in a scene use the prefab's meshes until you change their brushes.
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Brush Inspector: a brush under a Brush Group shows its group first; Hollow and Wall thickness are right under Shape.
 - Fixed: a hollow brush rendered with the default material whatever material it had, its faces did not take its
   static flags, and clicking it in the Scene view fell back to a guess from the brush shapes. The faces of a hollow
   brush, outside and in, now belong to the brush.

@@ -118,21 +118,36 @@ namespace CsgBrush.Editor
         /// <summary>Only the axes the field changed, so a mixed selection keeps its other axes.</summary>
         static Vector3 Changed(Vector3 own, Vector3 shown, Vector3 picked) => new Vector3(picked.x != shown.x ? picked.x : own.x, picked.y != shown.y ? picked.y : own.y, picked.z != shown.z ? picked.z : own.z);
 
+        /// <summary>What builds the brush: its Brush Group (clickable), or its scene's automatic group.</summary>
+        static void BuiltByField(Brush owner)
+        {
+            string builtBy = BrushCsg.BuiltBy(owner, out var reference);
+            var label = new GUIContent("Brush group", "Parent group that produces the mesh and collision geometry.");
+            if (reference != null) using (new EditorGUI.DisabledScope(true)) EditorGUILayout.ObjectField(label, reference, reference.GetType(), true);
+            else EditorGUILayout.LabelField(label, new GUIContent(builtBy), EditorStyles.wordWrappedMiniLabel);
+        }
+
         public override void OnInspectorGUI()
         {
             var settings = BrushSettings.instance;
             serializedObject.Update();
 
+            // the group a brush belongs to first, when it is one of yours: it decides what the brush is combined with
+            bool inGroup = targets.Length == 1 && target is Brush grouped && grouped.GetComponentInParent<BrushGroup>(true) is BrushGroup g && !g.isDefault;
+            if (inGroup) BuiltByField((Brush)target);
             EditorGUI.BeginChangeCheck();
             ShapeField();
-            EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
-            if (targets.Length == 1 && target is Brush owner)
+            var shapeNow = (BrushShape)shapeProp.enumValueIndex;
+            if (!shapeProp.hasMultipleDifferentValues && (shapeNow == BrushShape.Box || shapeNow == BrushShape.Cylinder))
             {
-                string builtBy = BrushCsg.BuiltBy(owner, out var reference);
-                var label = new GUIContent("Brush group", "Parent group that produces the mesh and collision geometry.");
-                if (reference != null) using (new EditorGUI.DisabledScope(true)) EditorGUILayout.ObjectField(label, reference, reference.GetType(), true);
-                else EditorGUILayout.LabelField(label, new GUIContent(builtBy), EditorStyles.wordWrappedMiniLabel);
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.PropertyField(hollowProp, new GUIContent("Hollow", "Keep only the walls. Unreal's one-click room."), GUILayout.Width(EditorGUIUtility.labelWidth + 20f));
+                using (new EditorGUI.DisabledScope(!hollowProp.boolValue))
+                    DrawUnitsField(settings, wallProp, "Wall thickness");
+                EditorGUILayout.EndHorizontal();
             }
+            EditorGUILayout.PropertyField(operationProp, new GUIContent("Operation", "Add fills space, Subtract carves it out of the brushes above it in the Hierarchy."));
+            if (targets.Length == 1 && !inGroup) BuiltByField((Brush)target);
 
             foreach (var t in targets) if (t is Brush pb && !string.IsNullOrEmpty(pb.problem)) { EditorGUILayout.HelpBox(pb.problem + " Undo the last edit or reset the shape.", MessageType.Error); break; }
             EditorGUILayout.Space(4);
@@ -164,14 +179,6 @@ namespace CsgBrush.Editor
             {
                 if (GUILayout.Button(new GUIContent(BrushEditContext.IsActive ? "Stop editing" : "Edit shape", "Move, Rotate and Scale act on vertices, edges or faces in the Scene view. The first edit turns the brush into a Custom shape.")))
                     BrushEditContext.Toggle();
-            }
-            if (shape == BrushShape.Box || shape == BrushShape.Cylinder)
-            {
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.PropertyField(hollowProp, new GUIContent("Hollow", "Keep only the walls. Unreal's one-click room."), GUILayout.Width(EditorGUIUtility.labelWidth + 20f));
-                using (new EditorGUI.DisabledScope(!hollowProp.boolValue))
-                    DrawUnitsField(settings, wallProp, "Wall thickness");
-                EditorGUILayout.EndHorizontal();
             }
             switch (shape)
             {
